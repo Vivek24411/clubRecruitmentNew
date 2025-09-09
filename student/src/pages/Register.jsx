@@ -141,7 +141,8 @@ const Register = () => {
     typeof window !== "undefined" ? window.innerWidth : 1024
   );
   const navigate = useNavigate();
-  
+  const regex = /^[a-z]+_[a-z]+@[a-z]+\.iitr\.ac\.in$/;
+
   // Responsive styles
   const responsiveStyles = React.useMemo(() => getResponsiveStyles(), [windowWidth]);
   
@@ -161,6 +162,11 @@ const Register = () => {
 
   async function sendOTP() {
     setSendingOTP(true);
+    if(!regex.test(email)){
+      toast.error("Please enter a valid IITR email");
+      setSendingOTP(false);
+      return;
+    }
     const response = await axios.post(
       `${import.meta.env.VITE_BASE_URI}/student/sendOtp`,
       {
@@ -177,6 +183,8 @@ const Register = () => {
       console.log("OTP sent successfully");
       toast.success("OTP sent successfully");
       setOtpInput(true);
+    }else{
+      toast.error(response.data.msg || "Failed to send OTP");
     }
   }
 
@@ -241,6 +249,7 @@ const Register = () => {
           <div style={{...styles.inputGroup}}>
             <label style={{...styles.label}}>Name</label>
             <input
+              required
               type="text"
               value={name}
               onChange={(e) => {
@@ -257,6 +266,7 @@ const Register = () => {
           <div style={{...styles.inputGroup}}>
             <label style={{...styles.label}}>Email</label>
             <input
+              required
               type="email"
               value={email}
               onChange={(e) => {
@@ -273,6 +283,7 @@ const Register = () => {
           <div style={{...styles.inputGroup}}>
             <label style={{...styles.label}}>Password</label>
             <input
+              required
               type="password"
               value={password}
               onChange={(e) => {
@@ -289,6 +300,7 @@ const Register = () => {
           <div style={{...styles.inputGroup}}>
             <label style={{...styles.label}}>Branch</label>
             <input
+              required
               type="text"
               value={branch}
               onChange={(e) => {
@@ -305,6 +317,7 @@ const Register = () => {
           <div style={{...styles.inputGroup}}>
             <label style={{...styles.label}}>Year</label>
             <input
+              required
               type="text"
               value={year}
               onChange={(e) => {

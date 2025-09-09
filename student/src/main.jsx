@@ -5,12 +5,15 @@ import App from "./App.jsx";
 import { BrowserRouter } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import StudentContext from "./context/StudentContext.jsx";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <ToastContainer />
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <StudentContext>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </StudentContext>
   </StrictMode>
 );

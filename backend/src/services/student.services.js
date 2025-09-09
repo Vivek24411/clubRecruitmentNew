@@ -10,7 +10,7 @@ module.exports.sendOtp = async (email, otp) => {
         secure: true,
         auth: {
             user: 'vive44814@gmail.com',
-            pass: "yduv xiui vxek zvmc"
+            pass: process.env.EMAIL_PASS
         }
     });
 
@@ -23,3 +23,9 @@ module.exports.sendOtp = async (email, otp) => {
 
     await transporter.sendMail(mailOptions);
 };
+
+
+module.exports.checkEmailDomain = (email) => {
+    const regex = /^[a-z]+_[a-z]+@[a-z]+\.iitr\.ac\.in$/;
+    return regex.test(email);
+}

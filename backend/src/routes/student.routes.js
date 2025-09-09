@@ -5,7 +5,22 @@ const {
   verifyOtp,
   sendOtp,
   login,
+  getProfile,
+  getAllSessions,
+  getSession,
+  getAllClubs,
+  getClub,
+  getAllEvents,
+  getClubEvents,
+  getEvent,
+  getClubSessions,
+  getDashBoard,
+  registerEvent,
+  getEventDetails,
+  addMemberOffer,
+  acceptMemberOffer,
 } = require("../controllers/student.controllers");
+const { studentAuth } = require("../middlewares/auth.middlewares");
 const router = express.Router();
 
 router.post(
@@ -31,5 +46,53 @@ router.post("/login",[
     body('email').isEmail().withMessage("Invalid email address"),
     body('password').isLength({ min: 6 }).withMessage("Password must be at least 6 characters long")
 ], login);
+
+router.get('/getProfile',studentAuth,getProfile)
+
+router.get('/getSessions',studentAuth,getAllSessions)
+
+router.get('/getSession',studentAuth,[
+  query('sessionId').isString().withMessage("Invalid session ID")
+], getSession);
+
+router.get('/getAllClubs',studentAuth, getAllClubs)
+
+router.get('/getClub',studentAuth,[
+  query('clubId').isString().withMessage("Invalid club ID")
+],getClub);
+
+router.get('/getEvents',studentAuth, getAllEvents)
+
+router.get('/getEvent',studentAuth,[
+  query('eventId').isString().withMessage("Invalid event ID")
+],getEvent);
+
+router.get('/getClubEvents',studentAuth,[
+  query('clubId').isString().withMessage("Invalid club ID")
+],getClubEvents)
+
+router.get('/getClubSessions',studentAuth,[
+  query('clubId').isString().withMessage("Invalid club ID")
+],getClubSessions)
+
+router.get('/getDashboard',studentAuth, getDashBoard)
+
+router.post('/registerEvent',studentAuth,[
+  body('eventId').isString().withMessage("Invalid event ID")
+],registerEvent)
+
+router.get('/getEventDetails',studentAuth,[
+  query('eventId').isString().withMessage("Invalid event ID")
+],getEventDetails)
+
+router.post('/addMemberOffer', studentAuth, [
+  body('eventId').isString().withMessage("Invalid event ID"),
+  body('memberEmail').isEmail().withMessage("Invalid member email")
+], addMemberOffer);
+
+router.post('/acceptMemberOffer', studentAuth, [
+  body('eventId').isString().withMessage("Invalid event ID"),
+  body('studentId').isString().withMessage("Invalid student ID")
+], acceptMemberOffer)
 
 module.exports = router;
