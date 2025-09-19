@@ -3,12 +3,20 @@ import { StudentContextData } from '../context/StudentContext'
 import { useContext } from 'react'
 import { toast } from 'react-toastify'
 import { useEffect } from 'react'
+import {useNavigate} from 'react-router-dom'
 
 const Profile = () => {
   const { profile } = useContext(StudentContextData);
   const [isLoading, setIsLoading] = useState(!profile);
+  const navigate = useNavigate(); 
 
   console.log(profile);
+
+   function logout(){
+    localStorage.removeItem("token");
+    navigate("/login");
+    toast.success("Logged out successfully");
+  }
 
   useEffect(()=>{
     if(profile){
@@ -107,6 +115,7 @@ const Profile = () => {
             {/* Profile Actions */}
             <div className="mt-8 pt-6 border-t border-gray-200">
               <div className="flex flex-col sm:flex-row sm:justify-end space-y-3 sm:space-y-0 sm:space-x-3">
+               <button className='inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#1a4b8e] hover:bg-[#153c70] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1a4b8e]' onClick={logout}>Logout</button>
                 <button 
                   className="inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#1a4b8e] hover:bg-[#153c70] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1a4b8e]"
                   onClick={() => toast.info("Edit profile functionality coming soon!")}
@@ -130,26 +139,7 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Application Status Card */}
-        <div className="mt-6 bg-white shadow rounded-lg overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">Club Applications</h3>
-          </div>
-          <div className="p-6">
-            <div className="bg-gray-50 border border-gray-200 rounded-md p-4 text-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-              <p className="mt-2 text-sm text-gray-500">You haven't applied to any clubs yet</p>
-              <button 
-                className="mt-4 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-[#1a4b8e] bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                onClick={() => toast.info("Explore clubs functionality coming soon!")}
-              >
-                Explore Clubs
-              </button>
-            </div>
-          </div>
-        </div>
+       
       </div>
     </div>
   )

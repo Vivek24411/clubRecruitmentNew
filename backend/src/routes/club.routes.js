@@ -3,6 +3,7 @@ const router = express.Router();
 const { body, query } = require("express-validator");
 const { clubLogin, addSession, getProfile, updateProfile, getSessions, getSession, addEvent, getEvents, getEvent, getDashBoard, getEventsRegisteredStudents, finalizeStudent, scheduleInterview, selectStudentForRound } = require("../controllers/club.contollers");
 const { clubAuth } = require("../middlewares/auth.middlewares");
+const upload = require("../middlewares/upload");
 
 router.post(
   "/login",
@@ -53,17 +54,27 @@ router.get('/getSession', clubAuth, [
   query('sessionId').isString().notEmpty().withMessage('sessionId is required')
 ],getSession)
 
-router.post('/addEvent',clubAuth,[
+router.post('/addEvent',clubAuth,
+  upload.single('eventBanner'),[
   body("title").isString().notEmpty(),
   body("shortDescription").isString().notEmpty(),
   body("longDescription").isString().notEmpty(),
   body("registerationDeadline").isString().optional(),
   body("maxParticipants").isNumeric().optional(),
-  body("ContactInfo").isArray().optional(),
-  body("roundDetails").isArray().optional(),
+  // Remove array validation as we're now handling them differently
   body('numberOfRounds').isNumeric().optional(),
   body('eligibility').isString().optional(),
-
+  body('roundDetailsJSON').optional(),
+  // Add custom validation for roundDetailsJSON to ensure it's valid JSON if provided
+  body('roundDetailsJSON').optional().custom((value) => {
+    if (!value) return true;
+    try {
+      JSON.parse(value);
+      return true;
+    } catch (e) {
+      throw new Error('roundDetailsJSON must be valid JSON');
+    }
+  })
 ],addEvent)
 
 router.get('/getEvents', clubAuth,getEvents)

@@ -40,6 +40,12 @@ const eventSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  eventBanner: {
+    type: String,
+  },
+  eventBannerPublicId: {
+    type: String,
+  },
  
  
 });

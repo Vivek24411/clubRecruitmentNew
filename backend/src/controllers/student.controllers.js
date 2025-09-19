@@ -16,13 +16,13 @@ module.exports.sendOtp = async (req, res) => {
 
   const { email } = req.body;
 
-  const validEmailFormat = checkEmailDomain(email);
-  if (!validEmailFormat) {
-    return res.json({
-      success: false,
-      msg: "Please use your college email to register",
-    });
-  }
+  // const validEmailFormat = checkEmailDomain(email);
+  // if (!validEmailFormat) {
+  //   return res.json({
+  //     success: false,
+  //     msg: "Please use your college email to register",
+  //   });
+  // }
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   console.log(otp);

@@ -157,34 +157,82 @@ module.exports.addEvent = async (req, res) => {
     return res.json({ errors: error.array(), success: false });
   }
 
+  // Extract basic fields from the request body
   const {
     title,
     shortDescription,
     longDescription,
     registerationDeadline,
     maxParticipants,
-    ContactInfo,
-    roundDetails,
     eligibility,
     numberOfRounds,
   } = req.body;
+  
+  // Handle ContactInfo array properly
+  let ContactInfo = [];
+  
+  // Check if there are any ContactInfo fields in the request
+  if (req.body['ContactInfo[0]'] !== undefined) {
+    // Collect all ContactInfo items
+    let i = 0;
+    while (req.body[`ContactInfo[${i}]`] !== undefined) {
+      ContactInfo.push(req.body[`ContactInfo[${i}]`]);
+      i++;
+    }
+  }
+  
+  // Handle roundDetails
+  let roundDetails = [];
+  if (req.body.roundDetailsJSON) {
+    try {
+      roundDetails = JSON.parse(req.body.roundDetailsJSON);
+    } catch (err) {
+      console.error("Error parsing roundDetails:", err);
+    }
+  }
+
+
+  let eventBanner = "";
+  let eventBannerPublicId = "";
+
+  if(req.file){
+    console.log(req.file);
+    eventBanner = req.file.path
+    eventBannerPublicId = req.file.filename
+  }
 
   console.log(req.club._id);
 
-  const event = await eventModel.create({
-    clubId: req.club._id,
-    title,
-    shortDescription,
-    longDescription,
-    registerationDeadline,
-    maxParticipants,
-    ContactInfo,
-    roundDetails,
-    eligibility,
-    numberOfRounds,
-  });
+  try {
+    // Log the data being saved to help with debugging
+    console.log("Saving event data:");
+    console.log("ContactInfo:", ContactInfo);
+    console.log("roundDetails:", roundDetails);
+    
+    const event = await eventModel.create({
+      clubId: req.club._id,
+      title,
+      shortDescription,
+      longDescription,
+      registerationDeadline,
+      maxParticipants,
+      ContactInfo,
+      roundDetails,
+      eligibility,
+      numberOfRounds,
+      eventBanner,
+      eventBannerPublicId
+    });
 
-  return res.json({ success: true, msg: "Event added successfully", event });
+    return res.json({ success: true, msg: "Event added successfully", event });
+  } catch (err) {
+    console.error("Error creating event:", err);
+    return res.status(500).json({ 
+      success: false, 
+      msg: "Failed to create event",
+      error: err.message 
+    });
+  }
 };
 
 module.exports.getEvents = async (req, res) => {

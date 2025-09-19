@@ -8,10 +8,7 @@ const cors = require('cors')
 // Use environment variable for CORS or default to wildcard during development
 const allowedOrigins = process.env.ALLOWED_ORIGINS || '*';
 
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true
-}))
+app.use(cors())
 app.use(express.json())
 app.use(express.urlencoded({extended:true}))
 

@@ -2,11 +2,13 @@ import React, { useEffect, useState, useContext } from 'react'
 import { ClubContextData } from '../context/ClubContext.jsx'
 import axios from 'axios'
 import { toast } from 'react-toastify'
+import { useNavigate } from 'react-router-dom'
 
 const Profile = () => {
   const {clubProfile, setClubProfile} = useContext(ClubContextData);
   const [isLoading, setIsLoading] = useState(!clubProfile);
   const [updateProfileTab, setUpdateProfileTab] = useState(false);
+  const navigate = useNavigate();
 
   // Form States
   const [name, setName] = useState(clubProfile ? clubProfile.name : '');
@@ -77,6 +79,12 @@ const Profile = () => {
     }
   }
 
+  function logout(){
+    localStorage.removeItem("clubToken");
+    navigate("/login");
+    toast.success("Logged out successfully");
+  }
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -102,12 +110,17 @@ const Profile = () => {
               <div className="bg-[#1a4b8e] px-6 py-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between">
                   <h2 className="text-xl font-bold text-white">{clubProfile.name}</h2>
-                  <button
+                 <div>
+                   <button
                     onClick={() => setUpdateProfileTab(true)}
-                    className="mt-2 md:mt-0 bg-white text-[#1a4b8e] px-4 py-1 rounded-lg font-medium hover:bg-gray-100 transition-colors"
+                    className="mt-2 md:mt-0  bg-white text-[#1a4b8e] px-4 py-1 rounded-lg font-medium hover:bg-gray-100 transition-colors"
                   >
                     Edit Profile
                   </button>
+                  <button className="mt-2 md:mt-0 ml-2 bg-red-500 text-white px-4 py-1 rounded-lg font-medium hover:bg-red-600 transition-colors" onClick={logout}>
+                    Logout
+                  </button>
+                 </div>
                 </div>
                 {clubProfile.shortDescription && (
                   <p className="mt-2 text-blue-100">{clubProfile.shortDescription}</p>

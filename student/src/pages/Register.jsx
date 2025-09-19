@@ -162,11 +162,11 @@ const Register = () => {
 
   async function sendOTP() {
     setSendingOTP(true);
-    if(!regex.test(email)){
-      toast.error("Please enter a valid IITR email");
-      setSendingOTP(false);
-      return;
-    }
+    // if(!regex.test(email)){
+    //   toast.error("Please enter a valid IITR email");
+    //   setSendingOTP(false);
+    //   return;
+    // }
     const response = await axios.post(
       `${import.meta.env.VITE_BASE_URI}/student/sendOtp`,
       {

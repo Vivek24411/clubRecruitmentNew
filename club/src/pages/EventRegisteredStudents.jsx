@@ -365,7 +365,7 @@ const EventRegisteredStudents = () => {
                                     const lastRound = student.roundDetails[student.numberOfRounds - 1];
                                     
                                     // Check if student is finalized
-                                    if ((lastRound.roundDate || lastRound.TestDate) && lastRound.selected) {
+                                    if ((lastRound.roundDate || lastRound.TestDate || lastRound.SubmissionDeadline) && lastRound.selected) {
                                         return (
                                             <div className="bg-green-50 border border-green-200 rounded-lg p-5">
                                                 <div className="flex items-center">
@@ -384,7 +384,7 @@ const EventRegisteredStudents = () => {
                                     }
                                     
                                     // Check if student needs to be finalized
-                                    if ((lastRound.roundDate || lastRound.TestDate) && !lastRound.selected) {
+                                    if ((lastRound.roundDate || lastRound.TestDate || lastRound.SubmissionDeadline) && !lastRound.selected) {
                                         return (
                                             <div className="bg-blue-50 border border-blue-200 rounded-lg p-5">
                                                 <h3 className="text-lg font-semibold text-blue-800 mb-3">Round {student.numberOfRounds}</h3>
@@ -403,7 +403,7 @@ const EventRegisteredStudents = () => {
                                     for (let i = student.numberOfRounds - 2; i >= 0; i--) {
                                         const round = student.roundDetails[i];
                                         
-                                        if (round.selected && (round.roundDate || round.TestDate)) {
+                                        if (round.selected && (round.roundDate || round.TestDate || round.SubmissionDeadline)) {
                                             return (
                                                 <div key={`round-${i}`} className="bg-indigo-50 border border-indigo-200 rounded-lg p-5">
                                                     <h3 className="text-lg font-semibold text-indigo-800 mb-2">Round {i + 1} Complete</h3>
@@ -437,7 +437,7 @@ const EventRegisteredStudents = () => {
                                                     </div>
                                                 </div>
                                             );
-                                        } else if (!round.selected && (round.roundDate || round.TestDate)) {
+                                        } else if (!round.selected && (round.roundDate || round.TestDate || round.SubmissionDeadline)) {
                                             return (
                                                 <div key={`select-${i}`} className="bg-amber-50 border border-amber-200 rounded-lg p-5">
                                                     <h3 className="text-lg font-semibold text-amber-800 mb-2">Round {i + 1} Evaluation</h3>
