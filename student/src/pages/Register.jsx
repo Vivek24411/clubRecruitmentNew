@@ -142,7 +142,7 @@ const Register = () => {
     typeof window !== "undefined" ? window.innerWidth : 1024
   );
   const navigate = useNavigate();
-  const regex = /^[a-z]+_[a-z]+@[a-z]+\.iitr\.ac\.in$/;
+  const regex = /@.*iitr\.ac\.in$/i;
 
   // Responsive styles
   const responsiveStyles = React.useMemo(() => getResponsiveStyles(), [windowWidth]);

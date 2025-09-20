@@ -26,6 +26,6 @@ module.exports.sendOtp = async (email, otp) => {
 
 
 module.exports.checkEmailDomain = (email) => {
-    const regex = /^[a-z]+_[a-z]+@[a-z]+\.iitr\.ac\.in$/;
+    const regex = /@.*iitr\.ac\.in$/i;
     return regex.test(email);
 }
