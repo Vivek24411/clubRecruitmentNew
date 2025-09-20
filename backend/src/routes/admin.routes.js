@@ -3,6 +3,7 @@ const { body, query } = require("express-validator");
 const { login, getProfile, addClub, getAllSessions, getSessionDetail, getAllClubs, getClubDetail, getAllEvents, getEventDetail, getDashBoard } = require("../controllers/admin.controllers");
 const { adminAuth } = require("../middlewares/auth.middlewares");
 const router = express.Router();
+const upload = require("../middlewares/upload");
 
 router.post("/login", [
   body("email").isEmail(),
@@ -11,7 +12,7 @@ router.post("/login", [
 
 router.get('/getProfile',adminAuth,getProfile)
 
-router.post("/addClub",adminAuth,[
+router.post("/addClub",adminAuth,upload.single('clubLogo'),[
   body("name").isString().notEmpty().withMessage("Club name is required"),
   body("userName").isString().notEmpty().withMessage("Username is required"),
   body("password").isLength({ min: 5 }).withMessage("Password must be at least 5 characters long"),

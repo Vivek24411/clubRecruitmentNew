@@ -26,7 +26,7 @@ const Session = () => {
         toast.error(response.data.msg);
       }
     } catch (error) {
-      console.error("Error fetching session details:", error);
+      
       toast.error("Failed to load session details");
     } finally {
       setLoading(false);

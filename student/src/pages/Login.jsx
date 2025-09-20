@@ -168,10 +168,9 @@ const Login = () => {
       password
     });
 
-    console.log(response);
     
     if(response.data.success){
-      console.log("Login successful");
+ 
       toast.success("Login successful");
       localStorage.setItem("token", response.data.token);
       navigate("/");
@@ -179,7 +178,7 @@ const Login = () => {
       toast.error(response.data.msg || "Login failed");
     }
     }catch(err){
-      console.error(err);
+    
       toast.error(err.message || "Server error");
     }
   }

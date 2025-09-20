@@ -45,11 +45,11 @@ const Profile = () => {
   async function updateProfile(e){
 
     e.preventDefault();
-    console.log('hiii');
+  
     
     setIsSubmitting(true);
 
-    console.log('hiii');
+   
     
     
     try {
@@ -61,7 +61,7 @@ const Profile = () => {
         },
       });
 
-      console.log(response);
+    
       
 
       if (response.data.success) {
@@ -72,7 +72,7 @@ const Profile = () => {
         toast.error(response.data.msg || "Failed to update profile");
       }
     } catch (error) {
-      console.error("Error updating profile:", error);
+     
       toast.error("An error occurred while updating profile");
     } finally {
       setIsSubmitting(false);

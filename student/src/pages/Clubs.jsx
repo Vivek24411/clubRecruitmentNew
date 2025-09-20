@@ -23,7 +23,7 @@ const Clubs = () => {
         toast.error(response.data.msg);
       }
     } catch (error) {
-      console.error("Error fetching clubs:", error);
+     
       toast.error("Failed to load clubs");
     } finally {
       setIsLoading(false);
@@ -83,9 +83,24 @@ const Clubs = () => {
                   className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300"
                 >
                   <div className="h-28 bg-[#1a4b8e] flex items-center justify-center">
-                    <div className="h-16 w-16 rounded-full bg-white flex items-center justify-center text-[#1a4b8e] text-2xl font-bold">
-                      {club.name.charAt(0)}
-                    </div>
+                    {club.clubLogo ? (
+                      <div className="h-20 w-20 rounded-full bg-white p-1 flex items-center justify-center overflow-hidden">
+                        <img 
+                          src={club.clubLogo} 
+                          alt={`${club.name} logo`}
+                          className="h-full w-full object-cover rounded-full"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.style.display = "none";
+                            e.target.parentNode.innerHTML = `<div class="h-full w-full rounded-full bg-white flex items-center justify-center text-[#1a4b8e] text-3xl font-bold">${club.name.charAt(0)}</div>`;
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-16 w-16 rounded-full bg-white flex items-center justify-center text-[#1a4b8e] text-2xl font-bold">
+                        {club.name.charAt(0)}
+                      </div>
+                    )}
                   </div>
                   <div className="p-5">
                     <h2 className="text-xl font-semibold text-gray-900">{club.name}</h2>

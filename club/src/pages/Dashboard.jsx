@@ -19,7 +19,7 @@ const Dashboard = () => {
           },
         }
       );
-      console.log(response);
+ 
       
       if(response.data.success) {
         const allSessions = response.data.sessions || [];

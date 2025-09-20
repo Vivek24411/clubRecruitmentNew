@@ -20,7 +20,7 @@ const Events = () => {
         },
       });
 
-      console.log(response);
+
       
       if(response.data.success){
         setEvents(response.data.events);
@@ -28,7 +28,7 @@ const Events = () => {
         toast.error(response.data.msg);
       }
     } catch (error) {
-      console.error("Error fetching events:", error);
+     
       toast.error("Failed to load events");
     } finally {
       setIsLoading(false);

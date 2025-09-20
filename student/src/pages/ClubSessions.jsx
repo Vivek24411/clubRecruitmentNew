@@ -27,7 +27,7 @@ const ClubSessions = () => {
         toast.error(response.data.msg);
       }
     } catch (error) {
-      console.error("Error fetching club sessions:", error);
+     
       toast.error("Failed to fetch club sessions");
     } finally {
       setIsLoading(false);

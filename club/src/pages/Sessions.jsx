@@ -23,7 +23,7 @@ const Sessions = () => {
         toast.error(response.data.msg);
       }
     } catch (error) {
-      console.error("Error fetching sessions:", error);
+     
       toast.error("Failed to load sessions");
     } finally {
       setIsLoading(false);

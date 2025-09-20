@@ -47,6 +47,12 @@ const clubSchema = new mongoose.Schema({
   achivements: {
     type: String,
   },
+  clubLogo: {
+    type: String,
+  },
+  clubLogoPublicId: {
+    type: String,
+  },
 });
 
 clubSchema.methods.comparePassword = async function (candidatePassword) {

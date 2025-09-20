@@ -25,7 +25,7 @@ const Event = () => {
         }
       });
 
-      console.log(response);
+
       
       if(response.data.success){
         setEvent(response.data.event);

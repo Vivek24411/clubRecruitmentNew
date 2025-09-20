@@ -39,7 +39,8 @@ router.post("/register",[
     body('password').isLength({ min: 6 }).withMessage("Password must be at least 6 characters long"),
     body('name').isString().isLength({ min: 2 }).withMessage("Name must be at least 2 characters long"),
     body('branch').isString().isLength({ min: 2 }).withMessage("Branch must be at least 2 characters long"),
-    body('year').isInt({ min: 1 }).withMessage("Year must be a positive integer")
+    body('year').isString().isLength({ min: 1 }).withMessage("Year must be a valid string"),
+    body('phoneNumber').isString().isLength({ min: 10 }).withMessage("Invalid phone number")
 ], register);
 
 router.post("/login",[

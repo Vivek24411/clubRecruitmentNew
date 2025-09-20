@@ -16,13 +16,7 @@ module.exports.login = async (req, res) => {
   }
 
   const { email, password } = req.body;
-  console.log("hii");
 
-  console.log(email);
-  console.log(password);
-
-  console.log(process.env.ADMIN_EMAIL);
-  console.log(process.env.ADMIN_PASSWORD);
 
   if (
     email === process.env.ADMIN_EMAIL &&
@@ -51,6 +45,11 @@ module.exports.addClub = async (req, res) => {
   }
 
   const { name, userName, password } = req.body;
+  const clubLogo = req.file ? req.file.path : null;
+  const clubLogoPublicId = req.file ? req.file.filename : null;
+
+ 
+
 
   const club = await clubModel.findOne({ userName });
   if (club) {
@@ -62,7 +61,7 @@ module.exports.addClub = async (req, res) => {
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  const newClub = await clubModel.create({ name, userName, password: hashedPassword });
+  const newClub = await clubModel.create({ name, userName, password: hashedPassword, clubLogo, clubLogoPublicId });
   return res.json({
     success: true,
     msg: "Club added successfully",

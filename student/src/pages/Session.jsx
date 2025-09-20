@@ -21,7 +21,7 @@ const Session = () => {
         },
         params: { sessionId }
       });
-      console.log(response);
+
       
 
       if (response.data.success) {
@@ -31,7 +31,7 @@ const Session = () => {
         toast.error(response.data.msg);
       }
     } catch (error) {
-      console.error("Error fetching session details:", error);
+      
       toast.error("Failed to load session details");
       setIsLoading(false);
     }finally{

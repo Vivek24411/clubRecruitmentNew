@@ -82,13 +82,13 @@ module.exports.getProfile = async (req, res) => {
     }
     return res.json({ success: true, club });
   } catch (err) {
-    console.error("Error fetching club profile:", err);
+    
     return res.json({ success: false, msg: "Failed to fetch club profile" });
   }
 };
 
 module.exports.updateProfile = async (req, res) => {
-  console.log("htrhthrt");
+ 
 
   const error = validationResult(req);
 
@@ -111,7 +111,7 @@ module.exports.updateProfile = async (req, res) => {
       club,
     });
   } catch (err) {
-    console.error("Error updating club profile:", err);
+    
     return res.json({ success: false, msg: "Failed to update club profile" });
   }
 };
@@ -121,7 +121,7 @@ module.exports.getSessions = async (req, res) => {
     const sessions = await sessionModel.find({ clubId: req.club._id });
     return res.json({ success: true, sessions });
   } catch (err) {
-    console.error("Error fetching sessions:", err);
+   
     return res.json({ success: false, msg: "Failed to fetch sessions" });
   }
 };
@@ -145,7 +145,7 @@ module.exports.getSession = async (req, res) => {
     }
     return res.json({ success: true, session });
   } catch (err) {
-    console.error("Error fetching session details:", err);
+   
     return res.json({ success: false, msg: "Failed to fetch session details" });
   }
 };
@@ -196,19 +196,15 @@ module.exports.addEvent = async (req, res) => {
   let eventBannerPublicId = "";
 
   if(req.file){
-    console.log(req.file);
+   
     eventBanner = req.file.path
     eventBannerPublicId = req.file.filename
   }
 
-  console.log(req.club._id);
 
   try {
     // Log the data being saved to help with debugging
-    console.log("Saving event data:");
-    console.log("ContactInfo:", ContactInfo);
-    console.log("roundDetails:", roundDetails);
-    
+   
     const event = await eventModel.create({
       clubId: req.club._id,
       title,
@@ -253,14 +249,13 @@ module.exports.getEvent = async (req, res) => {
   }
 
   const { eventId } = req.query;
-  console.log(eventId);
 
   try {
     const event = await eventModel.findOne({
       _id: eventId,
       clubId: req.club._id,
     });
-    console.log(event);
+   
 
     if (!event) {
       return res.json({ success: false, msg: "Event not found" });
@@ -297,7 +292,7 @@ module.exports.getEventsRegisteredStudents = async (req, res) => {
 
     return res.json({ success: true, registeredStudents });
   } catch (err) {
-    console.error("Error fetching registered students:", err);
+    
     return res.json({ success: false, msg: "Failed to fetch registered students" });
   }
 };
@@ -348,11 +343,11 @@ module.exports.scheduleInterview = async (req, res) => {
       return res.json({ success: false, msg: "Registration not found" });
     }
 
-    console.log(roundDate);
+
     
     registration.roundDetails[roundNumber-1].roundDate = roundDate;
 
-    console.log("registration", registration);
+
 
     // Mark the subdocument as modified so Mongoose knows to save it
     registration.markModified('roundDetails');
@@ -361,7 +356,7 @@ module.exports.scheduleInterview = async (req, res) => {
 
     const registrationupdated = await registerationEventModel.findOne({ eventId: eventId, studentId: studentId });
 
-    console.log(registrationupdated);
+
 
     return res.json({ success: true, msg: "Interview scheduled successfully" });
   } catch (err) {
@@ -389,7 +384,6 @@ module.exports.selectStudentForRound = async (req, res) => {
 
     registration.roundDetails[roundNumber-1].selected = true;
 
-    console.log(registration);
 
     // Mark the subdocument as modified so Mongoose knows to save it
     registration.markModified('roundDetails');

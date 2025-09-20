@@ -134,6 +134,7 @@ const Register = () => {
   const [year, setYear] = React.useState("");
   const [otp, setOtp] = React.useState("");
   const [otpInput, setOtpInput] = React.useState(false);
+  const [phoneNumber, setPhoneNumber] = React.useState("");
   const [sendingOTP, setSendingOTP] = React.useState(false);
   const [verifyingOTP, setVerifyingOTP] = React.useState(false);
   const [registering, setRegistering] = React.useState(false);
@@ -160,31 +161,34 @@ const Register = () => {
 
 
 
+
   async function sendOTP() {
     setSendingOTP(true);
-    // if(!regex.test(email)){
-    //   toast.error("Please enter a valid IITR email");
-    //   setSendingOTP(false);
-    //   return;
-    // }
-    const response = await axios.post(
-      `${import.meta.env.VITE_BASE_URI}/student/sendOtp`,
-      {
-        email,
+    if(!regex.test(email)){
+      toast.error("Please enter a valid IITR email");
+      setSendingOTP(false);
+      return;
+    }
+    
+    try {
+      const response = await axios.post(
+        `${import.meta.env.VITE_BASE_URI}/student/sendOtp`,
+        {
+          email,
+        }
+      );
+
+      if (response.data.success) {
+        toast.success("OTP sent successfully");
+        setOtpInput(true);
+      } else {
+        toast.error(response.data.msg || "Failed to send OTP");
       }
-    );
-
-
-
-
-    console.log(response);
-
-    if (response.data.success) {
-      console.log("OTP sent successfully");
-      toast.success("OTP sent successfully");
-      setOtpInput(true);
-    }else{
-      toast.error(response.data.msg || "Failed to send OTP");
+    } catch (error) {
+      toast.error("Error sending OTP. Please try again.");
+      console.error(error);
+    } finally {
+      setSendingOTP(false);  // Reset the sending state regardless of outcome
     }
   }
 
@@ -192,45 +196,55 @@ const Register = () => {
     e.preventDefault();
     setVerifyingOTP(true);
     setRegistering(true);
-    const response = await axios.post(
-      `${import.meta.env.VITE_BASE_URI}/student/verifyOtp`,
-      {
-        email,
-        otp,
-      }
-    );
-
-    console.log(response);
-
-    if (response.data.success) {
-      console.log("OTP verified successfully");
-      toast.success("OTP verified successfully");
-
-      const registerResponse = await axios.post(
-        `${import.meta.env.VITE_BASE_URI}/student/register`,
+    
+    try {
+      const response = await axios.post(
+        `${import.meta.env.VITE_BASE_URI}/student/verifyOtp`,
         {
           email,
-          name,
-          password,
-          branch,
-          year,
+          otp,
         }
       );
 
-      console.log(registerResponse);
+      if (response.data.success) {
+        toast.success("OTP verified successfully");
 
-      if (registerResponse.data.success) {
-        console.log("Registration successful");
-        toast.success("Registration successful");
-        await localStorage.setItem("token", registerResponse.data.token);
-        navigate("/");
+        try {
+          const registerResponse = await axios.post(
+            `${import.meta.env.VITE_BASE_URI}/student/register`,
+            {
+              email,
+              name,
+              password,
+              branch,
+              year,
+              phoneNumber
+            }
+          );
+
+          if (registerResponse.data.success) {
+            toast.success("Registration successful");
+            await localStorage.setItem("token", registerResponse.data.token);
+            navigate("/");
+          } else {
+            toast.error(registerResponse.data.msg || "Registration failed");
+            setRegistering(false);
+          }
+        } catch (registerError) {
+          console.error(registerError);
+          toast.error("Error during registration. Please try again.");
+          setRegistering(false);
+        }
       } else {
-        console.log("Registration failed");
-        toast.error("Registration failed");
+        toast.error(response.data.msg || "OTP verification failed");
+        setVerifyingOTP(false);
+        setRegistering(false);
       }
-    } else {
-      console.log("OTP verification failed");
-      toast.error("OTP verification failed");
+    } catch (error) {
+      console.error(error);
+      toast.error("Error verifying OTP. Please try again.");
+      setVerifyingOTP(false);
+      setRegistering(false);
     }
   }
 
@@ -296,6 +310,23 @@ const Register = () => {
               }}
             />
           </div>
+
+          <div>
+            <label style={{...styles.label}}>Phone Number</label>
+            <input
+              required
+              type="text"
+              value={phoneNumber}
+              onChange={(e) => {
+                setPhoneNumber(e.target.value);
+              }}
+              placeholder="Enter your phone number"
+              style={{
+                ...styles.input,
+                ...responsiveStyles.input
+              }}
+            />
+          </div>
           
           <div style={{...styles.inputGroup}}>
             <label style={{...styles.label}}>Branch</label>
@@ -323,7 +354,7 @@ const Register = () => {
               onChange={(e) => {
                 setYear(e.target.value);
               }}
-              placeholder="Enter your year"
+              placeholder="First, Second, Third, Fourth"
               style={{
                 ...styles.input,
                 ...responsiveStyles.input
@@ -354,9 +385,11 @@ const Register = () => {
               <button 
                 type="submit" 
                 onClick={verifyOtpAndRegister}
+                disabled={verifyingOTP || registering}
                 style={{
                   ...styles.primaryButton,
-                  ...responsiveStyles.primaryButton
+                  ...responsiveStyles.primaryButton,
+                  opacity: (verifyingOTP || registering) ? 0.7 : 1
                 }}
               >
                 {verifyingOTP || registering ? "Processing..." : "Verify OTP and Register"}
@@ -364,22 +397,26 @@ const Register = () => {
               <button 
                 type="button" 
                 onClick={sendOTP}
+                disabled={sendingOTP}
                 style={{
                   ...styles.secondaryButton,
-                  ...responsiveStyles.secondaryButton
+                  ...responsiveStyles.secondaryButton,
+                  opacity: sendingOTP ? 0.7 : 1
                 }}
               >
-                Resend OTP
+                {sendingOTP ? "Sending..." : "Resend OTP"}
               </button>
             </div>
           ) : (
             <button 
               type="button" 
               onClick={sendOTP}
+              disabled={sendingOTP}
               style={{
                 ...styles.primaryButton,
                 ...responsiveStyles.primaryButton,
-                marginTop: "10px"
+                marginTop: "10px",
+                opacity: sendingOTP ? 0.7 : 1
               }}
             >
               {sendingOTP ? "Sending..." : "Get OTP"}

@@ -24,7 +24,12 @@ const studentSchema = new mongoose.Schema({
   year: {
     type: String,
     required: true,
-  }
+  },
+  phoneNumber: {
+    type: String,
+    required: true,
+    unique: true,
+  },
 });
 
 studentSchema.methods.comparePassword = async function (candidatePassword) {

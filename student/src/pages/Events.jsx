@@ -28,7 +28,7 @@ const Events = () => {
         toast.error(response.data.msg);
       }
     } catch (error) {
-      console.error("Error fetching events:", error);
+      
       toast.error("Failed to fetch events");
     } finally {
       setIsLoading(false);
@@ -169,6 +169,25 @@ const Events = () => {
                       Open
                     </div>
                   )}
+
+                  {/* Event Banner Image */}
+                  <div className="w-full h-48 overflow-hidden">
+                    {event.eventBanner ? (
+                      <img 
+                        src={event.eventBanner} 
+                        alt={`${event.title} banner`} 
+                        className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = "https://placehold.co/600x400/1a4b8e/FFF?text=Event";
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-r from-[#1a4b8e] to-[#2a5fa3] flex items-center justify-center">
+                        <span className="text-white text-lg font-medium">{event.title}</span>
+                      </div>
+                    )}
+                  </div>
                   
                   {/* Header */}
                   <div className="bg-[#1a4b8e] px-6 py-5 relative">

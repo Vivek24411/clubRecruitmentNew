@@ -7,6 +7,25 @@ const AddClub = () => {
     const [userName, setUserName] = React.useState("");
     const [password, setPassword] = React.useState("");
     const [isLoading, setIsLoading] = React.useState(false);
+    const [clubLogo, setClubLogo] = React.useState(null);
+    const [clubLogoPreview, setClubLogoPreview] = React.useState(null);
+
+
+    async function uploadClublogo(e){
+        const file = e.target.files[0];
+        if(file){
+            setClubLogo(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setClubLogoPreview(reader.result);
+            };
+            reader.readAsDataURL(file);
+        } else {
+            setClubLogo(null);
+            setClubLogoPreview(null);
+        }
+    }
+
 
     const handleAddClub = async(e) => {
         e.preventDefault();
@@ -15,16 +34,21 @@ const AddClub = () => {
             toast.warning("Please fill all fields");
             return;
         }
+
+        const formData = new FormData();
+        formData.append('name', name);
+        formData.append('userName', userName);
+        formData.append('password', password);
+        if(clubLogo){
+            formData.append('clubLogo', clubLogo);
+        }
         
         setIsLoading(true);
         try {
-            const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/admin/addClub`,{
-                name,
-                userName,
-                password
-            },{
+            const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/admin/addClub`,formData,{
                 headers: {
-                    Authorization: `Bearer ${localStorage.getItem("adminToken")}`
+                    Authorization: `Bearer ${localStorage.getItem("adminToken")}`,
+                    'Content-Type': 'multipart/form-data'
                 }
             });
 
@@ -34,6 +58,8 @@ const AddClub = () => {
                setName("");
                setUserName("");
                setPassword("");
+               setClubLogo(null);
+               setClubLogoPreview(null);
             } else {
                 toast.error(response.data.msg);
             }
@@ -104,6 +130,65 @@ const AddClub = () => {
                                 required
                             />
                             <p className="mt-1 text-xs text-gray-500">Password must be at least 6 characters long</p>
+                        </div>
+                        
+                        {/* Club Logo Upload Field */}
+                        <div>
+                            <label htmlFor="clubLogo" className="block text-sm font-medium text-gray-700 mb-1">
+                                Club Logo
+                            </label>
+                            <div className="mt-1 flex flex-col md:flex-row items-start gap-4">
+                                <div className="flex-1 w-full md:w-auto">
+                                    <div className="border-2 border-dashed border-gray-300 rounded-lg px-6 py-8 text-center hover:border-blue-500 transition cursor-pointer" onClick={() => document.getElementById('clubLogo').click()}>
+                                        <div className="space-y-1 text-center">
+                                            <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                                                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                            <div className="text-sm text-gray-600">
+                                                <label htmlFor="clubLogo" className="cursor-pointer text-blue-600 hover:text-blue-700">
+                                                    Upload a club logo
+                                                </label>
+                                                <p className="mt-1 text-xs text-gray-500">PNG, JPG, or JPEG (max. 2MB)</p>
+                                            </div>
+                                        </div>
+                                        <input 
+                                            id="clubLogo" 
+                                            name="clubLogo" 
+                                            type="file" 
+                                            className="sr-only" 
+                                            accept=".jpg,.jpeg,.png"
+                                            onChange={uploadClublogo}
+                                        />
+                                    </div>
+                                </div>
+                                
+                                {clubLogoPreview && (
+                                    <div className="flex flex-col items-center">
+                                        <div className="relative w-32 h-32 border rounded-md overflow-hidden">
+                                            <img 
+                                                src={clubLogoPreview} 
+                                                alt="Club logo preview" 
+                                                className="w-full h-full object-cover"
+                                            />
+                                            <button 
+                                                type="button"
+                                                onClick={() => {
+                                                    setClubLogo(null);
+                                                    setClubLogoPreview(null);
+                                                }}
+                                                className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 hover:bg-red-700 focus:outline-none"
+                                                title="Remove image"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                        <p className="text-sm text-gray-500 mt-2">Preview</p>
+                                    </div>
+                                )}
+                            </div>
+                            <p className="mt-2 text-xs text-gray-500">Upload a logo to represent the club on the platform</p>
                         </div>
                         
                         {/* Submit Button */}

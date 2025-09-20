@@ -16,9 +16,11 @@ const EventRegisteredStudents = () => {
     
     async function fetchEventDetails() {
         try {
-            const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/club/getEvent/${eventId}`, {
+            const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/club/getEvent`, {
                 headers: {
                     Authorization: `Bearer ${localStorage.getItem("clubToken")}`
+                },params: {
+                    eventId
                 }
             });
             

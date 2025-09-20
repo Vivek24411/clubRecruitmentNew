@@ -24,15 +24,15 @@ const App = () => {
       <Route path='/' element={<ProtectedWrapper><Home/></ProtectedWrapper>}/>
       <Route path='/login' element={<Login/>}/>
       <Route path='/register' element={<Register/>}/>
-      <Route path='/profile' element={<Profile/>}/>
-      <Route path='/session/:sessionId' element={<Session/>}/>
-      <Route path='/sessions' element={<Sessions/>}/>
-      <Route path='/event/:eventId' element={<Event/>}/>
-      <Route path='/events' element={<Events/>}/>
-      <Route path='/clubs' element={<Clubs/>}/>
-      <Route path='/club/:clubId' element={<Club/>}/>
-      <Route path='/events/club/:clubId' element={<ClubEvents/>}/>
-      <Route path='/sessions/club/:clubId' element={<ClubSessions/>}/>
+      <Route path='/profile' element={<ProtectedWrapper><Profile/></ProtectedWrapper>}/>
+      <Route path='/session/:sessionId' element={<ProtectedWrapper><Session/></ProtectedWrapper>}/>
+      <Route path='/sessions' element={<ProtectedWrapper><Sessions/></ProtectedWrapper>}/>
+      <Route path='/event/:eventId' element={<ProtectedWrapper><Event/></ProtectedWrapper>}/>
+      <Route path='/events' element={<ProtectedWrapper><Events/></ProtectedWrapper>}/>
+      <Route path='/clubs' element={<ProtectedWrapper><Clubs/></ProtectedWrapper>}/>
+      <Route path='/club/:clubId' element={<ProtectedWrapper><Club/></ProtectedWrapper>}/>
+      <Route path='/events/club/:clubId' element={<ProtectedWrapper><ClubEvents/></ProtectedWrapper>}/>
+      <Route path='/sessions/club/:clubId' element={<ProtectedWrapper><ClubSessions/></ProtectedWrapper>}/>
     </Routes>
     <ToastContainer 
       position="top-center"

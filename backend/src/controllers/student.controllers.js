@@ -16,16 +16,16 @@ module.exports.sendOtp = async (req, res) => {
 
   const { email } = req.body;
 
-  // const validEmailFormat = checkEmailDomain(email);
-  // if (!validEmailFormat) {
-  //   return res.json({
-  //     success: false,
-  //     msg: "Please use your college email to register",
-  //   });
-  // }
+  const validEmailFormat = checkEmailDomain(email);
+  if (!validEmailFormat) {
+    return res.json({
+      success: false,
+      msg: "Please use your college email to register",
+    });
+  }
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  console.log(otp);
+
 
   const existingOTP = await otpModel.findOne({ email });
 
@@ -58,7 +58,7 @@ module.exports.verifyOtp = async (req, res) => {
     return res.json({ success: false, msg: "OTP not found" });
   }
 
-  console.log(otpRecord);
+
 
   const isMatch = await bcrypt.compare(otp, otpRecord.otp);
   console.log(isMatch);
@@ -78,11 +78,16 @@ module.exports.register = async (req, res) => {
       return res.json({ errors: errors.array(), success: false });
     }
 
-    const { name, email, password, branch, year } = req.body;
+    const { name, email, password, branch, year, phoneNumber } = req.body;
 
     const existingStudent = await studentModel.findOne({ email });
     if (existingStudent) {
       return res.json({ success: false, msg: "Student already exists" });
+    }
+
+    const existingPhoneNumber = await studentModel.findOne({ phoneNumber });
+    if (existingPhoneNumber) {
+      return res.json({ success: false, msg: "Phone number already exists" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -92,6 +97,7 @@ module.exports.register = async (req, res) => {
       password: hashedPassword,
       branch,
       year,
+      phoneNumber
     });
 
     const token = await student.createToken();
@@ -186,7 +192,7 @@ module.exports.getAllClubs = async (req, res) => {
     const clubs = await clubModel.find();
     return res.json({ success: true, clubs });
   } catch (error) {
-    console.error("Error fetching clubs:", error);
+
     return res.status(500).json({ success: false, msg: "Server error" });
   }
 };
@@ -206,7 +212,7 @@ module.exports.getClub = async (req, res) => {
     }
     return res.json({ success: true, club });
   } catch (error) {
-    console.error("Error fetching club:", error);
+    
     return res.status(500).json({ success: false, msg: "Server error" });
   }
 };
@@ -216,7 +222,7 @@ module.exports.getAllEvents = async (req, res) => {
     const events = await eventModel.find().populate("clubId", "-password");
     return res.json({ success: true, events });
   } catch (error) {
-    console.error("Error fetching events:", error);
+
     return res.status(500).json({ success: false, msg: "Server error" });
   }
 };
@@ -238,7 +244,7 @@ module.exports.getEvent = async (req, res) => {
     }
     return res.json({ success: true, event });
   } catch (error) {
-    console.error("Error fetching event:", error);
+   
     return res.status(500).json({ success: false, msg: "Server error" });
   }
 };
@@ -257,7 +263,7 @@ module.exports.getClubEvents = async (req, res) => {
       .populate("clubId", "-password");
     return res.json({ success: true, events });
   } catch (error) {
-    console.error("Error fetching club events:", error);
+    
     return res.status(500).json({ success: false, msg: "Server error" });
   }
 };
@@ -276,7 +282,7 @@ module.exports.getClubSessions = async (req, res) => {
       .populate("clubId", "-password");
     return res.json({ success: true, sessions });
   } catch (error) {
-    console.error("Error fetching club sessions:", error);
+    
     return res.status(500).json({ success: false, msg: "Server error" });
   }
 };
@@ -325,7 +331,6 @@ module.exports.registerEvent = async (req, res, next) => {
       }
     }
 
-    console.log(roundDetailsStudent);
 
     const registeration = await registerationEventModel.create({
       eventId,
@@ -334,7 +339,7 @@ module.exports.registerEvent = async (req, res, next) => {
       numberOfRounds: event.numberOfRounds,
     });
 
-    console.log(registeration);
+   
 
     return res.json({
       success: true,
@@ -342,7 +347,7 @@ module.exports.registerEvent = async (req, res, next) => {
       registeration,
     });
   } catch (err) {
-    console.error(err);
+ 
     return res.json({ success: false, msg: err.message || "Server error" });
   }
 };
@@ -484,7 +489,7 @@ module.exports.addMemberOffer = async (req, res, next) => {
 
     return res.json({ success: true, msg: "Member offered successfully" });
   } catch (err) {
-    console.error(err);
+    
     return res.json({ success: false, msg: err.message || "Server error" });
   }
 };
@@ -527,7 +532,7 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
 
     return res.json({ success: true, msg: "Member accepted successfully" });
   } catch (err) {
-    console.error(err);
+    
     return res.json({ success: false, msg: err.message || "Server error" });
   }
 };

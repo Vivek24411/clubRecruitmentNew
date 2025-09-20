@@ -24,7 +24,7 @@ const Club = () => {
         toast.error(response.data.msg);
       }
     } catch (error) {
-      console.error("Error fetching club:", error);
+     
       toast.error("Failed to load club");
     } finally {
       setIsLoading(false);
@@ -62,9 +62,24 @@ const Club = () => {
               <div className="px-6 py-8">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
                   <div className="flex items-center">
-                    <div className="h-16 w-16 rounded-full bg-white flex items-center justify-center text-[#1a4b8e] text-2xl font-bold">
-                      {club.name.charAt(0)}
-                    </div>
+                    {club.clubLogo ? (
+                      <div className="h-20 w-20 md:h-24 md:w-24 rounded-full bg-white p-1 flex items-center justify-center overflow-hidden shadow-lg">
+                        <img 
+                          src={club.clubLogo} 
+                          alt={`${club.name} logo`}
+                          className="h-full w-full object-cover rounded-full"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.style.display = "none";
+                            e.target.parentNode.innerHTML = `<div class="h-full w-full rounded-full bg-white flex items-center justify-center text-[#1a4b8e] text-3xl font-bold">${club.name.charAt(0)}</div>`;
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-20 w-20 md:h-24 md:w-24 rounded-full bg-white flex items-center justify-center text-[#1a4b8e] text-3xl font-bold shadow-lg">
+                        {club.name.charAt(0)}
+                      </div>
+                    )}
                     <div className="ml-4">
                       <h1 className="text-2xl md:text-3xl font-bold text-white">{club.name}</h1>
                       {club.shortDescription && (
