@@ -31,6 +31,10 @@ const registerationEventSchema = new mongoose.Schema({
     numberOfRounds: {
         type: Number,
     },
+    teamName: {
+        type: String,
+        default: null
+    },
 
 });
 

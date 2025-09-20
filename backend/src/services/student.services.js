@@ -9,13 +9,13 @@ module.exports.sendOtp = async (email, otp) => {
         port: 465,
         secure: true,
         auth: {
-            user: 'vive44814@gmail.com',
+            user: process.env.EMAIL_USER,
             pass: process.env.EMAIL_PASS
         }
     });
 
     const mailOptions = {
-        from: 'vive44814@gmail.com',
+        from: process.env.EMAIL_USER,
         to: email,
         subject: 'OTP Verification',
         text: `Your OTP is ${otp}`

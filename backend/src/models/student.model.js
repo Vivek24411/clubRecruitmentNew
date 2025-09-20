@@ -30,6 +30,11 @@ const studentSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+  enrollmentNumber: {
+    type: String,
+    required: true,
+    unique: true,
+  },
 });
 
 studentSchema.methods.comparePassword = async function (candidatePassword) {

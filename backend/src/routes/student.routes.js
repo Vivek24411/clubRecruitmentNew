@@ -19,6 +19,8 @@ const {
   getEventDetails,
   addMemberOffer,
   acceptMemberOffer,
+  unregisteredAsCaptain,
+  addTeamName,
 } = require("../controllers/student.controllers");
 const { studentAuth } = require("../middlewares/auth.middlewares");
 const router = express.Router();
@@ -40,7 +42,8 @@ router.post("/register",[
     body('name').isString().isLength({ min: 2 }).withMessage("Name must be at least 2 characters long"),
     body('branch').isString().isLength({ min: 2 }).withMessage("Branch must be at least 2 characters long"),
     body('year').isString().isLength({ min: 1 }).withMessage("Year must be a valid string"),
-    body('phoneNumber').isString().isLength({ min: 10 }).withMessage("Invalid phone number")
+    body('phoneNumber').isString().isLength({ min: 10 }).withMessage("Invalid phone number"),
+    body('enrollmentNumber').isString().isLength({ min: 5 }).withMessage("Invalid enrollment number")
 ], register);
 
 router.post("/login",[
@@ -95,5 +98,14 @@ router.post('/acceptMemberOffer', studentAuth, [
   body('eventId').isString().withMessage("Invalid event ID"),
   body('studentId').isString().withMessage("Invalid student ID")
 ], acceptMemberOffer)
+
+router.post('/unregisterAsCaptain',studentAuth, [
+  body('eventId').isString().withMessage("Invalid event ID")
+], unregisteredAsCaptain)
+
+router.post('/addTeamName',studentAuth, [
+  body('eventId').isString().withMessage("Invalid event ID"),
+  body('teamName').isString().withMessage("Invalid team name")
+], addTeamName)
 
 module.exports = router;

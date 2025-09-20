@@ -135,6 +135,7 @@ const Register = () => {
   const [otp, setOtp] = React.useState("");
   const [otpInput, setOtpInput] = React.useState(false);
   const [phoneNumber, setPhoneNumber] = React.useState("");
+  const [enrollmentNumber, setEnrollmentNumber] = React.useState("");
   const [sendingOTP, setSendingOTP] = React.useState(false);
   const [verifyingOTP, setVerifyingOTP] = React.useState(false);
   const [registering, setRegistering] = React.useState(false);
@@ -218,7 +219,8 @@ const Register = () => {
               password,
               branch,
               year,
-              phoneNumber
+              phoneNumber,
+              enrollmentNumber
             }
           );
 
@@ -304,6 +306,23 @@ const Register = () => {
                 setPassword(e.target.value);
               }}
               placeholder="Create a password"
+              style={{
+                ...styles.input,
+                ...responsiveStyles.input
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{...styles.label}}>Enrollment Number</label>
+            <input
+              required
+              type="text"
+              value={enrollmentNumber}
+              onChange={(e) => {
+                setEnrollmentNumber(e.target.value);
+              }}
+              placeholder="Enter your enrollment number"
               style={{
                 ...styles.input,
                 ...responsiveStyles.input

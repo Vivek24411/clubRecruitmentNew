@@ -12,7 +12,8 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'];
     
 // Configure CORS with specific options
-app.use(cors({
+app.use(cors(
+  {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
@@ -24,7 +25,8 @@ app.use(cors({
     return callback(null, true);
   },
   credentials: true // Enable credentials (cookies, authorization headers, etc.)
-}));
+}
+));
 
 app.use(express.json())
 app.use(express.urlencoded({extended:true}))

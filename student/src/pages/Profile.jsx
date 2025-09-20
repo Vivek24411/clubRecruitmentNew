@@ -97,6 +97,16 @@ const Profile = () => {
                   </div>
                </div>
 
+               <div>
+                  <p className="text-sm font-medium text-gray-500">Enrollment Number</p>
+                  <div className="mt-1 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4V5h12v10zM6 7h8v2H6V7zm0 4h5v2H6v-2z" />
+                    </svg>
+                    <p className="text-gray-900 font-medium">{profile?.enrollmentNumber || "Not specified"}</p>
+                  </div>
+                </div>
+
                 {/* Year */}
                 <div>
                   <p className="text-sm font-medium text-gray-500">Year of Study</p>

@@ -78,7 +78,9 @@ module.exports.register = async (req, res) => {
       return res.json({ errors: errors.array(), success: false });
     }
 
-    const { name, email, password, branch, year, phoneNumber } = req.body;
+    const { name, email, password, branch, year, phoneNumber, enrollmentNumber } = req.body;
+    console.log(enrollmentNumber);
+    
 
     const existingStudent = await studentModel.findOne({ email });
     if (existingStudent) {
@@ -97,7 +99,8 @@ module.exports.register = async (req, res) => {
       password: hashedPassword,
       branch,
       year,
-      phoneNumber
+      phoneNumber,
+      enrollmentNumber
     });
 
     const token = await student.createToken();
@@ -531,6 +534,72 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
     await captainRegisteration.save();
 
     return res.json({ success: true, msg: "Member accepted successfully" });
+  } catch (err) {
+    
+    return res.json({ success: false, msg: err.message || "Server error" });
+  }
+};
+
+
+module.exports.unregisteredAsCaptain = async (req, res, next) => {
+  const error = validationResult(req);
+  if (!error.isEmpty()) {
+    return res.json({ errors: error.array(), success: false });
+  }
+
+  const { eventId } = req.body;
+  const captainId = req.student._id;
+
+  try {
+    const event = await eventModel.findById(eventId);
+    if (!event) {
+      return res.json({ success: false, msg: "Event not found" });
+    }
+
+    await registerationEventModel.deleteOne({
+      eventId,
+      studentId: captainId,
+    });
+
+    return res.json({ success: true, msg: "Unregistered successfully" });
+  } catch (err) {
+    
+    return res.json({ success: false, msg: err.message || "Server error" });
+  }
+}
+
+module.exports.addTeamName = async (req, res, next) => {
+  const error = validationResult(req);
+  if (!error.isEmpty()) {
+    return res.json({ errors: error.array(), success: false });
+  }
+
+  const { eventId, teamName } = req.body;
+  const captainId = req.student._id;
+
+  try {
+    const event = await eventModel.findById(eventId);
+    if (!event) {
+      return res.json({ success: false, msg: "Event not found" });
+    }
+
+    const captainRegisteration = await registerationEventModel.findOne({
+      eventId,
+      studentId: captainId,
+    });
+
+    if (!captainRegisteration) {
+      return res.json({
+        success: false,
+        msg: "Captain registration not found",
+      });
+    }
+
+    captainRegisteration.teamName = teamName;
+    captainRegisteration.markModified("teamName");
+    await captainRegisteration.save();
+
+    return res.json({ success: true, msg: "Team name added successfully" });
   } catch (err) {
     
     return res.json({ success: false, msg: err.message || "Server error" });
