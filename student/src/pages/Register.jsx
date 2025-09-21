@@ -179,6 +179,8 @@ const Register = () => {
         }
       );
 
+      console.log(response)
+
       if (response.data.success) {
         toast.success("OTP sent successfully");
         setOtpInput(true);
