@@ -605,3 +605,29 @@ module.exports.addTeamName = async (req, res, next) => {
     return res.json({ success: false, msg: err.message || "Server error" });
   }
 };
+
+
+module.exports.forgotPassword = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.json({ errors: errors.array(), success: false });
+  }
+
+  const { email, newPassword } = req.body;
+
+  try {
+    const student = await studentModel.findOne({ email });
+    if (!student) {
+      return res.json({ success: false, msg: "Student not found, first register" });
+    }
+    
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    student.password = hashedPassword;
+    student.markModified("password");
+    await student.save();
+
+    return res.json({ success: true, msg: "Password updated successfully" });
+  } catch (err) {
+    return res.json({ success: false, msg: err.message || "Server error" });
+  }
+};

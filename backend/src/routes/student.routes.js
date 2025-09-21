@@ -21,6 +21,7 @@ const {
   acceptMemberOffer,
   unregisteredAsCaptain,
   addTeamName,
+  forgotPassword,
 } = require("../controllers/student.controllers");
 const { studentAuth } = require("../middlewares/auth.middlewares");
 const router = express.Router();
@@ -38,7 +39,7 @@ router.post("/verifyOtp",[
 
 router.post("/register",[
     body('email').isEmail().withMessage("Invalid email address"),
-    body('password').isLength({ min: 6 }).withMessage("Password must be at least 6 characters long"),
+    body('password').isLength({ min: 4 }).withMessage("Password must be at least 6 characters long"),
     body('name').isString().isLength({ min: 2 }).withMessage("Name must be at least 2 characters long"),
     body('branch').isString().isLength({ min: 2 }).withMessage("Branch must be at least 2 characters long"),
     body('year').isString().isLength({ min: 1 }).withMessage("Year must be a valid string"),
@@ -48,7 +49,7 @@ router.post("/register",[
 
 router.post("/login",[
     body('email').isEmail().withMessage("Invalid email address"),
-    body('password').isLength({ min: 6 }).withMessage("Password must be at least 6 characters long")
+    body('password').isLength({ min: 4 }).withMessage("Password must be at least 6 characters long")
 ], login);
 
 router.get('/getProfile',studentAuth,getProfile)
@@ -107,5 +108,10 @@ router.post('/addTeamName',studentAuth, [
   body('eventId').isString().withMessage("Invalid event ID"),
   body('teamName').isString().withMessage("Invalid team name")
 ], addTeamName)
+
+router.post('/forgotPassword',[
+  body("email").isEmail().withMessage("Invalid email address"),
+  body("newPassword").isLength({ min: 4 }).withMessage("Password must be at least 4 characters long")
+], forgotPassword)
 
 module.exports = router;

@@ -294,17 +294,21 @@ const Event = () => {
           <>
             {/* Event Banner */}
             {event.eventBanner && (
-              <div className="w-full h-64 md:h-80 lg:h-96 overflow-hidden rounded-lg shadow-xl mb-8">
-                <img
-                  src={event.eventBanner}
-                  alt={`${event.title} banner`}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src =
-                      "https://placehold.co/1200x400/1a4b8e/FFF?text=Event+Banner";
-                  }}
-                />
+              <div className="w-full mx-auto px-0 mb-8">
+                <div className="mx-1 sm:mx-0 overflow-hidden rounded-lg shadow-xl">
+                  <div className="aspect-[16/9] relative">
+                    <img
+                      src={event.eventBanner}
+                      alt={`${event.title} banner`}
+                      className="w-full h-full object-cover object-center absolute inset-0"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src =
+                          "https://placehold.co/1200x400/1a4b8e/FFF?text=Event+Banner";
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
             )}
 
@@ -744,7 +748,7 @@ const Event = () => {
                         />
                       </svg>
                       <h3 className="text-lg font-bold text-[#1a4b8e]">
-                        Interested in this event?
+                        Interested
                       </h3>
                     </div>
                     <div className="mt-2 flex items-center justify-center sm:justify-start text-gray-600">
@@ -899,34 +903,7 @@ const Event = () => {
                               </div>
                             )}
 
-                          {/* Unregister as Captain Button */}
-                          <div className="mt-6">
-                            <button
-                              onClick={unregisterAsCaptain}
-                              className="w-full bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 px-5 py-3 rounded-lg font-medium transition-all flex items-center justify-center group"
-                            >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-5 w-5 mr-2 text-red-600 group-hover:animate-pulse"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                />
-                              </svg>
-                              Unregister as Team Captain
-                            </button>
-                            <p className="mt-2 text-center text-xs text-gray-500">
-                              This will remove you and all team members from
-                              this event
-                            </p>
-                          </div>
-
+                         
                             {
                               detail.teamName && (
                                 <div className="mt-6 p-5 border border-blue-100 rounded-xl bg-blue-50/70 shadow-sm hover:shadow-md transition-shadow">
@@ -1327,8 +1304,38 @@ const Event = () => {
                                   </button>
                                 </div>
                               )}
+                              
                             </div>
+                            
                           </div>
+                           {/* Unregister as Captain Button */}
+                          <div className="mt-6">
+                            <button
+                              onClick={unregisterAsCaptain}
+                              className="w-full bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 px-5 py-3 rounded-lg font-medium transition-all flex items-center justify-center group"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-5 w-5 mr-2 text-red-600 group-hover:animate-pulse"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
+                              </svg>
+                              Unregister as Team Captain
+                            </button>
+                            <p className="mt-2 text-center text-xs text-gray-500">
+                              This will remove you and all team members from
+                              this event
+                            </p>
+                          </div>
+
                         </div>
                       );
                     } else if (show === 2) {

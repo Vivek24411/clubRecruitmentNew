@@ -288,7 +288,7 @@ module.exports.getEventsRegisteredStudents = async (req, res) => {
 
     const { eventId } = req.query;
 
-    const registeredStudents = await registerationEventModel.find({ eventId: eventId }).populate('studentId', '-password').populate('eventId');
+    const registeredStudents = await registerationEventModel.find({ eventId: eventId }).populate('studentId', '-password').populate('eventId').populate('membersAccepted', '-password');
 
     return res.json({ success: true, registeredStudents });
   } catch (err) {

@@ -84,7 +84,7 @@ const styles = {
   },
   linkContainer: {
     textAlign: "center",
-    marginTop: "20px"
+    marginTop: "12px"
   },
   link: {
     color: "#1a4b8e",
@@ -239,11 +239,15 @@ const Login = () => {
           
          
           
-         
+          <div className="text-center text-sm">Forgot Password? <Link className="text-[#1a4b8e] font-semibold" to="/forgotPassword">Reset</Link></div>
          
           <div style={{...styles.linkContainer}}>
-            Don't have an account? <Link to="/register" style={{...styles.link}}>Register</Link>
+            <div>
+              Don't have an account? <Link to="/register" style={{...styles.link}}>Register</Link>
+            </div>
           </div>
+         
+
         </form>
       </div>
     </div>

@@ -45,6 +45,9 @@ const EventRegisteredStudents = () => {
                     eventId
                 }
             });
+
+            console.log(response);
+            
             
             if (response.data.success) {
                 setRegisteredStudents(response.data.registeredStudents);
@@ -138,6 +141,11 @@ const EventRegisteredStudents = () => {
         }
     }
 
+    function formatDate(dateString) {
+        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+        return new Date(dateString).toLocaleDateString(undefined, options);
+    }
+
     // Filter students based on search query and status filter
     const filteredStudents = React.useMemo(() => {
         if (!registeredStudents.length) return [];
@@ -206,7 +214,7 @@ const EventRegisteredStudents = () => {
                             <div className="mt-4 md:mt-0 flex flex-wrap gap-3">
                                 <div className="bg-white/20 backdrop-blur-sm rounded-lg px-3 py-2 text-white text-sm">
                                     <div className="font-semibold">Deadline</div>
-                                    <div>{new Date(eventDetails.registerationDeadline).toLocaleDateString()}</div>
+                                    <div>{formatDate(eventDetails.registerationDeadline)}</div>
                                 </div>
                                 <div className="bg-white/20 backdrop-blur-sm rounded-lg px-3 py-2 text-white text-sm">
                                     <div className="font-semibold">Rounds</div>
@@ -344,19 +352,60 @@ const EventRegisteredStudents = () => {
                     {filteredStudents.map(student => (
                     <div key={student._id} className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
                         {/* Student header with info */}
-                        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-4 flex justify-between items-center">
-                            <h2 className="text-xl font-bold text-white">{student.studentId.name}</h2>
-                            <div className="text-right text-sm text-white">
-                                <p>{student.studentId.branch} • Year {student.studentId.year}</p>
-                                <p className="opacity-80">{student.studentId.email}</p>
+                        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-4 flex justify-between items-start">
+                            <div>
+                                <h2 className="text-xl font-bold text-white">{student.studentId.name}</h2>
+                                <div className="mt-1 flex items-center">
+                                    <span className="bg-blue-400/30 text-white text-xs px-2 py-0.5 rounded-full">Captain</span>
+                                </div>
+                                <div className="mt-1.5 space-y-1 text-sm text-white/90">
+                                    <p>{student.studentId.branch} • Year {student.studentId.year}</p>
+                                    <p>{student.studentId.enrollmentNumber}</p>
+                                </div>
+                                <div className="mt-2 flex items-center space-x-3">
+                                    <a href={`mailto:${student.studentId.email}`} className="flex items-center text-white/80 hover:text-white">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                        </svg>
+                                        <span>{student.studentId.email}</span>
+                                    </a>
+                                    <a href={`tel:${student.studentId.phoneNumber}`} className="flex items-center text-white/80 hover:text-white">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                        </svg>
+                                        <span>{student.studentId.phoneNumber}</span>
+                                    </a>
+                                </div>
                             </div>
+                            
+                            {student.membersAccepted && student.membersAccepted.length > 0 && (
+                                <div className="bg-blue-700/50 rounded-lg p-3">
+                                    <h3 className="text-sm font-medium text-white border-b border-white/20 pb-1 mb-2">Team Members</h3>
+                                    <div className="space-y-3">
+                                        {student.membersAccepted.map((member, index) => (
+                                            <div key={member.id || index} className="flex items-start space-x-2">
+                                                <div className="h-6 w-6 rounded-full bg-blue-500/40 flex items-center justify-center text-xs text-white flex-shrink-0">
+                                                    {index + 1}
+                                                </div>
+                                                <div className="text-sm text-white">
+                                                    <p className="font-medium">{member.name}</p>
+                                                    <div className="text-xs text-white/80 space-y-0.5">
+                                                        <p>{member.email}</p>
+                                                        <p>{member.phoneNumber}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         
                         {/* Student details */}
                         <div className="p-6">
                             {/* Registration info */}
                             <div className="flex flex-wrap justify-between items-center mb-4 text-sm text-gray-600">
-                                <p>Registered: {new Date(student.registeredAt).toLocaleDateString()}</p>
+                                <p>Registered: {formatDate(student.registeredAt)}</p>
                                 {/* <p>Contact: {student.ContactInfo?.join(', ')}</p> */}
                             </div>
                             

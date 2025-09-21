@@ -15,7 +15,7 @@ import Clubs from './pages/Clubs'
 import Club from './pages/Club'
 import ClubEvents from './pages/ClubEvents'
 import ClubSessions from './pages/ClubSessions'
-
+import ForgotPassword from './pages/ForgotPassword'
 
 const App = () => {
   return (
@@ -33,6 +33,7 @@ const App = () => {
       <Route path='/club/:clubId' element={<ProtectedWrapper><Club/></ProtectedWrapper>}/>
       <Route path='/events/club/:clubId' element={<ProtectedWrapper><ClubEvents/></ProtectedWrapper>}/>
       <Route path='/sessions/club/:clubId' element={<ProtectedWrapper><ClubSessions/></ProtectedWrapper>}/>
+      <Route path='/forgotPassword' element={<ForgotPassword/>}/>
     </Routes>
     <ToastContainer 
       position="top-center"

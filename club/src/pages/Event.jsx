@@ -150,17 +150,7 @@ const Event = () => {
               <div className="p-6">
                 <h2 className="text-xl font-semibold text-gray-800 mb-4">Event Management</h2>
                 <div className="flex flex-wrap gap-4">
-                  <button
-                    className="px-4 py-2 bg-[#1a4b8e] text-white rounded-md hover:bg-[#153c70] transition-colors"
-                    onClick={() => navigate(`/edit-event/${event._id}`)}
-                  >
-                    Edit Event
-                  </button>
-                  <button
-                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-                  >
-                    Delete Event
-                  </button>
+                  
                   <button
                     onClick={() => navigate(`/event-applications/${event._id}`)}
                     className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
