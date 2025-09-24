@@ -51,6 +51,20 @@ const Dashboard = () => {
     }
   }
 
+  function getDeadline(date) {
+    const [y, m, d] = date.split("-");
+    const deadline = new Date(
+      Number(y),
+      Number(m) - 1,
+      Number(d),
+      23,
+      59,
+      59,
+      999
+    );
+    return deadline;
+  }
+
   React.useEffect(() => {
     fetchData();
   }, []);
@@ -86,7 +100,7 @@ const Dashboard = () => {
                     <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded mb-1">
                       Deadline: {nextEvent.registerationDeadline ? new Date(nextEvent.registerationDeadline).toLocaleDateString() : "-"}
                     </span>
-                    {new Date(nextEvent.registerationDeadline) >= new Date() ? (
+                    {getDeadline(nextEvent.registerationDeadline) >= new Date() ? (
                       <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">Registration Open</span>
                     ) : (
                       <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded">Registration Closed</span>
