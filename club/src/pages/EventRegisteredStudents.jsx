@@ -13,6 +13,9 @@ const EventRegisteredStudents = () => {
     const [isLoading, setIsLoading] = React.useState(true);
     const [searchQuery, setSearchQuery] = React.useState("");
     const [statusFilter, setStatusFilter] = React.useState("all");
+    const [finalizingStudent, setFinalizingStudent] = React.useState(false);
+    const [roundScheduling, setRoundScheduling] = React.useState(false);
+    const [roundSelecting, setRoundSelecting] = React.useState(false);
     
     async function fetchEventDetails() {
         try {
@@ -64,6 +67,7 @@ const EventRegisteredStudents = () => {
 
     async function finalizeStudent(studentId){
         try {
+            setFinalizingStudent(true);
             const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/finalizeStudent`, {
                 eventId,
                 studentId
@@ -78,18 +82,21 @@ const EventRegisteredStudents = () => {
 
             if (response.data.success) {
                 toast.success("Student finalized successfully");
-                fetchRegisteredStudents();
+               await fetchRegisteredStudents();
             }else{
                 toast.error(response.data.msg);
             }
         } catch (error) {
             console.error("Error finalizing student:", error);
+        }finally{
+            setFinalizingStudent(false);
         }
 
     }
 
     async function scheduleInterview(studentId,roundNumber){
         try {
+            setRoundScheduling(true);
             const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/scheduleInterview`, {
                 eventId,
                 studentId,
@@ -106,17 +113,20 @@ const EventRegisteredStudents = () => {
 
             if (response.data.success) {
                 toast.success("Interview scheduled successfully");
-                fetchRegisteredStudents();
+                await fetchRegisteredStudents();
             }else{
                 toast.error(response.data.msg);
             }
         } catch (error) {
             console.error("Error scheduling interview:", error);
-        }   
+        } finally{  
+            setRoundScheduling(false);
+        }
     }
 
     async function selectStudentForRound(studentId, roundNumber){
         try {
+            setRoundSelecting(true);
             const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/selectStudentForRound`, {
                 eventId,
                 studentId,
@@ -132,12 +142,14 @@ const EventRegisteredStudents = () => {
 
             if (response.data.success) {
                 toast.success("Student selected for round successfully");
-                fetchRegisteredStudents();
+               await fetchRegisteredStudents();
             }else{
                 toast.error(response.data.msg);
             }
         } catch (error) {
             console.error("Error selecting student for round:", error);
+        }finally{
+            setRoundSelecting(false);
         }
     }
 
@@ -447,6 +459,7 @@ const EventRegisteredStudents = () => {
                                                
                                                 <button 
                                                     onClick={() => finalizeStudent(student.studentId._id)}
+                                                    disabled={finalizingStudent}
                                                     className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
                                                 >
                                                     Finalize Selection
@@ -480,12 +493,13 @@ const EventRegisteredStudents = () => {
                                                                 type="text" 
                                                                 value={interviewDate} 
                                                                 onChange={(e) => setInterviewDate(e.target.value)}
-                                                                className="flex-grow border border-gray-300 px-3 py-2 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" 
+                                                                className="flex-grow border border-gray-300 outline-none px-3 py-2 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" 
                                                                 placeholder="YYYY-MM-DD HH:MM"
                                                             />
                                                             <button 
                                                                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
                                                                 onClick={() => scheduleInterview(student.studentId._id, i + 2)}
+                                                                disabled={roundScheduling}
                                                             >
                                                                 Schedule Round {i + 2}
                                                             </button>
@@ -509,6 +523,7 @@ const EventRegisteredStudents = () => {
                                                     <button 
                                                         className="w-full md:w-auto bg-amber-600 hover:bg-amber-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
                                                         onClick={() => selectStudentForRound(student.studentId._id, i + 1)}
+                                                        disabled={roundSelecting}
                                                     >
                                                         Select for Next Round
                                                     </button>
@@ -536,8 +551,9 @@ const EventRegisteredStudents = () => {
                                                             placeholder="YYYY-MM-DD HH:MM"
                                                         />
                                                         <button 
-                                                            className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
+                                                            className="bg-blue-600 hover:bg-blue-700 outline-none text-white font-medium py-2 px-4 rounded-md transition-colors"
                                                             onClick={() => scheduleInterview(student.studentId._id, 1)}
+                                                            disabled={roundScheduling}
                                                         >
                                                             Schedule Round 1
                                                         </button>

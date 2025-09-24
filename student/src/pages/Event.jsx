@@ -74,7 +74,7 @@ const Event = () => {
         // setShow(1);
         // // Also refetch event details to get the latest data
 
-        getEventDetails();
+       await getEventDetails();
       } else {
         toast.error(response.data.msg || "Registration failed");
       }
@@ -135,7 +135,7 @@ const Event = () => {
         "Member offered successfully, they need to accept offer from their side to join your team"
       );
 
-      getEventDetails();
+     await getEventDetails();
     } else {
       toast.error(response.data.msg || "Failed to add member");
     }
@@ -162,7 +162,7 @@ const Event = () => {
       if (response.data.success) {
         toast.success("Member accepted successfully");
 
-        getEventDetails();
+         await getEventDetails();
       } else {
         toast.error(response.data.msg || "Failed to accept member");
       }
@@ -192,7 +192,7 @@ const Event = () => {
       if (response.data.success) {
         toast.success("Unregistered successfully");
 
-        getEventDetails();
+       await getEventDetails();
       } else {
         toast.error(response.data.msg || "Failed to unregister");
       }
@@ -222,8 +222,8 @@ const Event = () => {
 
       if (response.data.success) {
         toast.success("Team name added successfully");
-        getEventDetails();
         setTeamName("");
+        await getEventDetails();
       } else {
         toast.error(response.data.msg || "Failed to add team name");
       }
