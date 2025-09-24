@@ -240,11 +240,11 @@ const Event = () => {
     const deadline = new Date(
       Number(y),
       Number(m) - 1,
-      Number(d),
-      23,
-      59,
-      59,
-      999
+      Number(d)+1,
+      2,
+      0,
+      0,
+      0
     );
     return deadline;
   }
