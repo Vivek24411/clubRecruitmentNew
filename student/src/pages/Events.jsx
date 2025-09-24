@@ -79,9 +79,23 @@ const Events = () => {
     });
   };
 
+  function getDeadline(date) {
+    const [y, m, d] = date.split("-");
+    const deadline = new Date(
+      Number(y),
+      Number(m) - 1,
+      Number(d),
+      23,
+      59,
+      59,
+      999
+    );
+    return deadline;
+  };
+
   // Function to check if event deadline has passed
   const isDeadlinePassed = (deadline) => {
-    return new Date(deadline) < today;
+    return getDeadline(deadline) < today;
   };
 
   return (

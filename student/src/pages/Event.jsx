@@ -4,7 +4,6 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { Link } from "react-router-dom";
 
-
 const Event = () => {
   const [event, setEvent] = React.useState(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -15,6 +14,10 @@ const Event = () => {
   const [teamName, setTeamName] = React.useState("");
   const [memberEmail, setMemberEmail] = React.useState("");
   const [accepting, setAccepting] = React.useState(false);
+  const [registering, setRegistering] = React.useState(false);
+  const [sendingInvitation, setSendingInvitation] = React.useState(false);
+  const [unregistering, setUnregistering] = React.useState(false);
+  const [addingTeamName, setAddingTeamName] = React.useState(false);
 
   // Helper function to format date
   const formatDate = (dateString) => {
@@ -52,6 +55,7 @@ const Event = () => {
 
   async function handleRegister() {
     try {
+      setRegistering(true);
       const response = await axios.post(
         `${import.meta.env.VITE_BASE_URI}/student/registerEvent`,
         {
@@ -69,6 +73,7 @@ const Event = () => {
         // // Update local state to avoid having to refetch
         // setShow(1);
         // // Also refetch event details to get the latest data
+
         getEventDetails();
       } else {
         toast.error(response.data.msg || "Registration failed");
@@ -76,6 +81,8 @@ const Event = () => {
     } catch (error) {
       console.error("Error registering for event:", error);
       toast.error("Failed to register for event. Please try again.");
+    } finally {
+      setRegistering(false);
     }
   }
 
@@ -109,6 +116,7 @@ const Event = () => {
   }
 
   async function addMember() {
+    setSendingInvitation(true);
     const response = await axios.post(
       `${import.meta.env.VITE_BASE_URI}/student/addMemberOffer`,
       {
@@ -126,10 +134,13 @@ const Event = () => {
       toast.success(
         "Member offered successfully, they need to accept offer from their side to join your team"
       );
+
       getEventDetails();
     } else {
       toast.error(response.data.msg || "Failed to add member");
     }
+    setMemberEmail("");
+    setSendingInvitation(false);
   }
 
   async function acceptMemberOffer(studentId) {
@@ -150,7 +161,7 @@ const Event = () => {
 
       if (response.data.success) {
         toast.success("Member accepted successfully");
-        setAccepting(false);
+
         getEventDetails();
       } else {
         toast.error(response.data.msg || "Failed to accept member");
@@ -158,11 +169,14 @@ const Event = () => {
     } catch (error) {
       console.error("Error accepting member:", error);
       toast.error("Failed to accept member. Please try again.");
+    } finally {
+      setAccepting(false);
     }
   }
 
   async function unregisterAsCaptain() {
     try {
+      setUnregistering(true);
       const response = await axios.post(
         `${import.meta.env.VITE_BASE_URI}/student/unregisterAsCaptain`,
         {
@@ -177,6 +191,7 @@ const Event = () => {
 
       if (response.data.success) {
         toast.success("Unregistered successfully");
+
         getEventDetails();
       } else {
         toast.error(response.data.msg || "Failed to unregister");
@@ -184,11 +199,14 @@ const Event = () => {
     } catch (error) {
       console.error("Error unregistering as captain:", error);
       toast.error("Failed to unregister as captain. Please try again.");
+    } finally {
+      setUnregistering(false);
     }
   }
 
   async function addTeamName() {
     try {
+      setAddingTeamName(true);
       const response = await axios.post(
         `${import.meta.env.VITE_BASE_URI}/student/addTeamName`,
         {
@@ -212,6 +230,8 @@ const Event = () => {
     } catch (error) {
       console.error("Error adding team name:", error);
       toast.error("Failed to add team name. Please try again.");
+    } finally {
+      setAddingTeamName(false);
     }
   }
 
@@ -434,7 +454,7 @@ const Event = () => {
 
                   {/* Registration status badge */}
                   <div className="md:text-right">
-                    {new Date(event.registerationDeadline) > new Date() ? (
+                    {getDeadline(event.registerationDeadline) > new Date() ? (
                       <span className="inline-flex items-center bg-green-600 text-white text-sm font-medium px-4 py-1.5 rounded-full shadow-md animate-pulse">
                         <span className="w-2 h-2 bg-white rounded-full mr-2"></span>
                         Registration Open
@@ -731,49 +751,6 @@ const Event = () => {
             <div className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-shadow">
               <div className="p-8">
                 <div className="flex flex-col sm:flex-row justify-between items-center">
-                  <div className="text-center sm:text-left mb-4 sm:mb-0">
-                    <div className="flex items-center justify-center sm:justify-start">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-5 w-5 mr-2 text-[#1a4b8e]"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                        />
-                      </svg>
-                      <h3 className="text-lg font-bold text-[#1a4b8e]">
-                        Interested
-                      </h3>
-                    </div>
-                    <div className="mt-2 flex items-center justify-center sm:justify-start text-gray-600">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4 mr-1.5 text-gray-500"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                        />
-                      </svg>
-                      <p>
-                        Apply by:{" "}
-                        <span className="font-semibold">
-                          {formatDate(event.registerationDeadline)}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
                   {(() => {
                     if (show === null) {
                       return (
@@ -807,7 +784,7 @@ const Event = () => {
 
                           {detail.membersAccepted.length <
                             detail.eventId.maxParticipants - 1 &&
-                            new Date(detail.eventId.registerationDeadline) >
+                            getDeadline(detail.eventId.registerationDeadline) >
                               new Date() && (
                               <div className="mt-6 p-5 border border-blue-100 rounded-xl bg-blue-50/70 shadow-sm hover:shadow-md transition-shadow">
                                 <h3 className="font-semibold text-gray-800 mb-4 flex items-center">
@@ -837,7 +814,7 @@ const Event = () => {
                                       onChange={(e) =>
                                         setMemberEmail(e.target.value)
                                       }
-                                      className="w-full px-4 py-2.5 border border-blue-200 rounded-lg focus:ring-2 focus:ring-[#1a4b8e] focus:border-transparent transition-all pr-10"
+                                      className="w-full px-4 py-2.5 outline-none border border-blue-200 rounded-lg focus:ring-2 focus:ring-[#1a4b8e] focus:border-transparent transition-all pr-10"
                                     />
                                     <svg
                                       xmlns="http://www.w3.org/2000/svg"
@@ -856,7 +833,12 @@ const Event = () => {
                                   </div>
                                   <button
                                     onClick={() => addMember()}
-                                    className="bg-[#1a4b8e] hover:bg-[#153c70] text-white px-5 py-2.5 rounded-lg font-medium shadow-sm hover:shadow transition-all whitespace-nowrap"
+                                    disabled={sendingInvitation}
+                                    className={`bg-[#1a4b8e] hover:bg-[#153c70] text-white px-5 py-2.5 rounded-lg font-medium shadow-sm hover:shadow ${
+                                      sendingInvitation
+                                        ? "opacity-50 cursor-not-allowed"
+                                        : ""
+                                    } transition-all whitespace-nowrap`}
                                   >
                                     <span className="flex items-center justify-center">
                                       <svg
@@ -903,90 +885,12 @@ const Event = () => {
                               </div>
                             )}
 
-                         
-                            {
-                              detail.teamName && (
-                                <div className="mt-6 p-5 border border-blue-100 rounded-xl bg-blue-50/70 shadow-sm hover:shadow-md transition-shadow">
-                                  <h3 className="font-semibold text-gray-800 mb-4 flex items-center">
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      className="h-5 w-5 mr-2 text-[#1a4b8e]"
-                                      fill="none"
-                                      viewBox="0 0 24 24"
-                                      stroke="currentColor"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
-                                      />
-                                    </svg>
-                                    Team Name
-                                  </h3>
-                                  <div className="flex items-center bg-white px-5 py-3 rounded-lg border border-blue-200">
-                                    <div className="bg-[#1a4b8e] text-white rounded-full w-10 h-10 flex items-center justify-center mr-4 shadow-sm flex-shrink-0">
-                                      <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        className="h-5 w-5"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                      >
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={2}
-                                          d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
-                                        />
-                                      </svg>
-                                    </div>
-                                    <div>
-                                      <p className="text-sm text-gray-500 font-medium">
-                                        Your team is named
-                                      </p>
-                                      <h4 className="font-bold text-lg text-gray-800">
-                                        {detail.teamName}
-                                      </h4>
-                                    </div>
-                                   
-        
-                                  </div>
-                                </div>
-                              )
-                            }
-                            {
-                              !detail.teamName && (
-                                <div className="mt-6 p-5 border border-blue-100 rounded-xl bg-blue-50/70 shadow-sm hover:shadow-md transition-shadow">
-                            <h3 className="font-semibold text-gray-800 mb-4 flex items-center">
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-5 w-5 mr-2 text-[#1a4b8e]"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
-                                />
-                              </svg>
-                              Team Name
-                            </h3>
-                            <div className="flex flex-col sm:flex-row gap-2">
-                              <div className="relative flex-grow">
-                                <input
-                                  type="text"
-                                  placeholder="Enter team name"
-                                  value={teamName}
-                                  onChange={(e) => setTeamName(e.target.value)}
-                                  className="w-full px-4 py-2.5 border outline-none border-blue-200 rounded-lg focus:ring-2 focus:ring-[#1a4b8e] focus:border-transparent transition-all"
-                                />
+                          {detail.teamName && (
+                            <div className="mt-6 p-5 border border-blue-100 rounded-xl bg-blue-50/70 shadow-sm hover:shadow-md transition-shadow">
+                              <h3 className="font-semibold text-gray-800 mb-4 flex items-center">
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
-                                  className="h-5 w-5 text-gray-400 absolute right-3 top-1/2 transform -translate-y-1/2"
+                                  className="h-5 w-5 mr-2 text-[#1a4b8e]"
                                   fill="none"
                                   viewBox="0 0 24 24"
                                   stroke="currentColor"
@@ -998,15 +902,13 @@ const Event = () => {
                                     d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
                                   />
                                 </svg>
-                              </div>
-                              <button
-                                onClick={addTeamName}
-                                className="bg-[#1a4b8e] hover:bg-[#153c70] text-white px-5 py-2.5 rounded-lg font-medium shadow-sm hover:shadow transition-all whitespace-nowrap"
-                              >
-                                <span className="flex items-center justify-center">
+                                Team Name
+                              </h3>
+                              <div className="flex items-center bg-white px-5 py-3 rounded-lg border border-blue-200">
+                                <div className="bg-[#1a4b8e] text-white rounded-full w-10 h-10 flex items-center justify-center mr-4 shadow-sm flex-shrink-0">
                                   <svg
                                     xmlns="http://www.w3.org/2000/svg"
-                                    className="h-4 w-4 mr-1.5"
+                                    className="h-5 w-5"
                                     fill="none"
                                     viewBox="0 0 24 24"
                                     stroke="currentColor"
@@ -1015,20 +917,99 @@ const Event = () => {
                                       strokeLinecap="round"
                                       strokeLinejoin="round"
                                       strokeWidth={2}
-                                      d="M5 13l4 4L19 7"
+                                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
                                     />
                                   </svg>
-                                  Add Team Name
-                                </span>
-                              </button>
+                                </div>
+                                <div>
+                                  <p className="text-sm text-gray-500 font-medium">
+                                    Your team is named
+                                  </p>
+                                  <h4 className="font-bold text-lg text-gray-800">
+                                    {detail.teamName}
+                                  </h4>
+                                </div>
+                              </div>
                             </div>
-                            <p className="mt-2 text-center text-xs text-gray-500 bg-blue-100/70 p-2 rounded-md">
-                              This will set your team name for the event
-                            </p>
-                          </div>
-                              )
-                            }
-                          
+                          )}
+                          {!detail.teamName && (
+                            <div className="mt-6 p-5 border border-blue-100 rounded-xl bg-blue-50/70 shadow-sm hover:shadow-md transition-shadow">
+                              <h3 className="font-semibold text-gray-800 mb-4 flex items-center">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-5 w-5 mr-2 text-[#1a4b8e]"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
+                                  />
+                                </svg>
+                                Team Name
+                              </h3>
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <div className="relative flex-grow">
+                                  <input
+                                    type="text"
+                                    placeholder="Enter team name"
+                                    value={teamName}
+                                    onChange={(e) =>
+                                      setTeamName(e.target.value)
+                                    }
+                                    className="w-full px-4 py-2.5 border outline-none border-blue-200 rounded-lg focus:ring-2 focus:ring-[#1a4b8e] focus:border-transparent transition-all"
+                                  />
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5 text-gray-400 absolute right-3 top-1/2 transform -translate-y-1/2"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
+                                    />
+                                  </svg>
+                                </div>
+                                <button
+                                  onClick={addTeamName}
+                                  disabled={addingTeamName}
+                                  className={`bg-[#1a4b8e] hover:bg-[#153c70] ${
+                                    addingTeamName
+                                      ? "opacity-50 cursor-not-allowed"
+                                      : ""
+                                  } text-white px-5 py-2.5 rounded-lg font-medium shadow-sm hover:shadow transition-all whitespace-nowrap`}
+                                >
+                                  <span className="flex items-center justify-center">
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      className="h-4 w-4 mr-1.5"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      stroke="currentColor"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M5 13l4 4L19 7"
+                                      />
+                                    </svg>
+                                    Add Team Name
+                                  </span>
+                                </button>
+                              </div>
+                              <p className="mt-2 text-center text-xs text-gray-500 bg-blue-100/70 p-2 rounded-md">
+                                This will set your team name for the event
+                              </p>
+                            </div>
+                          )}
 
                           <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8">
                             {/* Round Status */}
@@ -1120,9 +1101,14 @@ const Event = () => {
                                                         d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                                                       />
                                                     </svg>
-                                                    <span className="text-sm font-medium text-blue-700">
+                                                    <span className="text-xs font-medium text-blue-700">
                                                       Due:{" "}
-                                                      {round.SubmissionDeadline}
+                                                      {
+                                                        formatDate(
+                                                          detail.eventId
+                                                          .registerationDeadline
+                                                        )
+                                                      }
                                                     </span>
                                                   </div>
                                                 )}
@@ -1156,7 +1142,8 @@ const Event = () => {
                                               {round.GoogleFormLink &&
                                                 new Date() <
                                                   getDeadline(
-                                                    round.SubmissionDeadline
+                                                    detail.eventId
+                                                      .registerationDeadline
                                                   ) && (
                                                   <div className="mt-2">
                                                     <a
@@ -1304,15 +1291,18 @@ const Event = () => {
                                   </button>
                                 </div>
                               )}
-                              
                             </div>
-                            
                           </div>
-                           {/* Unregister as Captain Button */}
+                          {/* Unregister as Captain Button */}
                           <div className="mt-6">
                             <button
                               onClick={unregisterAsCaptain}
-                              className="w-full bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 px-5 py-3 rounded-lg font-medium transition-all flex items-center justify-center group"
+                              disabled={unregistering}
+                              className={`w-full bg-red-100 ${
+                                unregistering
+                                  ? "opacity-50 cursor-not-allowed"
+                                  : ""
+                              } hover:bg-red-200 text-red-700 border border-red-300 px-5 py-3 rounded-lg font-medium transition-all flex items-center justify-center group`}
                             >
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"
@@ -1335,7 +1325,6 @@ const Event = () => {
                               this event
                             </p>
                           </div>
-
                         </div>
                       );
                     } else if (show === 2) {
@@ -1359,8 +1348,12 @@ const Event = () => {
                               </svg>
                             </div>
                             <div>
-                              <span className="text-sm text-gray-500 font-medium">Team Name</span>
-                              <p className="font-semibold text-gray-800 text-lg">{detail.teamName}</p>
+                              <span className="text-sm text-gray-500 font-medium">
+                                Team Name
+                              </span>
+                              <p className="font-semibold text-gray-800 text-lg">
+                                {detail.teamName}
+                              </p>
                             </div>
                           </div>
                           <div className="bg-blue-100 text-blue-800 px-4 py-3 rounded-md flex items-center mb-4">
@@ -1453,7 +1446,12 @@ const Event = () => {
                                                 d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                                               />
                                             </svg>
-                                            {round.SubmissionDeadline}
+                                            {detail.eventId && (
+                                              formatDate(
+                                                detail.eventId
+                                                  .registerationDeadline
+                                              )
+                                            )}
                                           </span>
                                         )}
                                       </div>
@@ -1513,11 +1511,54 @@ const Event = () => {
                       );
                     } else if (show === 3) {
                       if (
-                        new Date(detail[0].eventId.registerationDeadline) >
+                        getDeadline(detail[0].eventId.registerationDeadline) >
                         new Date()
                       ) {
                         return (
                           <div className="w-full">
+                            <div className="text-center sm:text-left mb-4 pb-4 sm:mb-0">
+                              <div className="flex items-center justify-center sm:justify-start">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-5 w-5 mr-2 text-[#1a4b8e]"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                  />
+                                </svg>
+                                <h3 className="text-lg font-bold text-[#1a4b8e]">
+                                  Interested
+                                </h3>
+                              </div>
+                              <div className="mt-2 flex items-center justify-center sm:justify-start text-gray-600">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-4 w-4 mr-1.5 text-gray-500"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                  />
+                                </svg>
+                                <p>
+                                  Apply by:{" "}
+                                  <span className="font-semibold">
+                                    {formatDate(event.registerationDeadline)}
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
                             <div className="bg-yellow-100 text-yellow-800 px-4 py-3 rounded-md mb-4">
                               <h3 className="font-medium text-lg mb-2">
                                 Team Invitations
@@ -1578,7 +1619,11 @@ const Event = () => {
                                           acceptMemberOffer(offer.studentId._id)
                                         }
                                         disabled={accepting}
-                                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex-1"
+                                        className={`bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex-1 ${
+                                          accepting
+                                            ? "opacity-50 cursor-not-allowed"
+                                            : ""
+                                        }`}
                                       >
                                         Accept Invitation
                                       </button>
@@ -1596,6 +1641,7 @@ const Event = () => {
                               </p>
                               <button
                                 onClick={handleRegister}
+                                disabled={registering}
                                 className="w-full bg-[#1a4b8e] hover:bg-[#153c70] text-white px-4 py-2 rounded-md"
                               >
                                 Register as Team Captain
@@ -1630,13 +1676,61 @@ const Event = () => {
                       }
                     } else {
                       if (
-                        new Date(detail?.registerationDeadline) > new Date()
+                        getDeadline(detail?.registerationDeadline) > new Date()
                       ) {
                         return (
                           <div className="w-full sm:w-auto">
+                            <div className="text-center sm:text-left mb-4 pb-4 sm:mb-0">
+                              <div className="flex items-center justify-center sm:justify-start">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-5 w-5 mr-2 text-[#1a4b8e]"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                                  />
+                                </svg>
+                                <h3 className="text-lg font-bold text-[#1a4b8e]">
+                                  Interested
+                                </h3>
+                              </div>
+                              <div className="mt-2 flex items-center justify-center sm:justify-start text-gray-600">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-4 w-4 mr-1.5 text-gray-500"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                  />
+                                </svg>
+                                <p>
+                                  Apply by:{" "}
+                                  <span className="font-semibold">
+                                    {formatDate(event.registerationDeadline)}
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
                             <button
                               onClick={handleRegister}
-                              className="w-full sm:w-auto bg-[#1a4b8e] hover:bg-[#153c70] text-white px-8 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 flex items-center justify-center"
+                              disabled={registering}
+                              className={`w-full sm:w-auto  ${
+                                registering
+                                  ? "opacity-50 cursor-not-allowed"
+                                  : ""
+                              } bg-[#1a4b8e] hover:bg-[#153c70]  text-white px-8 py-3 rounded-lg font-medium transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 flex items-center justify-center`}
                             >
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"

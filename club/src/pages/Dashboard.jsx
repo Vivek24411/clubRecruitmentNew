@@ -74,7 +74,7 @@ const Dashboard = () => {
           <div className="bg-blue-50 rounded-xl shadow p-5 flex flex-col">
             <h2 className="text-2xl font-semibold text-blue-800 mb-3 flex items-center justify-between">
               <div className="flex items-center">
-                <span className="inline-block w-2 h-6 bg-blue-800 rounded-full mr-2"></span>Next Upcoming Event
+                <span className="inline-block w-2 h-6 bg-blue-800 rounded-full mr-2"></span>Event
               </div>
               <Link to="/events" className="text-sm text-blue-700 hover:text-blue-900">View All Events</Link>
             </h2>
@@ -126,7 +126,7 @@ const Dashboard = () => {
           <div className="bg-blue-50 rounded-xl shadow p-5 flex flex-col">
             <h2 className="text-2xl font-semibold text-blue-800 mb-3 flex items-center justify-between">
               <div className="flex items-center">
-                <span className="inline-block w-2 h-6 bg-blue-800 rounded-full mr-2"></span>Next Upcoming Session
+                <span className="inline-block w-2 h-6 bg-blue-800 rounded-full mr-2"></span>Session
               </div>
               <Link to="/sessions" className="text-sm text-blue-700 hover:text-blue-900">View All Sessions</Link>
             </h2>

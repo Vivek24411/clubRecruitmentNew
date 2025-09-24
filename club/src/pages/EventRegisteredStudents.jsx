@@ -352,9 +352,10 @@ const EventRegisteredStudents = () => {
                     {filteredStudents.map(student => (
                     <div key={student._id} className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
                         {/* Student header with info */}
-                        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-4 flex justify-between items-start">
-                            <div>
-                                <h2 className="text-xl font-bold text-white">{student.studentId.name}</h2>
+                        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-4 sm:px-6 py-4 flex flex-col md:flex-row justify-between items-start gap-4">
+                            <div className="w-full md:w-auto mb-4 md:mb-0">
+                                {student.teamName && <div className="text-sm text-white/90 mb-1">Team: <span className="font-semibold">{student.teamName}</span></div>}
+                                <h2 className="text-xl font-medium text-gray-200">{student.studentId.name}</h2>
                                 <div className="mt-1 flex items-center">
                                     <span className="bg-blue-400/30 text-white text-xs px-2 py-0.5 rounded-full">Captain</span>
                                 </div>
@@ -367,7 +368,8 @@ const EventRegisteredStudents = () => {
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                         </svg>
-                                        <span>{student.studentId.email}</span>
+                                        <span className="hidden sm:inline">{student.studentId.email}</span>
+                                        <span className="sm:hidden">Email</span>
                                     </a>
                                     <a href={`tel:${student.studentId.phoneNumber}`} className="flex items-center text-white/80 hover:text-white">
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -379,19 +381,22 @@ const EventRegisteredStudents = () => {
                             </div>
                             
                             {student.membersAccepted && student.membersAccepted.length > 0 && (
-                                <div className="bg-blue-700/50 rounded-lg p-3">
+                                <div className="w-full md:max-w-xs lg:max-w-sm mt-4 md:mt-0 bg-blue-700/50 rounded-lg p-3 overflow-x-auto">
                                     <h3 className="text-sm font-medium text-white border-b border-white/20 pb-1 mb-2">Team Members</h3>
-                                    <div className="space-y-3">
+                                    <div className="flex flex-col gap-3">
                                         {student.membersAccepted.map((member, index) => (
-                                            <div key={member.id || index} className="flex items-start space-x-2">
-                                                <div className="h-6 w-6 rounded-full bg-blue-500/40 flex items-center justify-center text-xs text-white flex-shrink-0">
+                                            <div 
+                                                key={member.id || index} 
+                                                className="flex items-start gap-2 p-1.5 rounded-md bg-blue-600/30 hover:bg-blue-600/50 transition-colors"
+                                            >
+                                                <div className="h-7 w-7 rounded-full bg-blue-500/40 flex items-center justify-center text-xs text-white flex-shrink-0">
                                                     {index + 1}
                                                 </div>
-                                                <div className="text-sm text-white">
-                                                    <p className="font-medium">{member.name}</p>
-                                                    <div className="text-xs text-white/80 space-y-0.5">
-                                                        <p>{member.email}</p>
-                                                        <p>{member.phoneNumber}</p>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="font-medium text-sm text-white truncate">{member.name}</p>
+                                                    <div className="flex flex-col text-xs text-white/80">
+                                                        <p className="truncate">{member.email}</p>
+                                                        <p className="truncate">{member.phoneNumber}</p>
                                                     </div>
                                                 </div>
                                             </div>

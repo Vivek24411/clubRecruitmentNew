@@ -49,7 +49,7 @@ const Home = () => {
           {/* Upcoming Events */}
           <div className="bg-blue-50 rounded-xl shadow p-5 flex flex-col">
             <h2 className="text-2xl font-semibold text-blue-800 mb-3 flex items-center gap-2">
-              <span className="inline-block w-2 h-6 bg-blue-800 rounded-full mr-2"></span>Upcoming Events
+              <span className="inline-block w-2 h-6 bg-blue-800 rounded-full mr-2"></span>Events
             </h2>
             {events && events.length > 0 ? (
               <ul className="flex flex-col gap-3">
@@ -79,7 +79,7 @@ const Home = () => {
           {/* Upcoming Sessions */}
           <div className="bg-blue-50 rounded-xl shadow p-5 flex flex-col">
             <h2 className="text-2xl font-semibold text-blue-800 mb-3 flex items-center gap-2">
-              <span className="inline-block w-2 h-6 bg-blue-800 rounded-full mr-2"></span>Upcoming Sessions
+              <span className="inline-block w-2 h-6 bg-blue-800 rounded-full mr-2"></span>Sessions
             </h2>
             {sessions && sessions.length > 0 ? (
               <ul className="flex flex-col gap-3">
