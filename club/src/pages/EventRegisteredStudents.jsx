@@ -375,13 +375,13 @@ const EventRegisteredStudents = () => {
                                     <p>{student.studentId.branch} • Year {student.studentId.year}</p>
                                     <p>{student.studentId.enrollmentNumber}</p>
                                 </div>
-                                <div className="mt-2 flex items-center space-x-3">
+                                <div className="mt-2 flex items-center space-x-1.5">
                                     <a href={`mailto:${student.studentId.email}`} className="flex items-center text-white/80 hover:text-white">
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                         </svg>
-                                        <span className="hidden sm:inline">{student.studentId.email}</span>
-                                        <span className="sm:hidden">Email</span>
+                                        <span className="sm:inline">{student.studentId.email}</span>
+                                        
                                     </a>
                                     <a href={`tel:${student.studentId.phoneNumber}`} className="flex items-center text-white/80 hover:text-white">
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
