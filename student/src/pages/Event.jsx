@@ -240,7 +240,7 @@ const Event = () => {
     const deadline = new Date(
       Number(y),
       Number(m) - 1,
-      Number(d)+1,
+      Number(d),
       14,
       0,
       0,
@@ -527,7 +527,7 @@ const Event = () => {
                           Registration Deadline
                         </p>
                         <p className="font-semibold text-gray-800 text-lg">
-                          {formatDate(event.registerationDeadline)}
+                          {formatDate(event.registerationDeadline)} <span className="text-base font-medium">- 2:00 PM</span>
                         </p>
                       </div>
                     </div>
@@ -1554,7 +1554,7 @@ const Event = () => {
                                 <p>
                                   Apply by:{" "}
                                   <span className="font-semibold">
-                                    {formatDate(event.registerationDeadline)}
+                                    {formatDate(event.registerationDeadline)} - 2:00pm 
                                   </span>
                                 </p>
                               </div>
@@ -1718,7 +1718,7 @@ const Event = () => {
                                 <p>
                                   Apply by:{" "}
                                   <span className="font-semibold">
-                                    {formatDate(event.registerationDeadline)}
+                                    {formatDate(event.registerationDeadline)} - 2:00pm 
                                   </span>
                                 </p>
                               </div>
