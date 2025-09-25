@@ -74,6 +74,7 @@ const Home = () => {
             ) : (
               <div className="text-gray-500 text-center py-6">No upcoming events</div>
             )}
+            
           </div>
 
           {/* Upcoming Sessions */}
