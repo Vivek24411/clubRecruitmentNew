@@ -162,11 +162,7 @@ const Register = () => {
   }, []);
 
 
-  async function resendOTP(){
-    sendOTP();
-    setOtp("");
-    setSendingOTP(false);
-  }
+
 
   async function sendOTP() {
     setSendingOTP(true);
