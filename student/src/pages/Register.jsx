@@ -2,6 +2,7 @@ import axios from "axios";
 import React from "react";
 import { toast } from "react-toastify";
 import { useNavigate, Link } from "react-router-dom";
+import { set } from "mongoose";
 
 // Custom responsive styles
 const styles = {
@@ -161,7 +162,11 @@ const Register = () => {
   }, []);
 
 
-
+  async function resendOTP(){
+    sendOTP();
+    setOtp("");
+    setSendingOTP(false);
+  }
 
   async function sendOTP() {
     setSendingOTP(true);
