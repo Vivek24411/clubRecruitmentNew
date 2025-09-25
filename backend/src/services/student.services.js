@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-
+const { Resend } = require('resend');
 
 
 
@@ -7,16 +7,37 @@ const nodemailer = require('nodemailer');
 module.exports.sendOtp = async (email, otp) => {
 
     const transporter = nodemailer.createTransport({
-        host: "smtp-relay.brevo.com",
-        port: 587,
-        secure: false,
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
         auth: {
-            user: process.env.BREVO_USER,
-            pass: process.env.BREVO_API_KEY
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS
         }
     });
 
+//   try{
+//     console.log('Sending email to:', email);
+    
+//       const {data, error} = await resend.emails.send({
+//         from: 'noreply.0to1@gmail.com',
+//         to: 'noreply.0to1@gmail.com',
+//         subject: 'OTP Verification',
+//         text: `Your OTP is ${otp}`,
+//     });
 
+//     console.log(error);
+    
+
+//     if (error) {
+//         throw new Error('Error sending email');
+//     }
+
+//     console.log('Email sent:', data);
+//   }catch(err){
+//     console.error('Error sending email:', err);
+//     throw err;
+//   }
 
     const mailOptions = {
         from: process.env.EMAIL_USER,
