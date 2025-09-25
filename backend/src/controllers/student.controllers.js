@@ -9,7 +9,8 @@ const eventModel = require("../models/event.model");
 const registerationEventModel = require("../models/registerationEvent.model");
 
 module.exports.sendOtp = async (req, res) => {
-  const errors = validationResult(req);
+ try{
+   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.json({ errors: errors.array(), success: false });
   }
@@ -43,6 +44,10 @@ module.exports.sendOtp = async (req, res) => {
     success: true,
     msg: "OTP sent successfully",
   });
+ }catch(err){
+    console.error('Error in sendOtp controller:', err);
+    return res.json({ success: false, msg: err.message || "Server error" });
+  }
 };
 
 module.exports.verifyOtp = async (req, res) => {
