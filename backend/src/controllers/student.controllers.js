@@ -27,15 +27,30 @@ module.exports.sendOtp = async (req, res) => {
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-
-  const existingOTP = await otpModel.findOne({ email });
+  // Add timeout to database operations
+  const existingOTP = await Promise.race([
+    otpModel.findOne({ email }),
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Database operation timeout')), 10000)
+    )
+  ]);
 
   const hashedOtp = await bcrypt.hash(otp, 10);
 
   if (existingOTP) {
-    await otpModel.updateOne({ email }, { otp: hashedOtp });
+    await Promise.race([
+      otpModel.updateOne({ email }, { otp: hashedOtp }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Database operation timeout')), 10000)
+      )
+    ]);
   } else {
-    await otpModel.create({ email, otp: hashedOtp });
+    await Promise.race([
+      otpModel.create({ email, otp: hashedOtp }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Database operation timeout')), 10000)
+      )
+    ]);
   }
 
   await sendOtp(email, otp);
@@ -46,7 +61,12 @@ module.exports.sendOtp = async (req, res) => {
   });
  }catch(err){
     console.error('Error in sendOtp controller:', err);
-    return res.json({ success: false, msg: err.message || "Server error" });
+    return res.json({ 
+      success: false, 
+      msg: err.message === 'Database operation timeout' ? 
+        'Database connection timeout. Please try again.' : 
+        err.message || "Server error" 
+    });
   }
 };
 

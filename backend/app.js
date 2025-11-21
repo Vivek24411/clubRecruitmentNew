@@ -3,6 +3,7 @@ const studentRouter = require('./src/routes/student.routes')
 const adminRouter = require('./src/routes/admin.routes')
 const clubRouter = require('./src/routes/club.routes')
 const pingRouter = require('./src/routes/ping.routes')
+const ensureDBConnection = require('./src/middlewares/dbMiddleware')
 const app = express()
 const cors = require('cors')
 
@@ -31,6 +32,9 @@ app.use(cors(
 
 app.use(express.json())
 app.use(express.urlencoded({extended:true}))
+
+// Ensure database connection for all routes
+app.use(ensureDBConnection)
 
 app.use('/student',studentRouter)
 app.use('/admin',adminRouter)
