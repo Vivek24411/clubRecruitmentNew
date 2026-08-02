@@ -11,6 +11,7 @@ import Events from './pages/Events'
 import AddEvent from './pages/AddEvent'
 import UserProtectedWrapper from './pages/UserProtectedWrapper'
 import EventRegisteredStudents from './pages/EventRegisteredStudents'
+import EditEvent from './pages/EditEvent'
 
 const App = () => {
   return (
@@ -26,6 +27,7 @@ const App = () => {
     <Route path='/events' element={<UserProtectedWrapper><Events /></UserProtectedWrapper>} />
     <Route path='/addEvent' element={<UserProtectedWrapper><AddEvent /></UserProtectedWrapper>} />
     <Route path='/event-applications/:eventId' element={<UserProtectedWrapper><EventRegisteredStudents /></UserProtectedWrapper>} />
+    <Route path='/events/:eventId/edit' element={<UserProtectedWrapper><EditEvent /></UserProtectedWrapper>} />
     </Routes>
     </>
   )

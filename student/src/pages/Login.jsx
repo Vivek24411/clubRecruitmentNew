@@ -2,6 +2,7 @@ import React from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { useNavigate, Link } from "react-router-dom";
+import { StudentContextData } from "../context/StudentContext";
 
 // Custom responsive styles
 const styles = {
@@ -94,11 +95,7 @@ const styles = {
 };
 
 // Media queries for responsive design
-const getResponsiveStyles = () => {
-  // Check if window is available (client-side)
-  if (typeof window !== "undefined") {
-    const width = window.innerWidth;
-    
+const getResponsiveStyles = (width) => {
     // Mobile styles (small screens)
     if (width < 480) {
       return {
@@ -132,21 +129,21 @@ const getResponsiveStyles = () => {
         }
       };
     }
-  }
-  
   return {};
 };
 
 const Login = () => {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [isLoading, setIsLoading] = React.useState(false);
+  const { setLoggedInStudent, refreshProfile } = React.useContext(StudentContextData);
   const [windowWidth, setWindowWidth] = React.useState(
     typeof window !== "undefined" ? window.innerWidth : 1024
   );
   const navigate = useNavigate();
   
   // Responsive styles
-  const responsiveStyles = React.useMemo(() => getResponsiveStyles(), [windowWidth]);
+  const responsiveStyles = React.useMemo(() => getResponsiveStyles(windowWidth), [windowWidth]);
   
   // Add window resize listener
   React.useEffect(() => {
@@ -161,7 +158,9 @@ const Login = () => {
   }, []);
 
 
-  async function handleLogin(){
+  async function handleLogin(event){
+    event.preventDefault();
+    setIsLoading(true);
     try{
       const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/student/login`, {
       email,
@@ -171,15 +170,17 @@ const Login = () => {
     
     if(response.data.success){
  
-      toast.success("Login successful");
-      localStorage.setItem("token", response.data.token);
+      toast.success(response.data.msg || "Login successful");
+      setLoggedInStudent(true);
+      await refreshProfile();
       navigate("/");
     }else{
       toast.error(response.data.msg || "Login failed");
     }
     }catch(err){
-    
-      toast.error(err.message || "Server error");
+      toast.error(err.response?.data?.msg || "Server error");
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -194,11 +195,11 @@ const Login = () => {
           ...responsiveStyles.heading
         }}>Welcome back</h1>
         
-        <form style={{...styles.form}}>
+        <form style={{...styles.form}} onSubmit={handleLogin}>
           <div style={{...styles.inputGroup}}>
             <label style={{...styles.label}}>IITR Email</label>
             <input
-              type="text"
+              type="email"
               placeholder="Enter IITR email"
               required
               value={email}
@@ -227,14 +228,14 @@ const Login = () => {
           </div>
           
           <button 
-            type="button"
-            onClick={handleLogin}
+            type="submit"
+            disabled={isLoading}
             style={{
               ...styles.primaryButton,
               ...responsiveStyles.primaryButton
             }}
           >
-            Sign In
+            {isLoading ? "Signing in…" : "Sign In"}
           </button>
           
          

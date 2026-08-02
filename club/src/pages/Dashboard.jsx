@@ -1,32 +1,19 @@
 import React from 'react'
 import axios from 'axios'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 const Dashboard = () => {
-  const [sessions, setSessions] = React.useState([])
-  const [events, setEvents] = React.useState([])
   const [nextEvent, setNextEvent] = React.useState(null)
   const [nextSession, setNextSession] = React.useState(null)
-  const navigate = useNavigate();
 
   async function fetchData() {
     try {
-      const response = await axios.get(
-        `${import.meta.env.VITE_BASE_URI}/club/getDashBoard`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("clubToken")}`,
-          },
-        }
-      );
+      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/club/getDashBoard`);
  
       
       if(response.data.success) {
         const allSessions = response.data.sessions || [];
         const allEvents = response.data.events || [];
-        
-        setSessions(allSessions);
-        setEvents(allEvents);
         
         // Find the most upcoming event (closest date)
         if (allEvents.length > 0) {
@@ -197,8 +184,6 @@ const Dashboard = () => {
             )}
           </div>
         </div>
-
-        <div className="mt-8 text-center text-gray-500 text-xs">&copy; {new Date().getFullYear()} Club Recruitment Portal | Made with <span className="text-red-500">&#10084;</span> at IITR</div>
       </div>
     </div>
   )

@@ -2,7 +2,6 @@ import React from 'react'
 import {useParams, Link} from 'react-router-dom'
 import axios from 'axios'
 import { toast } from 'react-toastify';
-import { useEffect } from 'react';
 
 
 
@@ -12,31 +11,26 @@ const ClubSessions = () => {
   const [isLoading, setIsLoading] = React.useState(true)
   const { clubId } = useParams();
   
-  async function fetchClubSessions(){
+  const fetchClubSessions = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getClubSessions`,{ 
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        },
-        params: { clubId }
-      });
+      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getClubSessions`, { params: { clubId } });
       if(response.data.success){
         setClubSessions(response.data.sessions);
       }else{
         toast.error(response.data.msg);
       }
-    } catch (error) {
+    } catch {
      
       toast.error("Failed to fetch club sessions");
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [clubId]);
 
   React.useEffect(() => {
     fetchClubSessions();
-  }, [clubId]);
+  }, [fetchClubSessions]);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">

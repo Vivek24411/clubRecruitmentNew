@@ -8,23 +8,18 @@ const Sessions = () => {
   const [sessions, setSessions] = React.useState([])
   const [isLoading, setIsLoading] = React.useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [clubNames, setClubNames] = useState({})
 
   async function fetchSessions(){
     setIsLoading(true);
     try {
-      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getSessions`,{
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
-      });
+      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getSessions`);
 
       if(response.data.success){
         setSessions(response.data.sessions);
       }else{
         toast.error(response.data.msg);
       }
-    } catch (error) {
+    } catch {
 
       toast.error("Failed to load sessions");
     } finally {
@@ -48,7 +43,7 @@ const Sessions = () => {
     return (
       session.title.toLowerCase().includes(searchLower) ||
       session.shortDescription.toLowerCase().includes(searchLower) ||
-      (clubNames[session.clubId] && clubNames[session.clubId].toLowerCase().includes(searchLower)) ||
+      (session.clubId?.name && session.clubId.name.toLowerCase().includes(searchLower)) ||
       session.venue.toLowerCase().includes(searchLower)
     );
   });

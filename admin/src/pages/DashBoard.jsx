@@ -1,17 +1,14 @@
 import React from 'react'
 import axios from 'axios'
 import { toast } from 'react-toastify';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 
 const DashBoard = () => {
-  const navigate = useNavigate();
   const [clubCount, setClubCount] = React.useState(0);
   const [studentCount, setStudentCount] = React.useState(0);
   const [eventCount, setEventCount] = React.useState(0);
   const [sessionCount, setSessionCount] = React.useState(0);
-  const [sessions, setSessions] = React.useState([]);
-  const [events, setEvents] = React.useState([]);
   const [nextEvent, setNextEvent] = React.useState(null);
   const [nextSession, setNextSession] = React.useState(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -19,13 +16,8 @@ const DashBoard = () => {
   async function fetchDashBoardData(){
     setIsLoading(true);
     try {
-      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/admin/getDashBoard`,{
-        headers: {  
-          Authorization: `Bearer ${localStorage.getItem("adminToken")}`
-        }
-      });
+      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/admin/getDashBoard`);
 
-      console.log("Dashboard Data:", response.data);
       
       if(response.data.success){
         // Fix: Access data from dashboard object within response.data
@@ -37,9 +29,6 @@ const DashBoard = () => {
         
         const allEvents = dashboard.events || [];
         const allSessions = dashboard.sessions || [];
-        
-        setSessions(allSessions);
-        setEvents(allEvents);
         
         // Find the most upcoming event (closest date)
         if (allEvents.length > 0) {
@@ -283,8 +272,7 @@ const DashBoard = () => {
           </div>
         </div>
       )}
-      
-      <div className="mt-8 text-center text-gray-500 text-xs">&copy; {new Date().getFullYear()} Club Recruitment Portal | Made with <span className="text-red-500">&#10084;</span> at IITR</div>
+
     </div>
   </div>
   )

@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test",
+    "migrate:v2": "node scripts/migrate-v2.js",
+    "check": "node --check app.js && node --check server.js"
   },
   "keywords": [],
   "author": "",
@@ -11,7 +13,7 @@
   "description": "",
   "dependencies": {
     "bcrypt": "^6.0.0",
-    "cloudinary": "^1.41.3",
+    "cloudinary": "^2.10.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
@@ -19,8 +21,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.18.0",
     "multer": "^2.0.2",
-    "multer-storage-cloudinary": "^4.0.0",
-    "nodemailer": "^7.0.6",
+    "nodemailer": "^9.0.3",
     "resend": "^6.1.0",
     "sib-api-v3-sdk": "^8.5.0"
   }

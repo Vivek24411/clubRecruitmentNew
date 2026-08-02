@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom';
 import axios from 'axios'
 import { toast } from 'react-toastify';
 import { Link } from 'react-router-dom'
@@ -10,24 +9,19 @@ const Events = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [filter, setFilter] = useState('all')
   const [sortBy, setSortBy] = useState('deadline')
-  const navigate = useNavigate();
   const today = new Date();
 
   async function fetchEvents() {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getEvents`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        },
-      });
+      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getEvents`);
 
       if (response.data.success) {
         setEvents(response.data.events);
       } else {
         toast.error(response.data.msg);
       }
-    } catch (error) {
+    } catch {
       
       toast.error("Failed to fetch events");
     } finally {

@@ -1,89 +1,55 @@
-const jwt = require("jsonwebtoken");
 const clubModel = require("../models/club.model");
 const studentModel = require("../models/student.model");
+const { getSessionToken, verifySession } = require("../utils/auth");
 
-module.exports.adminAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.json({ success: false, msg: "No token provided" });
-  }
-
-  const token = authHeader.split(" ")[1];
-  if (!token) {
-    return res.json({ success: false, msg: "No token provided" });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (decoded.email !== process.env.ADMIN_EMAIL) {
-      return res.json({ success: false, msg: "Forbidden" });
-    }
-    req.admin = decoded;
-    next();
-  } catch (err) {
-    return res.json({ success: false, msg: "Invalid token" });
-  }
+function unauthorized(res, msg = "Authentication required") {
+  return res.status(401).json({ success: false, msg });
 }
 
-module.exports.clubAuth = async(req, res, next) => {
-  console.log('hii');
-  
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.json({ success: false, msg: "No token provided" });
-  }
-
-  console.log(authHeader);
-  
-
-  const token = authHeader.split(" ")[1];
-  if (!token) {
-    return res.json({ success: false, msg: "No token provided" });
-  }
-
-  console.log(token);
-  
+module.exports.adminAuth = async (req, res, next) => {
+  const token = getSessionToken(req, "admin");
+  if (!token) return unauthorized(res);
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    console.log(decoded);
+    const decoded = verifySession(token, "admin");
+    if (decoded.sub !== process.env.ADMIN_EMAIL.trim().toLowerCase()) return unauthorized(res);
+    req.admin = { email: decoded.sub, role: "admin" };
+    return next();
+  } catch {
+    return unauthorized(res, "Session expired or invalid");
+  }
+};
 
-    const club = await clubModel.findById(decoded.id);
-    console.log(club);
-    
-    if (!club) {
-      return res.json({ success: false, msg: "Club not found" });
+module.exports.clubAuth = async (req, res, next) => {
+  const token = getSessionToken(req, "club");
+  if (!token) return unauthorized(res);
+
+  try {
+    const decoded = verifySession(token, "club");
+    const club = await clubModel.findById(decoded.sub).select("+tokenVersion");
+    if (!club || club.status === "suspended" || club.tokenVersion !== decoded.ver) {
+      return unauthorized(res, "Club session is no longer active");
     }
     req.club = club;
-    console.log('hii');
-    
-    next();
-  } catch (err) {
-    return res.json({ success: false, msg: err.message || "Invalid token" });
+    return next();
+  } catch {
+    return unauthorized(res, "Session expired or invalid");
   }
-}
+};
 
-module.exports.studentAuth = async(req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.json({ success: false, msg: "No token provided" });
-  }
-
-  const token = authHeader.split(" ")[1];
-  if (!token) {
-    return res.json({ success: false, msg: "No token provided" });
-  }
+module.exports.studentAuth = async (req, res, next) => {
+  const token = getSessionToken(req, "student");
+  if (!token) return unauthorized(res);
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    const student = await studentModel.findById(decoded.id);
-    if (!student) {
-      return res.json({ success: false, msg: "Student not found" });
+    const decoded = verifySession(token, "student");
+    const student = await studentModel.findById(decoded.sub).select("+tokenVersion");
+    if (!student || student.status === "suspended" || student.tokenVersion !== decoded.ver) {
+      return unauthorized(res, "Student session is no longer active");
     }
-    req.student = student ;
-    next();
-  } catch (err) {
-    return res.json({ success: false, msg: "Invalid token" });
+    req.student = student;
+    return next();
+  } catch {
+    return unauthorized(res, "Session expired or invalid");
   }
-}
+};

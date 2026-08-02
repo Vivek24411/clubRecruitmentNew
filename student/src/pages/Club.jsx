@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { safeExternalUrl } from '../utils/url';
 
 const Club = () => {
 
@@ -9,31 +10,30 @@ const Club = () => {
   const [isLoading, setIsLoading] = React.useState(true)
   const { clubId } = useParams();
 
-  async function fetchClub() {
+  const fetchClub = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getClub`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        },
-        params: { clubId }
-      });
+      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getClub`, { params: { clubId } });
       if (response.data.success) {
         setClub(response.data.club);
       } else {
         toast.error(response.data.msg);
       }
-    } catch (error) {
+    } catch {
      
       toast.error("Failed to load club");
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [clubId]);
 
   useEffect(() => {
     fetchClub();
-  }, [clubId]);
+  }, [fetchClub]);
+
+  const websiteUrl = safeExternalUrl(club?.website);
+  const instagramUrl = safeExternalUrl(club?.instagram);
+  const linkedinUrl = safeExternalUrl(club?.linkedin);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
@@ -69,9 +69,11 @@ const Club = () => {
                           alt={`${club.name} logo`}
                           className="h-full w-full object-cover rounded-full"
                           onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.style.display = "none";
-                            e.target.parentNode.innerHTML = `<div class="h-full w-full rounded-full bg-white flex items-center justify-center text-[#1a4b8e] text-3xl font-bold">${club.name.charAt(0)}</div>`;
+                            const parent = e.currentTarget.parentNode;
+                            parent.textContent = club.name.charAt(0);
+                            parent.style.color = "#1a4b8e";
+                            parent.style.fontSize = "1.875rem";
+                            parent.style.fontWeight = "700";
                           }}
                         />
                       </div>
@@ -201,14 +203,14 @@ const Club = () => {
             </div>
 
             {/* Social Links */}
-            {(club.website || club.instagram || club.linkedin) && (
+            {(websiteUrl || instagramUrl || linkedinUrl) && (
               <div className="bg-white rounded-lg shadow-md overflow-hidden">
                 <div className="p-6">
                   <h2 className="text-xl font-semibold text-gray-800 mb-4">Connect with {club.name}</h2>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {club.website && (
+                    {websiteUrl && (
                       <a 
-                        href={club.website} 
+                        href={websiteUrl}
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="flex items-center p-3 rounded-md border border-gray-200 hover:bg-blue-50 transition-colors"
@@ -222,9 +224,9 @@ const Club = () => {
                       </a>
                     )}
 
-                    {club.instagram && (
+                    {instagramUrl && (
                       <a 
-                        href={club.instagram} 
+                        href={instagramUrl}
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="flex items-center p-3 rounded-md border border-gray-200 hover:bg-blue-50 transition-colors"
@@ -238,9 +240,9 @@ const Club = () => {
                       </a>
                     )}
 
-                    {club.linkedin && (
+                    {linkedinUrl && (
                       <a 
-                        href={club.linkedin} 
+                        href={linkedinUrl}
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="flex items-center p-3 rounded-md border border-gray-200 hover:bg-blue-50 transition-colors"

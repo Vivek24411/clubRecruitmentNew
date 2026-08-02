@@ -16,6 +16,8 @@ import Club from './pages/Club'
 import ClubEvents from './pages/ClubEvents'
 import ClubSessions from './pages/ClubSessions'
 import ForgotPassword from './pages/ForgotPassword'
+import MyApplications from './pages/MyApplications'
+import Notifications from './pages/Notifications'
 
 const App = () => {
   return (
@@ -34,6 +36,8 @@ const App = () => {
       <Route path='/events/club/:clubId' element={<ProtectedWrapper><ClubEvents/></ProtectedWrapper>}/>
       <Route path='/sessions/club/:clubId' element={<ProtectedWrapper><ClubSessions/></ProtectedWrapper>}/>
       <Route path='/forgotPassword' element={<ForgotPassword/>}/>
+      <Route path='/applications' element={<ProtectedWrapper><MyApplications/></ProtectedWrapper>}/>
+      <Route path='/notifications' element={<ProtectedWrapper><Notifications/></ProtectedWrapper>}/>
     </Routes>
     <ToastContainer 
       position="top-center"

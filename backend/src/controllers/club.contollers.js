@@ -1,10 +1,32 @@
 const { validationResult } = require("express-validator");
-const clubModel = require("../models/club.model");
-const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
+const clubModel = require("../models/club.model");
 const sessionModel = require("../models/session.model");
 const eventModel = require("../models/event.model");
 const registerationEventModel = require("../models/registerationEvent.model");
+const sessionRsvpModel = require("../models/sessionRsvp.model");
+const { clearSessionCookie, setSessionCookie } = require("../utils/auth");
+const { notifyStudent, notifyTeam } = require("../services/notification.services");
+const { writeAudit } = require("../services/audit.services");
+const { destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
+const DUMMY_PASSWORD_HASH = "$2b$12$4Qj6z7mmoEgcnxHLS0xDR.jjYdMm05/mtrLZVBInMaqjKAuvz9taa";
+
+async function ownedEvent(eventId, clubId) {
+  return eventModel.findOne({ _id: eventId, clubId });
+}
+
+function normalizedRoundDetails(rounds) {
+  return rounds.map((round, index) => {
+    const normalized = {
+      Round: index + 1,
+      Type: String(round.Type || "").trim().slice(0, 100),
+    };
+    if (round.TestDate) normalized.TestDate = String(round.TestDate).slice(0, 10);
+    if (round.SubmissionDeadline) normalized.SubmissionDeadline = String(round.SubmissionDeadline).slice(0, 10);
+    if (round.GoogleFormLink) normalized.GoogleFormLink = String(round.GoogleFormLink).trim().slice(0, 500);
+    return normalized;
+  });
+}
 
 module.exports.clubLogin = async (req, res) => {
   const error = validationResult(req);
@@ -13,11 +35,13 @@ module.exports.clubLogin = async (req, res) => {
     return res.json({ errors: error.array(), success: false });
   }
 
-  const { userName, password } = req.body;
+  const userName = req.body.userName.trim().toLowerCase();
+  const { password } = req.body;
 
   // Check if club with the given username exists
-  const club = await clubModel.findOne({ userName });
+  const club = await clubModel.findOne({ userName }).select("+password +tokenVersion");
   if (!club) {
+    await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
     return res.json({ success: false, msg: "Invalid club credentials" });
   }
 
@@ -26,10 +50,20 @@ module.exports.clubLogin = async (req, res) => {
   if (!isMatch) {
     return res.json({ success: false, msg: "Invalid club credentials" });
   }
+  if (club.status === "suspended") {
+    return res.status(403).json({ success: false, msg: "Club account is suspended" });
+  }
 
   // Generate a JWT token for the authenticated club
   const token = await club.createToken();
-  return res.json({ success: true, msg: "Club logged in successfully", token });
+  setSessionCookie(res, "club", token);
+  await writeAudit({ actorRole: "club", actorId: club._id, action: "auth.login", targetType: "club", targetId: club._id });
+  return res.json({ success: true, msg: "Club logged in successfully" });
+};
+
+module.exports.logout = async (req, res) => {
+  clearSessionCookie(res, "club");
+  return res.json({ success: true, msg: "Logged out successfully" });
 };
 
 module.exports.addSession = async (req, res) => {
@@ -59,7 +93,11 @@ module.exports.addSession = async (req, res) => {
       duration,
       longDescription,
       venue,
+      status: req.body.status || "published",
+      capacity: req.body.capacity || null,
     });
+
+    await writeAudit({ actorRole: "club", actorId: req.club._id, action: "session.create", targetType: "session", targetId: session._id });
 
     return res.json({
       success: true,
@@ -96,15 +134,23 @@ module.exports.updateProfile = async (req, res) => {
     return res.json({ errors: error.array(), success: false });
   }
 
-  const updateData = req.body;
+  const allowedFields = [
+    "name", "userName", "shortDescription", "longDescription", "website",
+    "linkedin", "instagram", "achivements", "recruitmentMethods",
+    "contactEmail", "contactPhone",
+  ];
+  const updateData = Object.fromEntries(
+    Object.entries(req.body).filter(([key]) => allowedFields.includes(key))
+  );
 
   try {
     const club = await clubModel
-      .findByIdAndUpdate(req.club._id, updateData, { new: true })
+      .findByIdAndUpdate(req.club._id, updateData, { new: true, runValidators: true })
       .select("-password");
     if (!club) {
       return res.json({ success: false, msg: "Club not found" });
     }
+    await writeAudit({ actorRole: "club", actorId: req.club._id, action: "profile.update", targetType: "club", targetId: req.club._id, metadata: { fields: Object.keys(updateData) } });
     return res.json({
       success: true,
       msg: "Profile updated successfully",
@@ -154,7 +200,8 @@ module.exports.addEvent = async (req, res) => {
   const error = validationResult(req);
 
   if (!error.isEmpty()) {
-    return res.json({ errors: error.array(), success: false });
+    await destroyUploadedFile(req.file);
+    return res.status(400).json({ errors: error.array(), success: false, msg: "Please correct the event details" });
   }
 
   // Extract basic fields from the request body
@@ -166,6 +213,10 @@ module.exports.addEvent = async (req, res) => {
     maxParticipants,
     eligibility,
     numberOfRounds,
+    registrationType,
+    minTeamSize,
+    maxTeamSize,
+    status,
   } = req.body;
   
   // Handle ContactInfo array properly
@@ -176,7 +227,7 @@ module.exports.addEvent = async (req, res) => {
     // Collect all ContactInfo items
     let i = 0;
     while (req.body[`ContactInfo[${i}]`] !== undefined) {
-      ContactInfo.push(req.body[`ContactInfo[${i}]`]);
+      if (i < 10) ContactInfo.push(String(req.body[`ContactInfo[${i}]`]).trim().slice(0, 200));
       i++;
     }
   }
@@ -185,7 +236,7 @@ module.exports.addEvent = async (req, res) => {
   let roundDetails = [];
   if (req.body.roundDetailsJSON) {
     try {
-      roundDetails = JSON.parse(req.body.roundDetailsJSON);
+      roundDetails = normalizedRoundDetails(JSON.parse(req.body.roundDetailsJSON));
     } catch (err) {
       console.error("Error parsing roundDetails:", err);
     }
@@ -212,21 +263,30 @@ module.exports.addEvent = async (req, res) => {
       longDescription,
       registerationDeadline,
       maxParticipants,
+      maxTeamSize: Number(maxTeamSize || maxParticipants || 1),
+      minTeamSize: Number(minTeamSize || 1),
+      registrationType: registrationType || "team",
+      registrationDeadlineAt: registerationDeadline
+        ? new Date(`${registerationDeadline}T23:59:59.999+05:30`)
+        : null,
       ContactInfo,
       roundDetails,
       eligibility,
       numberOfRounds,
       eventBanner,
-      eventBannerPublicId
+      eventBannerPublicId,
+      status: status || "published",
     });
+
+    await writeAudit({ actorRole: "club", actorId: req.club._id, action: "event.create", targetType: "event", targetId: event._id, metadata: { status: event.status } });
 
     return res.json({ success: true, msg: "Event added successfully", event });
   } catch (err) {
+    await destroyUploadedFile(req.file);
     console.error("Error creating event:", err);
     return res.status(500).json({ 
       success: false, 
       msg: "Failed to create event",
-      error: err.message 
     });
   }
 };
@@ -288,7 +348,10 @@ module.exports.getEventsRegisteredStudents = async (req, res) => {
 
     const { eventId } = req.query;
 
-    const registeredStudents = await registerationEventModel.find({ eventId: eventId }).populate('studentId', '-password').populate('eventId').populate('membersAccepted', '-password');
+    const event = await ownedEvent(eventId, req.club._id);
+    if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
+
+    const registeredStudents = await registerationEventModel.find({ eventId: event._id }).populate('studentId').populate('eventId').populate('membersAccepted');
 
     return res.json({ success: true, registeredStudents });
   } catch (err) {
@@ -307,18 +370,37 @@ module.exports.finalizeStudent = async (req, res) => {
 
     const { eventId, studentId } = req.body;
 
-    const registration = await registerationEventModel.findOne({ eventId: eventId, studentId: studentId });
+    const event = await ownedEvent(eventId, req.club._id);
+    if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
+    const registration = await registerationEventModel.findOne({ eventId: event._id, studentId: studentId });
 
     if (!registration) {
       return res.json({ success: false, msg: "Registration not found" });
     }
+    if (registration.overallStatus === "withdrawn") return res.status(409).json({ success: false, msg: "This application was withdrawn by the student" });
+    const teamSize = 1 + (registration.membersAccepted?.length || 0);
+    if (event.registrationType !== "individual" && teamSize < (event.minTeamSize || 1)) {
+      return res.status(400).json({ success: false, msg: "The team does not meet the event's minimum size" });
+    }
 
+    if (!registration.numberOfRounds || !registration.roundDetails[registration.numberOfRounds - 1]) {
+      return res.status(400).json({ success: false, msg: "Final round is not configured" });
+    }
     registration.roundDetails[registration.numberOfRounds-1].selected = true;
+    registration.overallStatus = "selected";
 
     // Mark the subdocument as modified so Mongoose knows to save it
     registration.markModified('roundDetails');
 
     await registration.save();
+
+    await notifyTeam(registration, {
+      type: "application_selected",
+      title: `Selected for ${event.title}`,
+      message: "Congratulations! Your team completed the final recruitment round.",
+      link: `/event/${eventId}`,
+    });
+    await writeAudit({ actorRole: "club", actorId: req.club._id, action: "application.finalize", targetType: "registration", targetId: registration._id });
 
     return res.json({ success: true, msg: "Student finalized successfully" });
   } catch (err) {
@@ -337,15 +419,24 @@ module.exports.scheduleInterview = async (req, res) => {
 
     const { eventId, studentId, roundNumber, roundDate } = req.body;
 
-    const registration = await registerationEventModel.findOne({ eventId: eventId, studentId: studentId });
+    const event = await ownedEvent(eventId, req.club._id);
+    if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
+    const registration = await registerationEventModel.findOne({ eventId: event._id, studentId: studentId });
 
     if (!registration) {
       return res.json({ success: false, msg: "Registration not found" });
     }
+    if (registration.overallStatus === "withdrawn") return res.status(409).json({ success: false, msg: "This application was withdrawn by the student" });
 
 
     
+    if (roundNumber < 1 || roundNumber > registration.numberOfRounds || !registration.roundDetails[roundNumber - 1]) {
+      return res.status(400).json({ success: false, msg: "Invalid round number" });
+    }
     registration.roundDetails[roundNumber-1].roundDate = roundDate;
+    registration.roundDetails[roundNumber-1].status = "scheduled";
+    registration.currentRound = roundNumber;
+    registration.overallStatus = "in_progress";
 
 
 
@@ -354,9 +445,13 @@ module.exports.scheduleInterview = async (req, res) => {
 
     await registration.save();
 
-    const registrationupdated = await registerationEventModel.findOne({ eventId: eventId, studentId: studentId });
-
-
+    await notifyTeam(registration, {
+      type: "round_scheduled",
+      title: `Round ${roundNumber} scheduled`,
+      message: `Your next round for ${event.title} is scheduled for ${roundDate}.`,
+      link: `/event/${eventId}`,
+    });
+    await writeAudit({ actorRole: "club", actorId: req.club._id, action: "application.round_schedule", targetType: "registration", targetId: registration._id, metadata: { roundNumber, roundDate } });
 
     return res.json({ success: true, msg: "Interview scheduled successfully" });
   } catch (err) {
@@ -376,18 +471,37 @@ module.exports.selectStudentForRound = async (req, res) => {
 
     const { eventId, studentId, roundNumber } = req.body;
 
-    const registration = await registerationEventModel.findOne({ eventId: eventId, studentId: studentId });
+    const event = await ownedEvent(eventId, req.club._id);
+    if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
+    const registration = await registerationEventModel.findOne({ eventId: event._id, studentId: studentId });
 
     if (!registration) {
       return res.json({ success: false, msg: "Registration not found" });
     }
+    if (registration.overallStatus === "withdrawn") return res.status(409).json({ success: false, msg: "This application was withdrawn by the student" });
 
+    if (roundNumber < 1 || roundNumber > registration.numberOfRounds || !registration.roundDetails[roundNumber - 1]) {
+      return res.status(400).json({ success: false, msg: "Invalid round number" });
+    }
     registration.roundDetails[roundNumber-1].selected = true;
+    registration.roundDetails[roundNumber-1].status = "cleared";
+    registration.currentRound = Math.min(roundNumber + 1, registration.numberOfRounds);
+    registration.overallStatus = "in_progress";
 
 
     // Mark the subdocument as modified so Mongoose knows to save it
     registration.markModified('roundDetails');
     await registration.save();
+
+    await notifyTeam(registration, {
+      type: "round_cleared",
+      title: `Round ${roundNumber} cleared`,
+      message: roundNumber === registration.numberOfRounds
+        ? "Your team cleared the final round."
+        : `Your team progressed to round ${roundNumber + 1}.`,
+      link: `/event/${eventId}`,
+    });
+    await writeAudit({ actorRole: "club", actorId: req.club._id, action: "application.round_clear", targetType: "registration", targetId: registration._id, metadata: { roundNumber } });
 
     
 
@@ -397,3 +511,254 @@ module.exports.selectStudentForRound = async (req, res) => {
     return res.json({ success: false, msg: "Failed to select student for round" });
   }
 }
+
+module.exports.updateEvent = async (req, res) => {
+  const event = await ownedEvent(req.params.eventId, req.club._id);
+  if (!event) {
+    await destroyUploadedFile(req.file);
+    return res.status(404).json({ success: false, msg: "Event not found" });
+  }
+
+  const allowedFields = [
+    "title", "shortDescription", "longDescription", "eligibility", "ContactInfo",
+    "registrationType", "minTeamSize", "maxTeamSize", "maxParticipants",
+    "numberOfRounds", "registerationDeadline",
+  ];
+  for (const field of allowedFields) {
+    if (req.body[field] !== undefined) event[field] = req.body[field];
+  }
+  if (req.body.registerationDeadline !== undefined) {
+    event.registrationDeadlineAt = req.body.registerationDeadline
+      ? new Date(`${req.body.registerationDeadline}T23:59:59.999+05:30`)
+      : null;
+  }
+  const oldBannerPublicId = event.eventBannerPublicId;
+  if (req.file) {
+    event.eventBanner = req.file.path;
+    event.eventBannerPublicId = req.file.filename;
+  }
+  try {
+    await event.save();
+  } catch (error) {
+    await destroyUploadedFile(req.file);
+    throw error;
+  }
+  if (req.file && oldBannerPublicId && oldBannerPublicId !== req.file.filename) {
+    await destroyCloudinaryImage(oldBannerPublicId);
+  }
+  await writeAudit({ actorRole: "club", actorId: req.club._id, action: "event.update", targetType: "event", targetId: event._id });
+  return res.json({ success: true, msg: "Event updated successfully", event });
+};
+
+module.exports.updateEventStatus = async (req, res) => {
+  const event = await ownedEvent(req.params.eventId, req.club._id);
+  if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
+  const previousStatus = event.status;
+  event.status = req.body.status;
+  if (event.status === "published" && !event.publishedAt) event.publishedAt = new Date();
+  await event.save();
+  if (previousStatus !== "cancelled" && event.status === "cancelled") {
+    const registrations = await registerationEventModel.find({ eventId: event._id });
+    await Promise.all(registrations.map((registration) => notifyTeam(registration, {
+      type: "event_cancelled",
+      title: `${event.title} was cancelled`,
+      message: "The club cancelled this recruitment event. Your application history remains available.",
+      link: "/applications",
+    })));
+  }
+  await writeAudit({ actorRole: "club", actorId: req.club._id, action: `event.${event.status}`, targetType: "event", targetId: event._id });
+  return res.json({ success: true, msg: `Event ${event.status}`, event });
+};
+
+module.exports.updateSession = async (req, res) => {
+  const session = await sessionModel.findOne({ _id: req.params.sessionId, clubId: req.club._id });
+  if (!session) return res.status(404).json({ success: false, msg: "Session not found" });
+  const previousStatus = session.status;
+  const confirmedCount = await sessionRsvpModel.countDocuments({
+    sessionId: session._id,
+    status: { $in: ["confirmed", "attended"] },
+  });
+  session.confirmedRsvpCount = confirmedCount;
+  const allowedFields = ["title", "shortDescription", "longDescription", "date", "time", "duration", "venue", "capacity", "status"];
+  for (const field of allowedFields) {
+    if (req.body[field] !== undefined) session[field] = req.body[field];
+  }
+  if (session.capacity && session.capacity < session.confirmedRsvpCount) {
+    return res.status(400).json({ success: false, msg: "Capacity cannot be lower than the confirmed RSVP count" });
+  }
+  await session.save();
+
+  const sessionAt = new Date(`${session.date}T${session.time}:00+05:30`);
+  const canPromoteWaitlist = session.status === "published" && !Number.isNaN(sessionAt.getTime()) && sessionAt > new Date();
+  const waitlisted = canPromoteWaitlist
+    ? await sessionRsvpModel.find({ sessionId: session._id, status: "waitlisted" }).sort({ createdAt: 1 })
+    : [];
+  const promotedStudents = [];
+  for (const waitlistedRsvp of waitlisted) {
+    let reserved;
+    if (session.capacity) {
+      reserved = await sessionModel.findOneAndUpdate(
+        { _id: session._id, $expr: { $lt: [{ $ifNull: ["$confirmedRsvpCount", 0] }, "$capacity"] } },
+        { $inc: { confirmedRsvpCount: 1 } },
+        { new: true }
+      );
+    } else {
+      reserved = await sessionModel.findOneAndUpdate(
+        { _id: session._id },
+        { $inc: { confirmedRsvpCount: 1 } },
+        { new: true }
+      );
+    }
+    if (!reserved) break;
+    const promoted = await sessionRsvpModel.findOneAndUpdate(
+      { _id: waitlistedRsvp._id, status: "waitlisted" },
+      { status: "confirmed", updatedAt: new Date() },
+      { new: true }
+    );
+    if (!promoted) {
+      await sessionModel.updateOne({ _id: session._id, confirmedRsvpCount: { $gt: 0 } }, { $inc: { confirmedRsvpCount: -1 } });
+      continue;
+    }
+    promotedStudents.push(promoted.studentId);
+  }
+  await Promise.all(promotedStudents.map((studentId) => notifyStudent(studentId, {
+    type: "session_rsvp_promoted",
+    title: `Your RSVP for ${session.title} is confirmed`,
+    message: "The session capacity changed and a place is now available for you.",
+    link: `/session/${session._id}`,
+  })));
+  if (previousStatus !== "cancelled" && session.status === "cancelled") {
+    const activeRsvps = await sessionRsvpModel.find({ sessionId: session._id, status: { $in: ["confirmed", "waitlisted"] } });
+    await Promise.all(activeRsvps.map((rsvp) => notifyStudent(rsvp.studentId, {
+      type: "session_cancelled",
+      title: `${session.title} was cancelled`,
+      message: "The club cancelled this session.",
+      link: "/sessions",
+    })));
+  }
+  await writeAudit({ actorRole: "club", actorId: req.club._id, action: "session.update", targetType: "session", targetId: session._id });
+  const updatedSession = await sessionModel.findById(session._id);
+  return res.json({ success: true, msg: promotedStudents.length ? `Session updated and ${promotedStudents.length} waitlisted RSVP(s) confirmed` : "Session updated successfully", session: updatedSession });
+};
+
+module.exports.updateApplication = async (req, res) => {
+  const event = await ownedEvent(req.params.eventId, req.club._id);
+  if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
+  const registration = await registerationEventModel.findOne({ _id: req.params.registrationId, eventId: event._id });
+  if (!registration) return res.status(404).json({ success: false, msg: "Application not found" });
+  if (registration.overallStatus === "withdrawn" && req.body.overallStatus) {
+    return res.status(409).json({ success: false, msg: "A student-withdrawn application cannot be reopened by a club" });
+  }
+  if (req.body.overallStatus === "selected") {
+    const teamSize = 1 + (registration.membersAccepted?.length || 0);
+    if (event.registrationType !== "individual" && teamSize < (event.minTeamSize || 1)) {
+      return res.status(400).json({ success: false, msg: "The team does not meet the event's minimum size" });
+    }
+  }
+
+  const allowedFields = ["overallStatus", "reviewerNotes", "score"];
+  for (const field of allowedFields) {
+    if (req.body[field] !== undefined) registration[field] = req.body[field];
+  }
+  await registration.save();
+  if (req.body.overallStatus) {
+    await notifyTeam(registration, {
+      type: "application_status",
+      title: `Application ${req.body.overallStatus.replace('_', ' ')}`,
+      message: `Your application status for ${event.title} was updated.`,
+      link: `/event/${event._id}`,
+    });
+  }
+  await writeAudit({ actorRole: "club", actorId: req.club._id, action: "application.update", targetType: "registration", targetId: registration._id, metadata: { fields: Object.keys(req.body) } });
+  return res.json({ success: true, msg: "Application updated", registration });
+};
+
+module.exports.bulkUpdateApplications = async (req, res) => {
+  const event = await ownedEvent(req.params.eventId, req.club._id);
+  if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
+  const registrationIds = req.body.registrationIds.slice(0, 100);
+  const registrations = await registerationEventModel.find({ _id: { $in: registrationIds }, eventId: event._id, overallStatus: { $ne: "withdrawn" } });
+  const eligibleRegistrations = registrations.filter((registration) => req.body.overallStatus !== "selected"
+    || event.registrationType === "individual"
+    || 1 + (registration.membersAccepted?.length || 0) >= (event.minTeamSize || 1));
+  const eligibleIds = eligibleRegistrations.map((registration) => registration._id);
+  const result = await registerationEventModel.updateMany(
+    { _id: { $in: eligibleIds }, eventId: event._id },
+    { $set: { overallStatus: req.body.overallStatus, updatedAt: new Date() } }
+  );
+  await Promise.all(eligibleRegistrations.map((registration) => notifyTeam(registration, {
+    type: "application_status",
+    title: `Application ${req.body.overallStatus.replace("_", " ")}`,
+    message: `Your application status for ${event.title} was updated.`,
+    link: `/event/${event._id}`,
+  })));
+  await writeAudit({ actorRole: "club", actorId: req.club._id, action: "application.bulk_update", targetType: "event", targetId: event._id, metadata: { count: result.modifiedCount, status: req.body.overallStatus } });
+  return res.json({
+    success: true,
+    msg: `${result.modifiedCount} applications changed${eligibleIds.length < registrationIds.length ? `; ${registrationIds.length - eligibleIds.length} withdrawn or incomplete application(s) skipped` : ""}`,
+    modifiedCount: result.modifiedCount,
+    updatedIds: eligibleIds.map(String),
+  });
+};
+
+function csvValue(value) {
+  let text = value == null ? "" : String(value);
+  if (/^[\t\r\n ]*[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+module.exports.exportApplications = async (req, res) => {
+  const event = await ownedEvent(req.params.eventId, req.club._id);
+  if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
+  const registrations = await registerationEventModel.find({ eventId: event._id }).populate("studentId").populate("membersAccepted");
+  const rows = [["Team", "Captain", "Email", "Phone", "Branch", "Year", "Members", "Status", "Score", "Registered At"]];
+  for (const registration of registrations) {
+    rows.push([
+      registration.teamName,
+      registration.studentId?.name,
+      registration.studentId?.email,
+      registration.studentId?.phoneNumber,
+      registration.studentId?.branch,
+      registration.studentId?.year,
+      (registration.membersAccepted || []).map((member) => member.name).join(", "),
+      registration.overallStatus,
+      registration.score,
+      registration.registeredAt?.toISOString(),
+    ]);
+  }
+  const csv = rows.map((row) => row.map(csvValue).join(",")).join("\n");
+  res.set("Content-Type", "text/csv; charset=utf-8");
+  res.set("Content-Disposition", `attachment; filename="${String(event.title).replace(/[^a-z0-9_-]/gi, '_')}-applications.csv"`);
+  return res.send(csv);
+};
+
+module.exports.getSessionAttendees = async (req, res) => {
+  const session = await sessionModel.findOne({ _id: req.params.sessionId, clubId: req.club._id });
+  if (!session) return res.status(404).json({ success: false, msg: "Session not found" });
+  const attendees = await sessionRsvpModel.find({ sessionId: session._id }).populate("studentId", "name email branch year enrollmentNumber").sort({ createdAt: 1 });
+  return res.json({ success: true, session, attendees });
+};
+
+module.exports.markAttendance = async (req, res) => {
+  const session = await sessionModel.findOne({ _id: req.params.sessionId, clubId: req.club._id });
+  if (!session) return res.status(404).json({ success: false, msg: "Session not found" });
+  const existing = await sessionRsvpModel.findOne({
+    sessionId: session._id,
+    studentId: req.body.studentId,
+    status: { $in: ["confirmed", "attended", "absent"] },
+  });
+  if (!existing) return res.status(404).json({ success: false, msg: "Confirmed RSVP not found" });
+  const wasCounted = ["confirmed", "attended"].includes(existing.status);
+  const willBeCounted = req.body.status === "attended";
+  existing.status = req.body.status;
+  existing.updatedAt = new Date();
+  const rsvp = await existing.save();
+  if (wasCounted !== willBeCounted) {
+    await sessionModel.updateOne(
+      { _id: session._id, ...(willBeCounted ? {} : { confirmedRsvpCount: { $gt: 0 } }) },
+      { $inc: { confirmedRsvpCount: willBeCounted ? 1 : -1 } }
+    );
+  }
+  await writeAudit({ actorRole: "club", actorId: req.club._id, action: "session.attendance", targetType: "session", targetId: session._id, metadata: { studentId: req.body.studentId, status: req.body.status } });
+  return res.json({ success: true, msg: "Attendance updated", rsvp });
+};

@@ -10,7 +10,7 @@ const Login = () => {
     const [userName, setUserName] = React.useState("");
     const [password, setPassword] = React.useState("");
     const [isLoading, setIsLoading] = React.useState(false);
-    const {setLoggedInClub} = useContext(ClubContextData);
+    const {setLoggedInClub, refreshClubProfile} = useContext(ClubContextData);
     const navigate = useNavigate();
 
     const handleLogin = async (e) => {
@@ -29,8 +29,8 @@ const Login = () => {
 
             if(response.data.success){
                 toast.success("Login successful");
-                localStorage.setItem("clubToken", response.data.token);
                 setLoggedInClub(true);
+                await refreshClubProfile();
                 navigate("/");
             }else{
                 toast.error(response.data.msg);

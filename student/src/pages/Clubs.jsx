@@ -11,18 +11,14 @@ const Clubs = () => {
   async function fetchClubs() {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getAllClubs`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`
-        }
-      });
+      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getAllClubs`);
 
       if (response.data.success) {
         setClubs(response.data.clubs);
       } else {
         toast.error(response.data.msg);
       }
-    } catch (error) {
+    } catch {
      
       toast.error("Failed to load clubs");
     } finally {
@@ -90,9 +86,11 @@ const Clubs = () => {
                           alt={`${club.name} logo`}
                           className="h-full w-full object-cover rounded-full"
                           onError={(e) => {
-                            e.target.onerror = null;
-                            e.target.style.display = "none";
-                            e.target.parentNode.innerHTML = `<div class="h-full w-full rounded-full bg-white flex items-center justify-center text-[#1a4b8e] text-3xl font-bold">${club.name.charAt(0)}</div>`;
+                            const parent = e.currentTarget.parentNode;
+                            parent.textContent = club.name.charAt(0);
+                            parent.style.color = "#1a4b8e";
+                            parent.style.fontSize = "1.875rem";
+                            parent.style.fontWeight = "700";
                           }}
                         />
                       </div>

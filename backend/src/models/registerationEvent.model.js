@@ -33,9 +33,39 @@ const registerationEventSchema = new mongoose.Schema({
     },
     teamName: {
         type: String,
-        default: null
+        default: null,
+        maxlength: 80,
+    },
+    overallStatus: {
+        type: String,
+        enum: ['submitted', 'in_progress', 'waitlisted', 'selected', 'rejected', 'withdrawn'],
+        default: 'submitted',
+        index: true,
+    },
+    currentRound: {
+        type: Number,
+        default: 0,
+    },
+    reviewerNotes: {
+        type: String,
+        default: '',
+        maxlength: 4000,
+    },
+    score: {
+        type: Number,
+        default: null,
+    },
+    updatedAt: {
+        type: Date,
+        default: Date.now,
     },
 
+});
+
+registerationEventSchema.index({ eventId: 1, studentId: 1 }, { unique: true });
+registerationEventSchema.pre('save', function(next) {
+    this.updatedAt = new Date();
+    next();
 });
 
 const registerationEventModel = mongoose.model('RegisterationEvent', registerationEventSchema);

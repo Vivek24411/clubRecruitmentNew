@@ -74,8 +74,8 @@ const Profile = () => {
   const contextValue = useContext(AdminContextData);
   const navigate = useNavigate();
 
-  function logout() {
-    localStorage.removeItem("adminToken");
+  async function logout() {
+    await contextValue?.signOut();
     navigate("/login");
   }
 

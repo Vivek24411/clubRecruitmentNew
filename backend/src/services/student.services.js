@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-const { Resend } = require('resend');
+
 
 
 
@@ -10,34 +10,15 @@ module.exports.sendOtp = async (email, otp) => {
         host: "smtp.gmail.com",
         port: 465,
         secure: true,
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
         auth: {
             user: process.env.EMAIL_USER,
             pass: process.env.EMAIL_PASS
         }
     });
 
-//   try{
-//     console.log('Sending email to:', email);
-    
-//       const {data, error} = await resend.emails.send({
-//         from: 'noreply.0to1@gmail.com',
-//         to: 'noreply.0to1@gmail.com',
-//         subject: 'OTP Verification',
-//         text: `Your OTP is ${otp}`,
-//     });
-
-//     console.log(error);
-    
-
-//     if (error) {
-//         throw new Error('Error sending email');
-//     }
-
-//     console.log('Email sent:', data);
-//   }catch(err){
-//     console.error('Error sending email:', err);
-//     throw err;
-//   }
 
     const mailOptions = {
         from: process.env.EMAIL_USER,
@@ -49,8 +30,31 @@ module.exports.sendOtp = async (email, otp) => {
     await transporter.sendMail(mailOptions);
 };
 
+module.exports.sendNotificationEmail = async (email, { title, message, link }) => {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return;
+    const transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
+        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    });
+    let detailsUrl = null;
+    if (process.env.STUDENT_APP_ORIGIN && link?.startsWith('/') && !link.startsWith('//')) {
+        try { detailsUrl = new URL(link, process.env.STUDENT_APP_ORIGIN).href; } catch { detailsUrl = null; }
+    }
+    await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject: String(title || "Recruitment update").replace(/[\r\n]/g, " "),
+        text: `${message || "You have a new recruitment update."}${detailsUrl ? `\n\nView details: ${detailsUrl}` : ""}`,
+    });
+};
+
 
 module.exports.checkEmailDomain = (email) => {
-    const regex = /@.*iitr\.ac\.in$/i;
-    return regex.test(email);
+    const domain = String(email || '').trim().toLowerCase().split('@')[1];
+    return domain === 'iitr.ac.in';
 }

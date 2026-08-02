@@ -1,27 +1,11 @@
-import React from 'react'
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useContext } from "react";
+import { Navigate } from "react-router-dom";
+import { AdminContextData } from "../context/AdminContext";
+import AdminLayout from "../components/AdminLayout";
 
-const UserProtectedWrapper = ({children}) => {
-
-    const adminToken = localStorage.getItem("adminToken");
-    const navigate = useNavigate();
-
-    useEffect(() => {
-    if(!adminToken){
-        navigate("/login");
-    }
-}, [adminToken])
-
-    if(!adminToken){
-    return null;
-    }
-
-  return (
-    <>
-      {children}
-    </>
-  )
+export default function UserProtectedWrapper({ children }) {
+  const { loggedInAdmin, authLoading } = useContext(AdminContextData);
+  if (authLoading) return <div className="grid min-h-screen place-items-center" role="status">Checking your session…</div>;
+  if (!loggedInAdmin) return <Navigate to="/login" replace />;
+  return <AdminLayout>{children}</AdminLayout>;
 }
-
-export default UserProtectedWrapper

@@ -20,6 +20,7 @@ const AddClub = () => {
                 setClubLogoPreview(reader.result);
             };
             reader.readAsDataURL(file);
+
         } else {
             setClubLogo(null);
             setClubLogoPreview(null);
@@ -34,6 +35,18 @@ const AddClub = () => {
             toast.warning("Please fill all fields");
             return;
         }
+        if (password.length < 10) {
+            toast.warning("Password must be at least 10 characters long");
+            return;
+        }
+        if (clubLogo && !['image/jpeg', 'image/png', 'image/webp'].includes(clubLogo.type)) {
+            toast.warning("Choose a JPG, PNG, or WebP image");
+            return;
+        }
+        if (clubLogo && clubLogo.size > 5 * 1024 * 1024) {
+            toast.warning("Club logo must be smaller than 5MB");
+            return;
+        }
 
         const formData = new FormData();
         formData.append('name', name);
@@ -45,12 +58,7 @@ const AddClub = () => {
         
         setIsLoading(true);
         try {
-            const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/admin/addClub`,formData,{
-                headers: {
-                    Authorization: `Bearer ${localStorage.getItem("adminToken")}`,
-                    'Content-Type': 'multipart/form-data'
-                }
-            });
+            const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/admin/addClub`, formData);
 
             if(response.data.success){
                toast.success(response.data.msg);
@@ -65,7 +73,7 @@ const AddClub = () => {
             }
         } catch (error) {
             console.error("Error adding club:", error);
-            toast.error(error.message || "Failed to add club");
+            toast.error(error.response?.data?.msg || "Failed to add club");
         } finally {
             setIsLoading(false);
         }
@@ -128,8 +136,10 @@ const AddClub = () => {
                                 placeholder="Enter secure password"
                                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-800 focus:border-blue-800 outline-none transition"
                                 required
+                                minLength={10}
+                                maxLength={72}
                             />
-                            <p className="mt-1 text-xs text-gray-500">Password must be at least 6 characters long</p>
+                            <p className="mt-1 text-xs text-gray-500">Password must be at least 10 characters long</p>
                         </div>
                         
                         {/* Club Logo Upload Field */}
@@ -148,7 +158,7 @@ const AddClub = () => {
                                                 <label htmlFor="clubLogo" className="cursor-pointer text-blue-600 hover:text-blue-700">
                                                     Upload a club logo
                                                 </label>
-                                                <p className="mt-1 text-xs text-gray-500">PNG, JPG, or JPEG (max. 2MB)</p>
+                                                <p className="mt-1 text-xs text-gray-500">PNG, JPG, or WebP (max. 5MB)</p>
                                             </div>
                                         </div>
                                         <input 
@@ -156,7 +166,7 @@ const AddClub = () => {
                                             name="clubLogo" 
                                             type="file" 
                                             className="sr-only" 
-                                            accept=".jpg,.jpeg,.png"
+                                            accept="image/jpeg,image/png,image/webp"
                                             onChange={uploadClublogo}
                                         />
                                     </div>

@@ -1,0 +1,42 @@
+# Club Recruitment implementation guide
+
+## What the app now supports
+
+- Students can discover active clubs, events, and sessions; register individually or as a team; manage invitations; track application rounds and final status; receive in-app notifications; update their profile/password; and RSVP or join a session waitlist.
+- Clubs can manage event and session lifecycles, edit details, review/search/filter applications, store private notes and scores, perform bulk status updates, schedule and clear rounds, export safe CSV files, and record attendance.
+- Administrators can moderate clubs, students, events, and sessions; suspend accounts and revoke sessions; reset club passwords; control the recruitment cycle; and inspect audit logs.
+
+## Required backend configuration
+
+Set these values in the deployment environment (never commit them):
+
+- `MONGODB_URI`
+- `JWT_SECRET` (at least 32 random characters in production)
+- `ADMIN_EMAIL`
+- `ADMIN_PASSWORD_HASH` (a bcrypt hash; plaintext `ADMIN_PASSWORD` is development-only)
+- `ALLOWED_ORIGINS` (comma-separated exact frontend origins, without paths)
+- `EMAIL_USER` and `EMAIL_PASS`
+- `STUDENT_APP_ORIGIN` (optional, used to create links in notification emails)
+- `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`
+- `TRUST_PROXY_HOPS` when the deployment is behind a non-standard number of trusted proxies (production defaults to `1`)
+
+Production authentication uses Secure, HttpOnly cookies. Every frontend must use HTTPS and point `VITE_BASE_URI` to the backend origin. If the proxy topology changes, review Express's `trust proxy` value before deployment because it controls client-IP rate limiting.
+
+## Existing database upgrade
+
+Back up the database, deploy the new code, and run this once from `backend/`:
+
+```sh
+npm run migrate:v2
+```
+
+The migration is idempotent. It backfills event deadlines and event memberships, records legacy withdrawn applications, reconciles RSVP counters, removes the obsolete session TTL index, and creates the new history/rate-limit indexes. Conflicting legacy team memberships are retained deterministically and reported for manual review.
+
+## Verification commands
+
+```sh
+cd backend && npm test
+cd ../student && npm run lint && npm run build
+cd ../club && npm run lint && npm run build
+cd ../admin && npm run lint && npm run build
+```

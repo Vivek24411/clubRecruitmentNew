@@ -10,7 +10,7 @@ const withTimeout = (operation, timeoutMs = 10000) => {
 
 // Enhanced error handler for database operations
 const handleDBError = (error, customMessage = 'Database operation failed') => {
-  console.error('Database Error:', error);
+  console.error('Database Error:', error?.message || 'unknown error');
   
   if (error.message === 'Database operation timeout') {
     return {
@@ -31,7 +31,7 @@ const handleDBError = (error, customMessage = 'Database operation failed') => {
   return {
     success: false,
     msg: customMessage,
-    error: process.env.NODE_ENV === 'development' ? error.message : 'INTERNAL_ERROR'
+    error: 'INTERNAL_ERROR'
   };
 };
 

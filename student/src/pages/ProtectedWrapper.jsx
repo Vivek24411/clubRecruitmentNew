@@ -1,31 +1,11 @@
-import React from 'react'
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useContext } from "react";
+import { Navigate } from "react-router-dom";
+import { StudentContextData } from "../context/StudentContext";
+import StudentLayout from "../components/StudentLayout";
 
-const ProtectedWrapper = ({children}) => {
-
-  const navigate = useNavigate();
-  const token = localStorage.getItem("token");
-
- 
-
-  useEffect(() => {
-    if(!token){
-      navigate('/login');
-    }
-  }, [token]);
-
-   if(!token){
-    return null;
-  }
-
-
-
-  return (
-    <>
-    {children}
-    </>
-  )
+export default function ProtectedWrapper({ children }) {
+  const { loggedInStudent, authLoading } = useContext(StudentContextData);
+  if (authLoading) return <div className="grid min-h-screen place-items-center" role="status">Checking your session…</div>;
+  if (!loggedInStudent) return <Navigate to="/login" replace />;
+  return <StudentLayout>{children}</StudentLayout>;
 }
-
-export default ProtectedWrapper

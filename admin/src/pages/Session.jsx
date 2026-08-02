@@ -1,5 +1,5 @@
 import axios from 'axios';
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { toast } from 'react-toastify';
 
@@ -8,18 +8,11 @@ const Session = () => {
   const [sessionDetails, setSessionDetails] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  async function fetchSessionDetails() {
+  const fetchSessionDetails = useCallback(async () => {
     try {
       const response = await axios.get(
         `${import.meta.env.VITE_BASE_URI}/admin/getSessionDetail`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("adminToken")}`
-          },
-          params: {
-            sessionId
-          }
-        }
+        { params: { sessionId } }
       );
 
       if (response.data.success) {
@@ -33,11 +26,11 @@ const Session = () => {
     } finally {
       setLoading(false);
     }
-  }
+  }, [sessionId]);
 
   useEffect(() => {
     fetchSessionDetails();
-  }, [sessionId])
+  }, [fetchSessionDetails])
 
   const formatDate = (dateString) => {
     const options = { year: 'numeric', month: 'long', day: 'numeric' };

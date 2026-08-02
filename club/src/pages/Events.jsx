@@ -1,97 +1,13 @@
-import React from 'react'
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios'
-import { toast } from 'react-toastify';
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from "react";
+import axios from "axios";
+import { Link } from "react-router-dom";
+import { toast } from "react-toastify";
 
-const Events = () => {
-
-  const [events, setEvents] = React.useState([])
-  const [isLoading, setIsLoading] = React.useState(true)
-  const navigate = useNavigate();
-
-
-  async function fetchEvents(){
-    setIsLoading(true);
-    try {
-      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/club/getEvents`,{
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("clubToken")}`
-        },
-      });
-
-
-      
-      if(response.data.success){
-        setEvents(response.data.events);
-      }else{
-        toast.error(response.data.msg);
-      }
-    } catch (error) {
-     
-      toast.error("Failed to load events");
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  React.useEffect(() => {
-    fetchEvents();
-  }, []);
-
-
-
-  return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-[#1a4b8e] mb-8">All Events</h1>
-        {isLoading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-[#1a4b8e]"></div>
-          </div>
-        ) : events && events.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {events.map(event => (
-              <div key={event._id} className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden flex flex-col">
-                <div className="bg-[#1a4b8e] px-6 py-4">
-                  <h2 className="text-xl font-semibold text-white">{event.title}</h2>
-                  {event.shortDescription && (
-                    <p className="mt-1 text-blue-100 text-sm">{event.shortDescription}</p>
-                  )}
-                </div>
-                <div className="p-5 flex-1 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center mb-2">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[#1a4b8e] mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      <span className="text-gray-700 text-sm">Registration Deadline: <span className="font-medium">{event.registerationDeadline}</span></span>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex justify-end">
-                    <Link
-                      to={`/event/${event._id}`}
-                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#1a4b8e] hover:bg-[#153c70] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1a4b8e]"
-                    >
-                      View Details
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow-md p-6 text-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No events found</h3>
-            <p className="mt-1 text-sm text-gray-500">No events are currently available.</p>
-          </div>
-        )}
-      </div>
-    </div>
-  )
+const statuses = ["draft", "published", "closed", "archived", "cancelled"];
+export default function Events() {
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { axios.get(`${import.meta.env.VITE_BASE_URI}/club/getEvents`).then(({ data }) => data.success ? setEvents(data.events) : toast.error(data.msg)).catch(() => toast.error("Could not load events")).finally(() => setLoading(false)); }, []);
+  const changeStatus = async (event, status) => { if (["cancelled", "archived"].includes(status) && !window.confirm(`${status} ${event.title}?`)) return; try { const { data } = await axios.patch(`${import.meta.env.VITE_BASE_URI}/club/events/${event._id}/status`, { status }); if (!data.success) throw new Error(data.msg); setEvents((items) => items.map((item) => item._id === event._id ? data.event : item)); toast.success(data.msg); } catch (error) { toast.error(error.response?.data?.msg || error.message); } };
+  return <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6"><div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-3xl font-bold">Recruitment events</h1><p className="mt-1 text-slate-600">Draft, publish, close, and review each recruitment pipeline.</p></div><Link to="/addEvent" className="rounded-lg bg-[#1a4b8e] px-4 py-2 font-semibold text-white">Create event</Link></div>{loading ? <p className="mt-8">Loading events…</p> : events.length === 0 ? <div className="mt-6 rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">No events yet.</div> : <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{events.map((event) => <article key={event._id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">{event.eventBanner && <img src={event.eventBanner} alt="" className="aspect-[16/6] w-full object-cover" />}<div className="p-5"><div className="flex items-start justify-between gap-3"><h2 className="text-xl font-bold">{event.title}</h2><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold capitalize">{event.status}</span></div><p className="mt-2 line-clamp-2 text-sm text-slate-600">{event.shortDescription}</p><p className="mt-3 text-sm text-slate-500">Deadline: {event.registerationDeadline || "Not set"}</p><label className="mt-4 block text-xs font-semibold uppercase text-slate-500">Lifecycle<select className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm normal-case text-slate-900" value={event.status} onChange={(e) => changeStatus(event, e.target.value)}>{statuses.map((status) => <option key={status}>{status}</option>)}</select></label><div className="mt-4 flex flex-wrap gap-3 text-sm font-semibold"><Link className="text-[#1a4b8e]" to={`/event/${event._id}`}>Overview</Link><Link className="text-[#1a4b8e]" to={`/events/${event._id}/edit`}>Edit</Link><Link className="text-emerald-700" to={`/event-applications/${event._id}`}>Applications</Link></div></div></article>)}</div>}</div>;
 }
-
-export default Events

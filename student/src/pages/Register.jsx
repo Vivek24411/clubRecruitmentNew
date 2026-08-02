@@ -2,6 +2,7 @@ import axios from "axios";
 import React from "react";
 import { toast } from "react-toastify";
 import { useNavigate, Link } from "react-router-dom";
+import { StudentContextData } from "../context/StudentContext";
 
 
 // Custom responsive styles
@@ -80,11 +81,7 @@ const styles = {
 };
 
 // Media queries for responsive design
-const getResponsiveStyles = () => {
-  // Check if window is available (client-side)
-  if (typeof window !== "undefined") {
-    const width = window.innerWidth;
-    
+const getResponsiveStyles = (width) => {
     // Mobile styles (small screens)
     if (width < 480) {
       return {
@@ -122,8 +119,6 @@ const getResponsiveStyles = () => {
         }
       };
     }
-  }
-  
   return {};
 };
 
@@ -144,12 +139,11 @@ const Register = () => {
     typeof window !== "undefined" ? window.innerWidth : 1024
   );
   const navigate = useNavigate();
-  const regex = /@.*iitr\.ac\.in$/i;
+  const { setLoggedInStudent, refreshProfile } = React.useContext(StudentContextData);
+  const isIitrEmail = (value) => value.trim().toLowerCase().split("@")[1] === "iitr.ac.in";
 
-  // Responsive styles
-  const responsiveStyles = React.useMemo(() => getResponsiveStyles(), [windowWidth]);
+  const responsiveStyles = React.useMemo(() => getResponsiveStyles(windowWidth), [windowWidth]);
   
-  // Add window resize listener
   React.useEffect(() => {
     if (typeof window !== "undefined") {
       const handleResize = () => {
@@ -166,7 +160,7 @@ const Register = () => {
 
   async function sendOTP() {
     setSendingOTP(true);
-    if(!regex.test(email)){
+    if(!isIitrEmail(email)){
       toast.error("Please enter a valid IITR email");
       setSendingOTP(false);
       return;
@@ -177,10 +171,10 @@ const Register = () => {
         `${import.meta.env.VITE_BASE_URI}/student/sendOtp`,
         {
           email,
+          purpose: "signup",
         }
       );
 
-      console.log(response)
 
       if (response.data.success) {
         toast.success("OTP sent successfully");
@@ -207,6 +201,7 @@ const Register = () => {
         {
           email,
           otp,
+          purpose: "signup",
         }
       );
 
@@ -223,13 +218,15 @@ const Register = () => {
               branch,
               year,
               phoneNumber,
-              enrollmentNumber
+              enrollmentNumber,
+              verificationToken: response.data.verificationToken,
             }
           );
 
           if (registerResponse.data.success) {
             toast.success("Registration successful");
-            await localStorage.setItem("token", registerResponse.data.token);
+            setLoggedInStudent(true);
+            await refreshProfile();
             navigate("/");
           } else {
             toast.error(registerResponse.data.msg || "Registration failed");
@@ -304,6 +301,8 @@ const Register = () => {
             <input
               required
               type="password"
+              maxLength={72}
+              minLength={10}
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value);
@@ -320,7 +319,7 @@ const Register = () => {
             <label style={{...styles.label}}>Enrollment Number</label>
             <input
               required
-              type="text"
+              type="tel"
               value={enrollmentNumber}
               onChange={(e) => {
                 setEnrollmentNumber(e.target.value);

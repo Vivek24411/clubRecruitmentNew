@@ -10,6 +10,7 @@ const ForgotPassword = () => {
   const [otp, setOtp] = React.useState("");
   const [step, setStep] = React.useState(1); // Step 1: Email, Step 2: OTP and New Password
   const [isLoading, setIsLoading] = React.useState(false);
+  const [confirmPassword, setConfirmPassword] = React.useState("");
 
   async function sendOTP() {
     if (!email) {
@@ -21,7 +22,7 @@ const ForgotPassword = () => {
     try {
       const response = await axios.post(
         `${import.meta.env.VITE_BASE_URI}/student/sendOtp`,
-        { email }
+        { email, purpose: "password_reset" }
       );
 
       if (response.data.success) {
@@ -30,7 +31,7 @@ const ForgotPassword = () => {
       } else {
         toast.error(response.data.msg || "Failed to send OTP");
       }
-    } catch (error) {
+    } catch {
       toast.error("Error sending OTP. Please try again.");
     } finally {
       setIsLoading(false);
@@ -43,8 +44,12 @@ const ForgotPassword = () => {
       return;
     }
     
-    if (!newPassword) {
-      toast.error("Please enter a new password");
+    if (newPassword.length < 10) {
+      toast.error("Password must be at least 10 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords do not match");
       return;
     }
     
@@ -55,6 +60,7 @@ const ForgotPassword = () => {
         {
           email,
           otp,
+          purpose: "password_reset",
         }
       );
 
@@ -64,6 +70,7 @@ const ForgotPassword = () => {
           {
             email,
             newPassword,
+            resetToken: response.data.verificationToken,
           }
         );
 
@@ -76,7 +83,7 @@ const ForgotPassword = () => {
       } else {
         toast.error(response.data.msg || "Failed to verify OTP");
       }
-    } catch (error) {
+    } catch {
       toast.error("Error resetting password. Please try again.");
     } finally {
       setIsLoading(false);
@@ -136,9 +143,23 @@ const ForgotPassword = () => {
               <label className="block font-medium">New Password</label>
               <input
                 type="password"
+                maxLength={72}
+                minLength={10}
                 placeholder="Enter new password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block font-medium">Confirm New Password</label>
+              <input
+                type="password"
+                maxLength={72}
+                minLength={10}
+                placeholder="Repeat new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>

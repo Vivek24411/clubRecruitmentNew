@@ -11,6 +11,8 @@ const AddSession = () => {
   const [longDescription, setLongDescription] = React.useState("");
   const [venue, setVenue] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
+  const [capacity, setCapacity] = React.useState("");
+  const [status, setStatus] = React.useState("draft");
 
   const handleSubmit = async (e) => { 
     e.preventDefault();
@@ -24,11 +26,9 @@ const AddSession = () => {
         time,
         duration,
         longDescription,
-        venue
-      },{
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("clubToken")}`
-        }
+        venue,
+        capacity: capacity || null,
+        status,
       });
 
       if(response.data.success){
@@ -41,6 +41,8 @@ const AddSession = () => {
         setDuration("");
         setLongDescription("");
         setVenue("");
+        setCapacity("");
+        setStatus("draft");
       }else{
         toast.error(response.data.msg);
       }
@@ -78,7 +80,7 @@ const AddSession = () => {
                 </label>
                 <div className="mt-1">
                   <input
-                    type="text"
+                    type="date"
                     id="title"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
@@ -114,12 +116,11 @@ const AddSession = () => {
                 </label>
                 <div className="mt-1">
                   <input
-                    type="text"
+                    type="date"
                     id="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
                     required
-                    placeholder='YYYY-MM-DD'
                     className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-[#1a4b8e] focus:border-[#1a4b8e] sm:text-sm border px-3 py-2"
                   />
                 </div>
@@ -131,12 +132,11 @@ const AddSession = () => {
                 </label>
                 <div className="mt-1">
                   <input
-                    type="text"
+                    type="time"
                     id="time"
                     value={time}
                     onChange={(e) => setTime(e.target.value)}
                     required
-                    placeholder='HH:MM'
                     className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-[#1a4b8e] focus:border-[#1a4b8e] sm:text-sm border px-3 py-2"
                   />
                 </div>
@@ -149,7 +149,8 @@ const AddSession = () => {
                 </label>
                 <div className="mt-1">
                   <input
-                    type="text"
+                    type="number"
+                    min="1"
                     id="duration"
                     value={duration}
                     onChange={(e) => setDuration(e.target.value)}
@@ -175,6 +176,16 @@ const AddSession = () => {
                     className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-[#1a4b8e] focus:border-[#1a4b8e] sm:text-sm border px-3 py-2"
                   />
                 </div>
+              </div>
+
+              <div className="sm:col-span-3">
+                <label htmlFor="capacity" className="block text-sm font-medium text-gray-700">Capacity (optional)</label>
+                <input id="capacity" type="number" min="1" value={capacity} onChange={(e) => setCapacity(e.target.value)} className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2" placeholder="Unlimited when blank" />
+              </div>
+
+              <div className="sm:col-span-3">
+                <label htmlFor="status" className="block text-sm font-medium text-gray-700">Visibility</label>
+                <select id="status" value={status} onChange={(e) => setStatus(e.target.value)} className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"><option value="draft">Save as draft</option><option value="published">Publish now</option></select>
               </div>
 
               {/* Detailed Description */}

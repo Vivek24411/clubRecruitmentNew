@@ -1,22 +1,11 @@
-import React from "react";
-import { useEffect } from "react";
-import {useNavigate} from "react-router-dom";
+import { useContext } from "react";
+import { Navigate } from "react-router-dom";
+import { ClubContextData } from "../context/ClubContext";
+import ClubLayout from "../components/ClubLayout";
 
-const UserProtectedWrapper = ({ children }) => {
-  const token = localStorage.getItem("clubToken");
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!token) {
-      navigate("/login");
-    }
-  }, [token]);
-
-  if (!token) {
-    return null;
-  }
-
-  return <>{children}</>;
-};
-
-export default UserProtectedWrapper;
+export default function UserProtectedWrapper({ children }) {
+  const { loggedInClub, authLoading } = useContext(ClubContextData);
+  if (authLoading) return <div className="grid min-h-screen place-items-center" role="status">Checking your session…</div>;
+  if (!loggedInClub) return <Navigate to="/login" replace />;
+  return <ClubLayout>{children}</ClubLayout>;
+}

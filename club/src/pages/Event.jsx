@@ -13,17 +13,10 @@ const Event = () => {
   const [isLoading, setIsLoading] = React.useState(true)
   const navigate = useNavigate();
 
-  async function fetchEventDetails(){
+  const fetchEventDetails = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/club/getEvent`,{
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("clubToken")}`
-        },
-        params: {
-          eventId
-        }
-      });
+      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/club/getEvent`, { params: { eventId } });
 
 
       
@@ -37,11 +30,11 @@ const Event = () => {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [eventId]);
 
   React.useEffect(() => {
     fetchEventDetails();
-  }, [eventId]);
+  }, [fetchEventDetails]);
 
 
   return (

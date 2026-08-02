@@ -73,9 +73,7 @@ const styles = {
 };
 
 // Media queries for responsive design
-const getResponsiveStyles = () => {
-  if (typeof window !== "undefined") {
-    const width = window.innerWidth;
+const getResponsiveStyles = (width) => {
     if (width < 480) {
       return {
         formContainer: {
@@ -106,7 +104,6 @@ const getResponsiveStyles = () => {
         }
       };
     }
-  }
   return {};
 };
 
@@ -114,7 +111,7 @@ const getResponsiveStyles = () => {
 const Login = () => {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const {setLoggedInAdmin} = useContext(AdminContextData);
+  const {setLoggedInAdmin, refreshAdminProfile} = useContext(AdminContextData);
 
   const [windowWidth, setWindowWidth] = React.useState(
     typeof window !== "undefined" ? window.innerWidth : 1024
@@ -122,7 +119,7 @@ const Login = () => {
   const navigate = useNavigate();
 
   // Responsive styles
-  const responsiveStyles = React.useMemo(() => getResponsiveStyles(), [windowWidth]);
+  const responsiveStyles = React.useMemo(() => getResponsiveStyles(windowWidth), [windowWidth]);
 
   // Add window resize listener
   React.useEffect(() => {
@@ -143,19 +140,16 @@ const Login = () => {
         password
       });
 
-      console.log(response);
-      
       if (response.data.success) {
         toast.success("Login successful");
-        localStorage.setItem("adminToken", response.data.token);
         setLoggedInAdmin(true);
+        await refreshAdminProfile();
         navigate("/");
       } else {
         toast.error(response.data.msg);
       }
     } catch (error) {
-      console.error("Error during login:", error);
-      toast.error(error.message || "An error occurred. Please try again.");
+      toast.error(error.response?.data?.msg || "An error occurred. Please try again.");
     }
   }
 
@@ -169,11 +163,11 @@ const Login = () => {
           ...styles.heading,
           ...responsiveStyles.heading
         }}>Admin Login</h1>
-        <form style={{ ...styles.form }}>
+        <form style={{ ...styles.form }} onSubmit={handleLogin}>
           <div style={{ ...styles.inputGroup }}>
             <label style={{ ...styles.label }}>Admin Email</label>
             <input
-              type="text"
+              type="email"
               placeholder="Enter admin email"
               required
               value={email}
@@ -199,8 +193,7 @@ const Login = () => {
             />
           </div>
           <button
-            type="button"
-            onClick={handleLogin}
+            type="submit"
             style={{
               ...styles.primaryButton,
               ...responsiveStyles.primaryButton

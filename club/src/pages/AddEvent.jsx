@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 
@@ -14,9 +14,17 @@ const AddEvent = () => {
   const [roundDetails, setRoundDetails] = React.useState([]);
   const [eventBanner, setEventBanner] = React.useState(null);
   const [eventBannerPreview, setEventBannerPreview] = React.useState(null);
+  const [registrationType, setRegistrationType] = React.useState("team");
+  const [minTeamSize, setMinTeamSize] = React.useState(1);
+  const [status, setStatus] = React.useState("draft");
 
   async function handleImageInput(e) {
     const file = e.target.files[0];
+    if (!file) {
+      setEventBanner(null);
+      setEventBannerPreview(null);
+      return;
+    }
     setEventBanner(file);
 
     const reader = new FileReader();
@@ -33,12 +41,6 @@ const AddEvent = () => {
 
     try {
       // Log form data for debugging
-      console.log("Form data being submitted:");
-      console.log("Title:", title);
-      console.log("Short Description:", shortDescription);
-      console.log("ContactInfo:", ContactInfo);
-      console.log("Number of Rounds:", numberOfRounds);
-      console.log("Round Details:", roundDetails);
       
       // Validate required fields
       if(!eventBanner){
@@ -47,9 +49,9 @@ const AddEvent = () => {
       }
 
       // Validate image file type
-      const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
       if (!allowedTypes.includes(eventBanner.type)) {
-        toast.error("Please upload a valid image file (JPG, JPEG, or PNG)");
+        toast.error("Please upload a valid image file (JPG, PNG, or WebP)");
         return;
       }
 
@@ -73,6 +75,10 @@ const AddEvent = () => {
       formData.append('longDescription', longDescription);
       formData.append('registerationDeadline', registerationDeadline);
       formData.append('maxParticipants', maxParticipants);
+      formData.append('registrationType', registrationType);
+      formData.append('minTeamSize', minTeamSize);
+      formData.append('maxTeamSize', registrationType === 'individual' ? 1 : maxParticipants);
+      formData.append('status', status);
       // Handle the ContactInfo array
       if (ContactInfo && ContactInfo.length > 0) {
         // Add each contact info as a separate item in the array
@@ -94,16 +100,9 @@ const AddEvent = () => {
 
       const response = await axios.post(
         `${import.meta.env.VITE_BASE_URI}/club/addEvent`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            Authorization: `Bearer ${localStorage.getItem("clubToken")}`,
-          },
-        }
+        formData
       );
       
-      console.log(response.data);
 
       if (response.data.success) {
         toast.success("Event added successfully");
@@ -119,6 +118,9 @@ const AddEvent = () => {
         setRoundDetails([]);
         setEventBanner(null);
         setEventBannerPreview(null);
+        setRegistrationType("team");
+        setMinTeamSize(1);
+        setStatus("draft");
       } else {
         toast.error(response.data.msg || "Failed to add event");
       }
@@ -187,7 +189,7 @@ const AddEvent = () => {
             </label>
             <input
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               onChange={handleImageInput}
               className="w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#1a4b8e]"
               required
@@ -215,8 +217,7 @@ const AddEvent = () => {
                 Registration Deadline
               </label>
               <input
-                type="String"
-                placeholder="YYYY-MM-DD"
+                type="date"
                 className="w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#1a4b8e]"
                 value={registerationDeadline}
                 onChange={(e) => setRegisterationDeadline(e.target.value)}
@@ -237,6 +238,12 @@ const AddEvent = () => {
                 placeholder="e.g. 100"
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <label className="text-sm font-medium text-gray-700">Registration type<select className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" value={registrationType} onChange={(e) => setRegistrationType(e.target.value)}><option value="individual">Individual</option><option value="team">Team</option><option value="optional_team">Optional team</option></select></label>
+            <label className="text-sm font-medium text-gray-700">Minimum team size<input type="number" min="1" disabled={registrationType === "individual"} className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 disabled:bg-gray-100" value={registrationType === "individual" ? 1 : minTeamSize} onChange={(e) => setMinTeamSize(Number(e.target.value))} /></label>
+            <label className="text-sm font-medium text-gray-700">Visibility<select className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2" value={status} onChange={(e) => setStatus(e.target.value)}><option value="draft">Save as draft</option><option value="published">Publish now</option></select></label>
           </div>
 
           {/* Contact Info */}
@@ -306,8 +313,7 @@ const AddEvent = () => {
                           Test Date
                         </label>
                         <input
-                          type="text"
-                          placeholder="YYYY-MM-DD"
+                          type="date"
                           className="w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#1a4b8e]"
                           value={roundDetails[i]?.TestDate || ""}
                           onChange={(e) => {
@@ -337,8 +343,7 @@ const AddEvent = () => {
                         </label>
                         <input
                           className="w-full border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#1a4b8e]"
-                          type="text"
-                          placeholder="YYYY-MM-DD"
+                          type="date"
                           value={roundDetails[i]?.SubmissionDeadline || ""}
                           onChange={(e) => {
                             const newDetails = [...roundDetails];

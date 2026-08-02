@@ -1,39 +1,64 @@
 const mongoose = require('mongoose')
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
 
 
 const studentSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
+    trim: true,
+    maxlength: 100,
   },
   email: {
     type: String,
     required: true,
     unique: true,
+    lowercase: true,
+    trim: true,
   },
   password: {
     type: String,
     required: true,
+    select: false,
   },
   branch:{
     type: String,
     required: true,
+    trim: true,
+    maxlength: 100,
   },
   year: {
     type: String,
     required: true,
+    maxlength: 20,
   },
   phoneNumber: {
     type: String,
     required: true,
     unique: true,
+    maxlength: 30,
   },
   enrollmentNumber: {
     type: String,
     required: true,
     unique: true,
+    trim: true,
+    uppercase: true,
+  },
+  tokenVersion: {
+    type: Number,
+    default: 0,
+    select: false,
+  },
+  status: {
+    type: String,
+    enum: ['active', 'suspended'],
+    default: 'active',
+    index: true,
+  },
+  notificationPreferences: {
+    email: { type: Boolean, default: true },
+    inApp: { type: Boolean, default: true },
   },
 });
 
@@ -42,8 +67,8 @@ studentSchema.methods.comparePassword = async function (candidatePassword) {
 };
 
 studentSchema.methods.createToken = async function() {
-  const token = jwt.sign({ id: this._id }, process.env.JWT_SECRET);
-  return token;
+  const { signSession } = require('../utils/auth');
+  return signSession({ subject: this._id, role: 'student', version: this.tokenVersion || 0 });
 };
 
 const studentModel = mongoose.model("Student", studentSchema);

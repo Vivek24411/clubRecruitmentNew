@@ -11,6 +11,9 @@ import UserProtectedWrapper from './pages/UserProtectedWrapper'
 import AddClub from './pages/AddClub'
 import Clubs from './pages/Clubs'
 import Club from './pages/Club'
+import Students from './pages/Students'
+import Settings from './pages/Settings'
+import AuditLogs from './pages/AuditLogs'
 
 const App = () => {
   return (
@@ -26,6 +29,9 @@ const App = () => {
       <Route path='/addClub' element={<UserProtectedWrapper><AddClub/></UserProtectedWrapper>} />
       <Route path='/clubs' element={<UserProtectedWrapper><Clubs/></UserProtectedWrapper>} />
       <Route path='/club/:clubId' element={<UserProtectedWrapper><Club/></UserProtectedWrapper>} />
+      <Route path='/students' element={<UserProtectedWrapper><Students/></UserProtectedWrapper>} />
+      <Route path='/settings' element={<UserProtectedWrapper><Settings/></UserProtectedWrapper>} />
+      <Route path='/audit-logs' element={<UserProtectedWrapper><AuditLogs/></UserProtectedWrapper>} />
     </Routes>
     </>
   )

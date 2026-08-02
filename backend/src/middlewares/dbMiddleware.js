@@ -9,7 +9,6 @@ const ensureDBConnection = async (req, res, next) => {
     return res.status(500).json({
       success: false,
       msg: 'Database connection failed',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 };

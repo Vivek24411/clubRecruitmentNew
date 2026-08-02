@@ -1,42 +1,102 @@
 const express = require("express");
-const { body, query } = require("express-validator");
-const { login, getProfile, addClub, getAllSessions, getSessionDetail, getAllClubs, getClubDetail, getAllEvents, getEventDetail, getDashBoard } = require("../controllers/admin.controllers");
+const { body, param, query } = require("express-validator");
+const { login, logout, getProfile, addClub, getAllSessions, getSessionDetail, getAllClubs, getClubDetail, getAllEvents, getEventDetail, getDashBoard, getStudents, updateStudentStatus, updateClubStatus, resetClubPassword, moderateEvent, moderateSession, getAuditLogs, getSettings, updateSettings } = require("../controllers/admin.controllers");
 const { adminAuth } = require("../middlewares/auth.middlewares");
 const router = express.Router();
 const upload = require("../middlewares/upload");
+const rateLimit = require("../middlewares/rateLimit");
+const validateRequest = require("../middlewares/validateRequest");
+const fitsBcrypt = (value) => Buffer.byteLength(String(value), "utf8") <= 72;
 
-router.post("/login", [
-  body("email").isEmail(),
-  body("password").isLength({ min: 5 }),
-], login);
+const loginRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 8, keyPrefix: "admin-login", persistent: true });
+
+router.post("/login", loginRateLimit, [
+  body("email").isEmail().normalizeEmail().isLength({ max: 254 }),
+  body("password").isLength({ min: 5, max: 128 }),
+], validateRequest, login);
+
+router.post('/logout', logout)
 
 router.get('/getProfile',adminAuth,getProfile)
 
 router.post("/addClub",adminAuth,upload.single('clubLogo'),[
-  body("name").isString().notEmpty().withMessage("Club name is required"),
-  body("userName").isString().notEmpty().withMessage("Username is required"),
-  body("password").isLength({ min: 5 }).withMessage("Password must be at least 5 characters long"),
-], addClub);
+  body("name").isString().trim().isLength({ min: 2, max: 150 }).withMessage("Club name is required"),
+  body("userName").isString().trim().isLength({ min: 1, max: 80 }).withMessage("Username is required"),
+  body("password").isLength({ min: 10, max: 128 }).custom(fitsBcrypt).withMessage("Password must be 10–72 bytes long"),
+], validateRequest, addClub);
 
 router.get('/getAllSessions',adminAuth,getAllSessions)
 
 router.get('/getSessionDetail', adminAuth,[
-  query("sessionId").isString().notEmpty().withMessage("Session ID is required"),
-],getSessionDetail)
+  query("sessionId").isMongoId().withMessage("Session ID is required"),
+], validateRequest, getSessionDetail)
 
 router.get('/getAllClubs', adminAuth,getAllClubs )
 
 router.get('/getClubDetail', adminAuth,[
-  query("clubId").isString().notEmpty().withMessage("Club ID is required"),
-],getClubDetail)
+  query("clubId").isMongoId().withMessage("Club ID is required"),
+], validateRequest, getClubDetail)
 
 router.get('/getAllEvents',adminAuth,getAllEvents)
 
 router.get('/getEventDetail',adminAuth,[
-  query("eventId").isString().notEmpty().withMessage("Event ID is required"),
-],getEventDetail)
+  query("eventId").isMongoId().withMessage("Event ID is required"),
+], validateRequest, getEventDetail)
 
 router.get('/getDashBoard',adminAuth,getDashBoard)
+
+router.get('/students', adminAuth, [
+  query('page').optional().isInt({ min: 1 }),
+  query('limit').optional().isInt({ min: 1, max: 100 }),
+  query('search').optional().isString().isLength({ max: 100 }),
+], validateRequest, getStudents)
+
+router.patch('/students/:studentId/status', adminAuth, [
+  param('studentId').isMongoId(),
+  body('status').isIn(['active', 'suspended']),
+], validateRequest, updateStudentStatus)
+
+router.patch('/clubs/:clubId/status', adminAuth, [
+  param('clubId').isMongoId(),
+  body('status').isIn(['active', 'suspended']),
+], validateRequest, updateClubStatus)
+
+router.post('/clubs/:clubId/reset-password', adminAuth, [
+  param('clubId').isMongoId(),
+  body('newPassword').isLength({ min: 10, max: 128 }).custom(fitsBcrypt).withMessage("Password must be 10–72 bytes long"),
+], validateRequest, resetClubPassword)
+
+router.patch('/events/:eventId/status', adminAuth, [
+  param('eventId').isMongoId(),
+  body('status').isIn(['draft', 'published', 'closed', 'archived', 'cancelled']),
+], validateRequest, moderateEvent)
+
+router.patch('/sessions/:sessionId/status', adminAuth, [
+  param('sessionId').isMongoId(),
+  body('status').isIn(['draft', 'published', 'cancelled', 'completed', 'archived']),
+], validateRequest, moderateSession)
+
+router.get('/audit-logs', adminAuth, [
+  query('page').optional().isInt({ min: 1 }),
+  query('limit').optional().isInt({ min: 1, max: 100 }),
+  query('action').optional().isString().isLength({ max: 100 }),
+], validateRequest, getAuditLogs)
+
+router.get('/settings', adminAuth, getSettings)
+router.patch('/settings', adminAuth, [
+  body('registrationEnabled').optional().isBoolean(),
+  body('maintenanceMessage').optional().isString().isLength({ max: 500 }),
+  body('recruitmentCycle').optional().isObject().custom((cycle) => {
+    if (cycle.startAt && cycle.endAt && new Date(cycle.startAt) >= new Date(cycle.endAt)) {
+      throw new Error('Recruitment cycle end must be after its start');
+    }
+    return true;
+  }),
+  body('recruitmentCycle.name').optional().isString().isLength({ max: 100 }),
+  body('recruitmentCycle.status').optional().isIn(['draft', 'open', 'closed']),
+  body('recruitmentCycle.startAt').optional({ nullable: true }).isISO8601(),
+  body('recruitmentCycle.endAt').optional({ nullable: true }).isISO8601(),
+], validateRequest, updateSettings)
 
 
 module.exports = router;

@@ -10,31 +10,26 @@ const ClubEvents = () => {
     const [isLoading, setIsLoading] = React.useState(true)
     const { clubId } = useParams();
 
-    async function fetchClubEvents(){
+    const fetchClubEvents = React.useCallback(async () => {
         setIsLoading(true);
         try {
-          const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getClubEvents`,{
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`
-            },
-            params: { clubId }
-          });
+          const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getClubEvents`, { params: { clubId } });
           if(response.data.success){
             setClubEvents(response.data.events);
           }else{
             toast.error(response.data.msg);
           }
-        } catch (error) {
+        } catch {
          
           toast.error("Failed to fetch club events");
         } finally {
           setIsLoading(false);
         }
-    }
+    }, [clubId]);
 
     useEffect(() => {
         fetchClubEvents();
-    }, [clubId]);
+    }, [fetchClubEvents]);
 
     return (
         <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">

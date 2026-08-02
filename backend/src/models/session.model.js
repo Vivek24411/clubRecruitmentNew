@@ -8,45 +8,59 @@ const sessionSchema = new mongoose.Schema({
   },
   title: {
     type: String,
-    required: true
+    required: true,
+    trim: true,
+    maxlength: 150,
   },
   shortDescription: {
     type: String,
-    
+    maxlength: 500,
   },
   longDescription: {
     type: String,
-    
+    maxlength: 10000,
   },
   date: {
     type: String,
-    
+    maxlength: 10,
   },
   time: {
     type: String,
-   
+    maxlength: 5,
   },
   venue: {
     type: String,
+    maxlength: 300,
   },
   duration: {
     type: String,
+    maxlength: 4,
   },
-expiresAt: {
+  status: {
+    type: String,
+    enum: ['draft', 'published', 'cancelled', 'completed', 'archived'],
+    default: 'published',
+    index: true,
+  },
+  capacity: {
+    type: Number,
+    default: null,
+    min: 1,
+  },
+  confirmedRsvpCount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  updatedAt: {
     type: Date,
-    default: function() {
-        // Combine date and time fields to create a Date object
-        if (this.date && this.time) {
-            // Assuming date is 'YYYY-MM-DD' and time is 'HH:mm'
-            const dateTimeString = `${this.date}T${this.time}:00.000Z`;
-            const sessionDate = new Date(dateTimeString);
-            // Add 4 hours
-            return new Date(sessionDate.getTime() + 4 * 60 * 60 * 1000);
-        }
-        return undefined;
-    },
-    index: { expires: 0 }
-}       
+    default: Date.now,
+  },
+});
+
+sessionSchema.pre('save', function(next) {
+  this.updatedAt = new Date();
+  next();
 });
 
 const sessionModel = mongoose.model("Session", sessionSchema);

@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom'
 import axios from 'axios'
 import { toast } from 'react-toastify';
 import { Link } from 'react-router-dom'
-import { useNavigate } from 'react-router-dom';
 
 const Event = () => {
 
@@ -11,20 +10,11 @@ const Event = () => {
   const [event, setEvent] = React.useState(null)
   const [isLoading, setIsLoading] = React.useState(true)
 
-  async function fetchEventDetails(){
+  const fetchEventDetails = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/admin/getEventDetail`,{
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("adminToken")}`
-        },
-        params: {
-          eventId
-        }
-      });
+      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/admin/getEventDetail`, { params: { eventId } });
 
-      console.log(response);
-      
       if(response.data.success){
         setEvent(response.data.event);
       }else{
@@ -35,26 +25,26 @@ const Event = () => {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [eventId]);
 
   React.useEffect(() => {
     fetchEventDetails();
-  }, [eventId]);  
+  }, [fetchEventDetails]);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
         {/* Back button */}
         <div className="mb-6">
-          <a 
-            href="/admin/events" 
+          <Link
+            to="/events"
             className="inline-flex items-center text-[#1a4b8e] hover:text-[#153c70] transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
             </svg>
             Back to Events
-          </a>
+          </Link>
         </div>
 
         {isLoading ? (
@@ -136,7 +126,7 @@ const Event = () => {
                   <ul className="list-disc pl-6 text-gray-700">
                     {event.roundDetails.map((round, idx) => (
                      
-                      <div>
+                      <div key={idx}>
                        <h3>Round - {round.Round} {round.Type}</h3>
                        
                       </div>
@@ -154,12 +144,12 @@ const Event = () => {
             <h3 className="mt-2 text-sm font-medium text-gray-900">Event not found</h3>
             <p className="mt-1 text-sm text-gray-500">This event might have been removed or the ID is invalid.</p>
             <div className="mt-6">
-              <a
-                href="/admin/events"
+              <Link
+                to="/events"
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#1a4b8e] hover:bg-[#153c70] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1a4b8e]"
               >
                 Go back to Events
-              </a>
+              </Link>
             </div>
           </div>
         )}
