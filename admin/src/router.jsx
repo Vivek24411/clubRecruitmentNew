@@ -49,7 +49,20 @@ export function Routes({ children }) {
     const params = matchPath(child.props.path, location);
     if (params) return <ParamsContext.Provider value={params}>{child.props.element}</ParamsContext.Provider>;
   }
-  return <main className="mx-auto max-w-3xl p-8"><h1 className="text-2xl font-bold">Page not found</h1><Link to="/" className="mt-4 inline-block text-blue-700">Return home</Link></main>;
+  return (
+    <main className="grid min-h-[70vh] place-items-center px-6">
+      <div className="reveal text-center">
+        <p className="eyebrow eyebrow-accent">Error 404</p>
+        <h1 className="display mt-3 text-3xl sm:text-4xl">This page doesn&rsquo;t exist</h1>
+        <p className="mt-3 text-sm text-ink-3">
+          The link may be out of date, or the item was removed.
+        </p>
+        <Link to="/" className="btn btn-secondary mt-7">
+          Return home
+        </Link>
+      </div>
+    </main>
+  );
 }
 
 export function Route() { return null; }

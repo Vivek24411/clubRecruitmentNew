@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import {
+  Badge,
+  Button,
+  Input,
+  Monogram,
+  Page,
+  PageHeader,
+  Skeleton,
+  TableWrap,
+} from "../components/ui";
 
 export default function Students() {
   const [students, setStudents] = useState([]);
@@ -10,31 +20,134 @@ export default function Students() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await axios.get(`${import.meta.env.VITE_BASE_URI}/admin/students`, { params: { search, limit: 100 } });
+      const { data } = await axios.get(`${import.meta.env.VITE_BASE_URI}/admin/students`, {
+        params: { search, limit: 100 },
+      });
       if (!data.success) throw new Error(data.msg);
       setStudents(data.students);
-    } catch (error) { toast.error(error.response?.data?.msg || error.message || "Could not load students"); }
-    finally { setLoading(false); }
+    } catch (error) {
+      toast.error(error.response?.data?.msg || error.message || "Could not load students");
+    } finally {
+      setLoading(false);
+    }
   }, [search]);
 
-  useEffect(() => { const timer = setTimeout(load, 250); return () => clearTimeout(timer); }, [load]);
+  useEffect(() => {
+    const timer = setTimeout(load, 250);
+    return () => clearTimeout(timer);
+  }, [load]);
 
   const setStatus = async (student, status) => {
-    if (status === "suspended" && !window.confirm(`Suspend ${student.name}? Their active sessions will be revoked.`)) return;
+    if (
+      status === "suspended" &&
+      !window.confirm(`Suspend ${student.name}? Their active sessions will be revoked.`)
+    )
+      return;
     try {
-      const { data } = await axios.patch(`${import.meta.env.VITE_BASE_URI}/admin/students/${student._id}/status`, { status });
+      const { data } = await axios.patch(
+        `${import.meta.env.VITE_BASE_URI}/admin/students/${student._id}/status`,
+        { status },
+      );
       if (!data.success) throw new Error(data.msg);
-      setStudents((items) => items.map((item) => item._id === student._id ? data.student : item));
+      setStudents((items) =>
+        items.map((item) => (item._id === student._id ? data.student : item)),
+      );
       toast.success(data.msg);
-    } catch (error) { toast.error(error.response?.data?.msg || error.message); }
+    } catch (error) {
+      toast.error(error.response?.data?.msg || error.message);
+    }
   };
 
-  return <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-    <div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-3xl font-bold">Students</h1><p className="mt-1 text-slate-600">Search accounts and revoke access when needed.</p></div><label className="text-sm font-medium">Search students<input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, email, enrollment" className="mt-1 block w-72 max-w-full rounded-lg border border-slate-300 px-3 py-2" /></label></div>
-    <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-      <table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-4">Student</th><th className="p-4">Enrollment</th><th className="p-4">Course</th><th className="p-4">Status</th><th className="p-4">Action</th></tr></thead><tbody>
-        {loading ? <tr><td colSpan="5" className="p-8 text-center">Loading students…</td></tr> : students.length === 0 ? <tr><td colSpan="5" className="p-8 text-center text-slate-500">No students found.</td></tr> : students.map((student) => <tr key={student._id} className="border-t border-slate-100"><td className="p-4"><p className="font-semibold">{student.name}</p><p className="text-slate-500">{student.email}</p></td><td className="p-4">{student.enrollmentNumber}</td><td className="p-4">{student.branch} · {student.year}</td><td className="p-4"><span className={`rounded-full px-2.5 py-1 font-semibold ${student.status === "suspended" ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800"}`}>{student.status || "active"}</span></td><td className="p-4"><button onClick={() => setStatus(student, student.status === "suspended" ? "active" : "suspended")} className={`font-semibold ${student.status === "suspended" ? "text-emerald-700" : "text-red-700"}`}>{student.status === "suspended" ? "Restore" : "Suspend"}</button></td></tr>)}
-      </tbody></table>
-    </div>
-  </div>;
+  return (
+    <Page>
+      <PageHeader
+        eyebrow="Accounts"
+        title="Students"
+        description="Search registered accounts and revoke access when needed."
+        actions={
+          <Input
+            aria-label="Search students"
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Name, email, or enrollment…"
+            className="w-full sm:w-72"
+          />
+        }
+      />
+
+      <TableWrap className="mt-8">
+        <table className="table min-w-[48rem]">
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Enrollment</th>
+              <th>Course</th>
+              <th>Status</th>
+              <th className="text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              Array.from({ length: 6 }).map((_, index) => (
+                <tr key={index}>
+                  <td colSpan="5">
+                    <Skeleton className="h-8 w-full" />
+                  </td>
+                </tr>
+              ))
+            ) : students.length === 0 ? (
+              <tr>
+                <td colSpan="5" className="py-14 text-center text-sm text-ink-3">
+                  {search ? "No students match that search." : "No students registered yet."}
+                </td>
+              </tr>
+            ) : (
+              students.map((student) => {
+                const suspended = student.status === "suspended";
+                return (
+                  <tr key={student._id}>
+                    <td>
+                      <div className="flex items-center gap-3">
+                        <Monogram name={student.name || "?"} size="sm" />
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold">{student.name}</p>
+                          <p className="truncate text-xs text-ink-3">{student.email}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="tabular">{student.enrollmentNumber || "—"}</td>
+                    <td className="text-ink-2">
+                      {[student.branch, student.year].filter(Boolean).join(" · ") || "—"}
+                    </td>
+                    <td>
+                      <Badge tone={suspended ? "bad" : "ok"}>{student.status || "active"}</Badge>
+                    </td>
+                    <td className="text-right">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className={suspended ? "text-ok" : "text-bad"}
+                        onClick={() => setStatus(student, suspended ? "active" : "suspended")}
+                      >
+                        {suspended ? "Restore" : "Suspend"}
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </TableWrap>
+
+      {!loading && students.length > 0 && (
+        <p className="mt-4 text-sm text-ink-3" role="status">
+          Showing <span className="tabular font-semibold text-ink">{students.length}</span>{" "}
+          {students.length === 1 ? "student" : "students"}
+          {students.length === 100 ? " (first 100 — refine your search)" : ""}.
+        </p>
+      )}
+    </Page>
+  );
 }

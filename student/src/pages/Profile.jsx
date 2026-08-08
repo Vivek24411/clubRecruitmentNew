@@ -3,18 +3,82 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { StudentContextData } from "../context/StudentContext";
+import { Button, Card, Field, Input, Meta, Monogram, Page, PageHeader } from "../components/ui";
 
-const fieldClass = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
+const DETAIL_FIELDS = [
+  ["name", "Full name"],
+  ["branch", "Branch"],
+  ["year", "Year"],
+  ["phoneNumber", "Phone number"],
+];
+
+const PASSWORD_FIELDS = [
+  ["currentPassword", "Current password", "current-password"],
+  ["newPassword", "New password", "new-password"],
+  ["confirmPassword", "Confirm new password", "new-password"],
+];
+
+/** Checkbox styled to match the paper/ink system rather than the OS default. */
+function Check({ checked, onChange, label }) {
+  return (
+    <label className="group flex cursor-pointer items-center gap-2.5 text-sm">
+      <span className="relative flex h-4 w-4 flex-none items-center justify-center">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onChange}
+          className="peer absolute inset-0 cursor-pointer opacity-0"
+        />
+        <span className="h-4 w-4 rounded-xs border border-line-2 bg-surface transition-all duration-200 peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent/30" />
+        <svg
+          viewBox="0 0 12 12"
+          className="pointer-events-none absolute h-3 w-3 scale-50 text-white opacity-0 transition-all duration-200 peer-checked:scale-100 peer-checked:opacity-100"
+          aria-hidden="true"
+        >
+          <path
+            d="M2.5 6.2l2.3 2.3 4.7-4.9"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+        </svg>
+      </span>
+      {label}
+    </label>
+  );
+}
 
 export default function Profile() {
   const { profile, setProfile, signOut } = useContext(StudentContextData);
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", branch: "", year: "", phoneNumber: "", notificationPreferences: { email: true, inApp: true } });
-  const [passwords, setPasswords] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [form, setForm] = useState({
+    name: "",
+    branch: "",
+    year: "",
+    phoneNumber: "",
+    notificationPreferences: { email: true, inApp: true },
+  });
+  const [passwords, setPasswords] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (profile) setForm({ name: profile.name || "", branch: profile.branch || "", year: profile.year || "", phoneNumber: profile.phoneNumber || "", notificationPreferences: { email: profile.notificationPreferences?.email !== false, inApp: profile.notificationPreferences?.inApp !== false } });
+    if (profile)
+      setForm({
+        name: profile.name || "",
+        branch: profile.branch || "",
+        year: profile.year || "",
+        phoneNumber: profile.phoneNumber || "",
+        notificationPreferences: {
+          email: profile.notificationPreferences?.email !== false,
+          inApp: profile.notificationPreferences?.inApp !== false,
+        },
+      });
   }, [profile]);
 
   const saveProfile = async (event) => {
@@ -27,14 +91,23 @@ export default function Profile() {
       toast.success(data.msg);
     } catch (error) {
       toast.error(error.response?.data?.msg || error.message || "Could not save profile");
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const changePassword = async (event) => {
     event.preventDefault();
-    if (passwords.newPassword !== passwords.confirmPassword) return toast.error("New passwords do not match");
+    if (passwords.newPassword !== passwords.confirmPassword)
+      return toast.error("New passwords do not match");
     try {
-      const { data } = await axios.post(`${import.meta.env.VITE_BASE_URI}/student/changePassword`, { currentPassword: passwords.currentPassword, newPassword: passwords.newPassword });
+      const { data } = await axios.post(
+        `${import.meta.env.VITE_BASE_URI}/student/changePassword`,
+        {
+          currentPassword: passwords.currentPassword,
+          newPassword: passwords.newPassword,
+        },
+      );
       if (!data.success) throw new Error(data.msg);
       toast.success(data.msg);
       await signOut();
@@ -44,34 +117,114 @@ export default function Profile() {
     }
   };
 
-  return <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-    <h1 className="text-3xl font-bold">Profile and account</h1>
-    <p className="mt-1 text-slate-600">Keep your recruitment contact details accurate.</p>
-    <div className="mt-6 grid gap-6 lg:grid-cols-3">
-      <aside className="rounded-xl bg-[#1a4b8e] p-6 text-white">
-        <div className="grid h-16 w-16 place-items-center rounded-full bg-white text-2xl font-bold text-[#1a4b8e]">{profile?.name?.split(" ").map((part) => part[0]).join("").slice(0, 2)}</div>
-        <h2 className="mt-4 text-xl font-bold">{profile?.name}</h2>
-        <p className="mt-1 break-all text-blue-100">{profile?.email}</p>
-        <p className="mt-4 text-sm text-blue-100">Enrollment</p><p>{profile?.enrollmentNumber}</p>
-      </aside>
-      <div className="space-y-6 lg:col-span-2">
-        <form onSubmit={saveProfile} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-bold">Personal details</h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            {[['name','Full name'],['branch','Branch'],['year','Year'],['phoneNumber','Phone number']].map(([key, label]) => <label key={key} className="text-sm font-medium text-slate-700">{label}<input className={fieldClass} value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} required /></label>)}
-          </div>
-          <fieldset className="mt-5 rounded-lg bg-slate-50 p-4"><legend className="px-1 text-sm font-semibold text-slate-700">Recruitment notifications</legend><div className="mt-2 flex flex-wrap gap-5"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.notificationPreferences.inApp} onChange={(e) => setForm({ ...form, notificationPreferences: { ...form.notificationPreferences, inApp: e.target.checked } })} /> In-app alerts</label><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.notificationPreferences.email} onChange={(e) => setForm({ ...form, notificationPreferences: { ...form.notificationPreferences, email: e.target.checked } })} /> Email updates</label></div></fieldset>
-          <button disabled={saving} className="mt-5 rounded-lg bg-[#1a4b8e] px-4 py-2 font-semibold text-white disabled:opacity-60">{saving ? "Saving…" : "Save changes"}</button>
-        </form>
-        <form onSubmit={changePassword} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-bold">Change password</h2>
-          <p className="mt-1 text-sm text-slate-600">Changing it signs you out of every active session.</p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            {[['currentPassword','Current password'],['newPassword','New password'],['confirmPassword','Confirm new password']].map(([key, label]) => <label key={key} className="text-sm font-medium text-slate-700">{label}<input type="password" minLength={key === 'currentPassword' ? 1 : 10} maxLength={key === 'currentPassword' ? 128 : 72} className={fieldClass} value={passwords[key]} onChange={(e) => setPasswords({ ...passwords, [key]: e.target.value })} required autoComplete={key === 'currentPassword' ? 'current-password' : 'new-password'} /></label>)}
-          </div>
-          <button className="mt-5 rounded-lg border border-slate-300 px-4 py-2 font-semibold hover:bg-slate-50">Update password</button>
-        </form>
+  const setNotification = (key) => (event) =>
+    setForm((prev) => ({
+      ...prev,
+      notificationPreferences: { ...prev.notificationPreferences, [key]: event.target.checked },
+    }));
+
+  return (
+    <Page width="5xl">
+      <PageHeader
+        eyebrow="Account"
+        title="Profile and settings"
+        description="Keep your recruitment contact details accurate — clubs use them to reach you."
+      />
+
+      <div className="mt-10 grid gap-8 lg:grid-cols-3">
+        {/* Identity card */}
+        <aside className="lg:sticky lg:top-24 lg:h-fit">
+          <Card className="reveal p-6">
+            <Monogram name={profile?.name || "Student"} size="lg" />
+            <h2 className="display mt-5 text-xl leading-snug">{profile?.name}</h2>
+            <p className="mt-1.5 break-all text-sm text-ink-3">{profile?.email}</p>
+            <dl className="mt-6 space-y-4 border-t border-line pt-5">
+              <Meta label="Enrollment" value={profile?.enrollmentNumber} />
+              <Meta label="Branch" value={profile?.branch} />
+              <Meta label="Year" value={profile?.year} />
+            </dl>
+          </Card>
+        </aside>
+
+        <div className="space-y-8 lg:col-span-2">
+          {/* Personal details */}
+          <Card as="form" onSubmit={saveProfile} className="reveal p-6" style={{ "--d": "80ms" }}>
+            <h2 className="display text-xl">Personal details</h2>
+            <p className="mt-1.5 text-sm text-ink-3">
+              Your email and enrollment number are fixed to your institute account.
+            </p>
+
+            <div className="mt-6 grid gap-5 sm:grid-cols-2">
+              {DETAIL_FIELDS.map(([key, label]) => (
+                <Field key={key} id={key} label={label} required>
+                  <Input
+                    id={key}
+                    value={form[key]}
+                    onChange={(event) => setForm({ ...form, [key]: event.target.value })}
+                    required
+                  />
+                </Field>
+              ))}
+            </div>
+
+            <fieldset className="mt-7 rounded-sm border border-line bg-paper-2 px-5 py-4">
+              <legend className="eyebrow px-1">Recruitment notifications</legend>
+              <div className="mt-3 flex flex-wrap gap-6">
+                <Check
+                  checked={form.notificationPreferences.inApp}
+                  onChange={setNotification("inApp")}
+                  label="In-app alerts"
+                />
+                <Check
+                  checked={form.notificationPreferences.email}
+                  onChange={setNotification("email")}
+                  label="Email updates"
+                />
+              </div>
+            </fieldset>
+
+            <Button className="mt-7" disabled={saving} loading={saving}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          </Card>
+
+          {/* Password */}
+          <Card
+            as="form"
+            onSubmit={changePassword}
+            className="reveal p-6"
+            style={{ "--d": "140ms" }}
+          >
+            <h2 className="display text-xl">Change password</h2>
+            <p className="mt-1.5 text-sm text-ink-3">
+              Changing your password signs you out of every active session.
+            </p>
+
+            <div className="mt-6 grid gap-5 sm:grid-cols-3">
+              {PASSWORD_FIELDS.map(([key, label, autoComplete]) => (
+                <Field key={key} id={key} label={label} required>
+                  <Input
+                    id={key}
+                    type="password"
+                    minLength={key === "currentPassword" ? 1 : 10}
+                    maxLength={key === "currentPassword" ? 128 : 72}
+                    autoComplete={autoComplete}
+                    value={passwords[key]}
+                    onChange={(event) =>
+                      setPasswords({ ...passwords, [key]: event.target.value })
+                    }
+                    required
+                  />
+                </Field>
+              ))}
+            </div>
+
+            <Button variant="secondary" className="mt-7">
+              Update password
+            </Button>
+          </Card>
+        </div>
       </div>
-    </div>
-  </div>;
+    </Page>
+  );
 }

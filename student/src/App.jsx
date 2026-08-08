@@ -39,11 +39,11 @@ const App = () => {
       <Route path='/applications' element={<ProtectedWrapper><MyApplications/></ProtectedWrapper>}/>
       <Route path='/notifications' element={<ProtectedWrapper><Notifications/></ProtectedWrapper>}/>
     </Routes>
-    <ToastContainer 
-      position="top-center"
-      autoClose={3000}
-      hideProgressBar={false}
-      newestOnTop={true}
+    <ToastContainer
+      position="bottom-right"
+      autoClose={3500}
+      hideProgressBar
+      newestOnTop
       closeOnClick
       rtl={false}
       pauseOnFocusLoss

@@ -108,7 +108,7 @@ module.exports.sendOtp = async (req, res) => {
   if (!validEmailFormat) {
     return res.json({
       success: false,
-      msg: "Please use your college email to register",
+      msg: "Please use a valid IITR institute email",
     });
   }
 
@@ -206,7 +206,7 @@ module.exports.register = async (req, res) => {
     const email = normalizeEmail(req.body.email);
 
     if (!checkEmailDomain(email)) {
-      return res.status(400).json({ success: false, msg: "Please use your IITR email to register" });
+      return res.status(400).json({ success: false, msg: "Please use a valid IITR institute email" });
     }
 
     const existingStudent = await studentModel.findOne({ email });

@@ -1,181 +1,101 @@
+import { useContext, useState } from "react";
 import axios from "axios";
-import React from "react";
 import { toast } from "react-toastify";
 import { useNavigate, Link } from "react-router-dom";
 import { StudentContextData } from "../context/StudentContext";
+import AuthShell from "../components/AuthShell";
+import { Button, Field, Input } from "../components/ui";
+import { isIitrInstituteEmail } from "../utils/email";
 
-
-// Custom responsive styles
-const styles = {
-  container: {
-    background: "#1a4b8e",
-    minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "20px",
-  },
-  formContainer: {
-    background: "white",
-    borderRadius: "20px",
-    padding: "30px",
-    width: "100%",
-    maxWidth: "450px",
-    boxShadow: "0 4px 8px rgba(0,0,0,0.1)"
-  },
-  heading: {
-    textAlign: "center",
-    fontSize: "28px",
-    marginBottom: "30px",
-    fontWeight: "bold"
-  },
-  form: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "15px"
-  },
-  inputGroup: {
-    marginBottom: "5px"
-  },
-  label: {
-    display: "block",
-    marginBottom: "5px",
-    fontWeight: "500"
-  },
-  input: {
-    width: "100%",
-    padding: "12px",
-    border: "1px solid #ddd",
-    borderRadius: "8px",
-    fontSize: "16px"
-  },
-  primaryButton: {
-    background: "#1a4b8e",
-    color: "white",
-    border: "none",
-    borderRadius: "8px",
-    padding: "14px",
-    fontSize: "16px",
-    fontWeight: "bold",
-    cursor: "pointer"
-  },
-  secondaryButton: {
-    background: "#e0e0e0",
-    color: "#1a4b8e",
-    border: "none",
-    borderRadius: "8px",
-    padding: "14px",
-    fontSize: "16px",
-    fontWeight: "bold",
-    cursor: "pointer"
-  },
-  linkContainer: {
-    textAlign: "center",
-    marginTop: "20px"
-  },
-  link: {
-    color: "#1a4b8e",
-    textDecoration: "none",
-    fontWeight: "bold"
-  }
-};
-
-// Media queries for responsive design
-const getResponsiveStyles = (width) => {
-    // Mobile styles (small screens)
-    if (width < 480) {
-      return {
-        formContainer: {
-          padding: "20px 15px",
-          borderRadius: "15px",
-        },
-        heading: {
-          fontSize: "24px",
-          marginBottom: "20px",
-        },
-        input: {
-          padding: "10px",
-          fontSize: "14px",
-        },
-        primaryButton: {
-          padding: "12px",
-          fontSize: "15px",
-        },
-        secondaryButton: {
-          padding: "12px",
-          fontSize: "15px",
-        },
-      };
-    }
-    
-    // Tablet styles (medium screens)
-    if (width < 768) {
-      return {
-        formContainer: {
-          padding: "25px 20px",
-        },
-        heading: {
-          fontSize: "26px",
-        }
-      };
-    }
-  return {};
-};
-
-const Register = () => {
-  const [name, setName] = React.useState("");
-  const [email, setEmail] = React.useState("");
-  const [password, setPassword] = React.useState("");
-  const [branch, setBranch] = React.useState("");
-  const [year, setYear] = React.useState("");
-  const [otp, setOtp] = React.useState("");
-  const [otpInput, setOtpInput] = React.useState(false);
-  const [phoneNumber, setPhoneNumber] = React.useState("");
-  const [enrollmentNumber, setEnrollmentNumber] = React.useState("");
-  const [sendingOTP, setSendingOTP] = React.useState(false);
-  const [verifyingOTP, setVerifyingOTP] = React.useState(false);
-  const [registering, setRegistering] = React.useState(false);
-  const [windowWidth, setWindowWidth] = React.useState(
-    typeof window !== "undefined" ? window.innerWidth : 1024
+/** Two-dot progress rail; the fill slides as the step advances. */
+function StepRail({ step, labels }) {
+  return (
+    <div className="mb-8">
+      <div className="flex items-center gap-3">
+        {labels.map((label, index) => {
+          const done = index < step;
+          const current = index === step;
+          return (
+            <div key={label} className="flex flex-1 items-center gap-3">
+              <span
+                className={`grid h-6 w-6 flex-none place-items-center rounded-full border text-[0.6875rem] font-semibold transition-all duration-500 ${
+                  done
+                    ? "border-accent bg-accent text-white"
+                    : current
+                      ? "border-accent text-accent"
+                      : "border-line-2 text-ink-4"
+                }`}
+              >
+                {done ? "✓" : index + 1}
+              </span>
+              <span
+                className={`eyebrow transition-colors duration-500 ${
+                  current || done ? "text-ink" : "text-ink-4"
+                }`}
+              >
+                {label}
+              </span>
+              {index < labels.length - 1 && (
+                <span className="h-px flex-1 overflow-hidden bg-line">
+                  <span
+                    className="block h-full bg-accent transition-transform duration-700 ease-out"
+                    style={{
+                      transform: `scaleX(${done ? 1 : 0})`,
+                      transformOrigin: "left",
+                    }}
+                  />
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
+}
+
+const DETAIL_FIELDS = [
+  { key: "name", label: "Full name", type: "text", placeholder: "Ada Lovelace", autoComplete: "name" },
+  { key: "email", label: "IITR email", type: "email", placeholder: "name_s@branch.iitr.ac.in", autoComplete: "email" },
+  { key: "password", label: "Password", type: "password", placeholder: "At least 10 characters", autoComplete: "new-password", minLength: 10, maxLength: 72 },
+  { key: "enrollmentNumber", label: "Enrollment number", type: "text", placeholder: "22114001" },
+  { key: "phoneNumber", label: "Phone number", type: "tel", placeholder: "98765 43210", autoComplete: "tel" },
+  { key: "branch", label: "Branch", type: "text", placeholder: "Computer Science" },
+  { key: "year", label: "Year", type: "text", placeholder: "First, Second, Third, Fourth" },
+];
+
+export default function Register() {
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    branch: "",
+    year: "",
+    phoneNumber: "",
+    enrollmentNumber: "",
+  });
+  const [otp, setOtp] = useState("");
+  const [otpInput, setOtpInput] = useState(false);
+  const [sendingOTP, setSendingOTP] = useState(false);
+  const [verifyingOTP, setVerifyingOTP] = useState(false);
+  const [registering, setRegistering] = useState(false);
+
   const navigate = useNavigate();
-  const { setLoggedInStudent, refreshProfile } = React.useContext(StudentContextData);
-  const isIitrEmail = (value) => value.trim().toLowerCase().split("@")[1] === "iitr.ac.in";
+  const { setLoggedInStudent, refreshProfile } = useContext(StudentContextData);
 
-  const responsiveStyles = React.useMemo(() => getResponsiveStyles(windowWidth), [windowWidth]);
-  
-  React.useEffect(() => {
-    if (typeof window !== "undefined") {
-      const handleResize = () => {
-        setWindowWidth(window.innerWidth);
-      };
-      
-      window.addEventListener("resize", handleResize);
-      return () => window.removeEventListener("resize", handleResize);
-    }
-  }, []);
-
-
-
-
+  const set = (key) => (event) => setForm((prev) => ({ ...prev, [key]: event.target.value }));
   async function sendOTP() {
     setSendingOTP(true);
-    if(!isIitrEmail(email)){
+    if (!isIitrInstituteEmail(form.email)) {
       toast.error("Please enter a valid IITR email");
       setSendingOTP(false);
       return;
     }
-    
     try {
-      const response = await axios.post(
-        `${import.meta.env.VITE_BASE_URI}/student/sendOtp`,
-        {
-          email,
-          purpose: "signup",
-        }
-      );
-
-
+      const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/student/sendOtp`, {
+        email: form.email,
+        purpose: "signup",
+      });
       if (response.data.success) {
         toast.success("OTP sent successfully");
         setOtpInput(true);
@@ -186,43 +106,28 @@ const Register = () => {
       toast.error("Error sending OTP. Please try again.");
       console.error(error);
     } finally {
-      setSendingOTP(false);  // Reset the sending state regardless of outcome
+      setSendingOTP(false);
     }
   }
 
-  async function verifyOtpAndRegister(e) {
-    e.preventDefault();
+  async function verifyOtpAndRegister(event) {
+    event.preventDefault();
     setVerifyingOTP(true);
     setRegistering(true);
-    
     try {
-      const response = await axios.post(
-        `${import.meta.env.VITE_BASE_URI}/student/verifyOtp`,
-        {
-          email,
-          otp,
-          purpose: "signup",
-        }
-      );
+      const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/student/verifyOtp`, {
+        email: form.email,
+        otp,
+        purpose: "signup",
+      });
 
       if (response.data.success) {
         toast.success("OTP verified successfully");
-
         try {
           const registerResponse = await axios.post(
             `${import.meta.env.VITE_BASE_URI}/student/register`,
-            {
-              email,
-              name,
-              password,
-              branch,
-              year,
-              phoneNumber,
-              enrollmentNumber,
-              verificationToken: response.data.verificationToken,
-            }
+            { ...form, verificationToken: response.data.verificationToken },
           );
-
           if (registerResponse.data.success) {
             toast.success("Registration successful");
             setLoggedInStudent(true);
@@ -251,206 +156,94 @@ const Register = () => {
   }
 
   return (
-    <div style={{...styles.container}}>
-      <div style={{
-        ...styles.formContainer, 
-        ...responsiveStyles.formContainer
-      }}>
-        <h1 style={{
-          ...styles.heading,
-          ...responsiveStyles.heading
-        }}>Registration</h1>
-        
-        <form style={{...styles.form}}>
-          <div style={{...styles.inputGroup}}>
-            <label style={{...styles.label}}>Name</label>
-            <input
-              required
-              type="text"
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-              }}
-              placeholder="Enter your name"
-              style={{
-                ...styles.input,
-                ...responsiveStyles.input
-              }}
-            />
-          </div>
-          
-          <div style={{...styles.inputGroup}}>
-            <label style={{...styles.label}}>Email</label>
-            <input
-              required
-              type="email"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-              }}
-              placeholder="Enter your IITR email"
-              style={{
-                ...styles.input,
-                ...responsiveStyles.input
-              }}
-            />
-          </div>
-          
-          <div style={{...styles.inputGroup}}>
-            <label style={{...styles.label}}>Password</label>
-            <input
-              required
-              type="password"
-              maxLength={72}
-              minLength={10}
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-              }}
-              placeholder="Create a password"
-              style={{
-                ...styles.input,
-                ...responsiveStyles.input
-              }}
-            />
-          </div>
+    <AuthShell
+      eyebrow="Create account"
+      title={otpInput ? "Verify your email" : "Join the recruitment cycle"}
+      description={
+        otpInput
+          ? `We sent a one-time code to ${form.email}. Enter it below to finish creating your account.`
+          : "Register with your institute email. You'll confirm it with a one-time code."
+      }
+      footer={
+        <p>
+          Already have an account?{" "}
+          <Link to="/login" className="link link-accent">
+            Sign in
+          </Link>
+        </p>
+      }
+    >
+      <StepRail step={otpInput ? 1 : 0} labels={["Details", "Verify"]} />
 
-          <div>
-            <label style={{...styles.label}}>Enrollment Number</label>
-            <input
-              required
-              type="tel"
-              value={enrollmentNumber}
-              onChange={(e) => {
-                setEnrollmentNumber(e.target.value);
-              }}
-              placeholder="Enter your enrollment number"
-              style={{
-                ...styles.input,
-                ...responsiveStyles.input
-              }}
+      {otpInput ? (
+        <form onSubmit={verifyOtpAndRegister} className="space-y-5">
+          <Field label="One-time code" id="otp" hint="The code expires shortly after it is sent.">
+            <Input
+              id="otp"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="6-digit code"
+              className="tabular text-center text-lg tracking-[0.4em]"
+              value={otp}
+              onChange={(event) => setOtp(event.target.value)}
             />
-          </div>
+          </Field>
 
-          <div>
-            <label style={{...styles.label}}>Phone Number</label>
-            <input
-              required
-              type="text"
-              value={phoneNumber}
-              onChange={(e) => {
-                setPhoneNumber(e.target.value);
-              }}
-              placeholder="Enter your phone number"
-              style={{
-                ...styles.input,
-                ...responsiveStyles.input
-              }}
-            />
-          </div>
-          
-          <div style={{...styles.inputGroup}}>
-            <label style={{...styles.label}}>Branch</label>
-            <input
-              required
-              type="text"
-              value={branch}
-              onChange={(e) => {
-                setBranch(e.target.value);
-              }}
-              placeholder="Enter your branch"
-              style={{
-                ...styles.input,
-                ...responsiveStyles.input
-              }}
-            />
-          </div>
-          
-          <div style={{...styles.inputGroup}}>
-            <label style={{...styles.label}}>Year</label>
-            <input
-              required
-              type="text"
-              value={year}
-              onChange={(e) => {
-                setYear(e.target.value);
-              }}
-              placeholder="First, Second, Third, Fourth"
-              style={{
-                ...styles.input,
-                ...responsiveStyles.input
-              }}
-            />
-          </div>
-          
-          {otpInput && (
-            <div style={{...styles.inputGroup}}>
-              <label style={{...styles.label}}>OTP</label>
-              <input
-                type="text"
-                value={otp}
-                onChange={(e) => {
-                  setOtp(e.target.value);
-                }}
-                placeholder="Enter OTP"
-                style={{
-                  ...styles.input,
-                  ...responsiveStyles.input
-                }}
-              />
-            </div>
-          )}
-          
-          {otpInput ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              <button 
-                type="submit" 
-                onClick={verifyOtpAndRegister}
-                disabled={verifyingOTP || registering}
-                style={{
-                  ...styles.primaryButton,
-                  ...responsiveStyles.primaryButton,
-                  opacity: (verifyingOTP || registering) ? 0.7 : 1
-                }}
-              >
-                {verifyingOTP || registering ? "Processing..." : "Verify OTP and Register"}
-              </button>
-              <button 
-                type="button" 
-                onClick={sendOTP}
-                disabled={sendingOTP}
-                style={{
-                  ...styles.secondaryButton,
-                  ...responsiveStyles.secondaryButton,
-                  opacity: sendingOTP ? 0.7 : 1
-                }}
-              >
-                {sendingOTP ? "Sending..." : "Resend OTP"}
-              </button>
-            </div>
-          ) : (
-            <button 
-              type="button" 
+          <Button type="submit" size="lg" block loading={verifyingOTP || registering}>
+            {verifyingOTP || registering ? "Creating account…" : "Verify and register"}
+          </Button>
+
+          <div className="flex items-center justify-between text-sm">
+            <button
+              type="button"
+              onClick={() => setOtpInput(false)}
+              className="link text-ink-3"
+            >
+              ← Edit details
+            </button>
+            <button
+              type="button"
               onClick={sendOTP}
               disabled={sendingOTP}
-              style={{
-                ...styles.primaryButton,
-                ...responsiveStyles.primaryButton,
-                marginTop: "10px",
-                opacity: sendingOTP ? 0.7 : 1
-              }}
+              className="link link-accent disabled:opacity-50"
             >
-              {sendingOTP ? "Sending..." : "Get OTP"}
+              {sendingOTP ? "Sending…" : "Resend code"}
             </button>
-          )}
-          
-          <div style={{...styles.linkContainer}}>
-            Already have an account? <Link to="/login" style={{...styles.link}}>Sign In</Link>
           </div>
         </form>
-      </div>
-    </div>
-  );
-};
+      ) : (
+        <form
+          className="space-y-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            sendOTP();
+          }}
+        >
+          <div className="grid gap-5 sm:grid-cols-2">
+            {DETAIL_FIELDS.map(({ key, label, ...inputProps }) => (
+              <Field
+                key={key}
+                id={key}
+                label={label}
+                required
+                className={key === "name" || key === "email" ? "sm:col-span-2" : undefined}
+              >
+                <Input
+                  id={key}
+                  required
+                  value={form[key]}
+                  onChange={set(key)}
+                  {...inputProps}
+                />
+              </Field>
+            ))}
+          </div>
 
-export default Register;
+          <Button type="submit" size="lg" block loading={sendingOTP}>
+            {sendingOTP ? "Sending code…" : "Continue"}
+          </Button>
+        </form>
+      )}
+    </AuthShell>
+  );
+}

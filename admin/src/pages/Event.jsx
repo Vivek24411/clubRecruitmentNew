@@ -1,161 +1,185 @@
-import React from 'react'
-import { useParams } from 'react-router-dom'
-import axios from 'axios'
-import { toast } from 'react-toastify';
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useState } from "react";
+import { useParams, Link } from "react-router-dom";
+import axios from "axios";
+import { toast } from "react-toastify";
+import { eventDeadline, formatDateTime } from "../utils/date";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Meta,
+  MetaGrid,
+  Page,
+  Skeleton,
+} from "../components/ui";
 
-const Event = () => {
+const STATUS_TONE = {
+  published: "ok",
+  draft: "neutral",
+  closed: "warn",
+  archived: "neutral",
+  cancelled: "bad",
+};
 
-  const { eventId } = useParams()
-  const [event, setEvent] = React.useState(null)
-  const [isLoading, setIsLoading] = React.useState(true)
+export default function Event() {
+  const { eventId } = useParams();
+  const [event, setEvent] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const fetchEventDetails = React.useCallback(async () => {
+  const fetchEventDetails = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/admin/getEventDetail`, { params: { eventId } });
-
-      if(response.data.success){
-        setEvent(response.data.event);
-      }else{
-        toast.error(response.data.msg);
-      }
+      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/admin/getEventDetail`, {
+        params: { eventId },
+      });
+      if (response.data.success) setEvent(response.data.event);
+      else toast.error(response.data.msg);
     } catch (error) {
       console.error("Error fetching event details:", error);
+      toast.error("Could not load event");
     } finally {
       setIsLoading(false);
     }
   }, [eventId]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     fetchEventDetails();
   }, [fetchEventDetails]);
 
+  if (isLoading) {
+    return (
+      <Page width="5xl">
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="mt-6 h-10 w-2/3" />
+        <Skeleton className="mt-4 h-4 w-1/2" />
+        <Skeleton className="mt-10 h-64 w-full" />
+      </Page>
+    );
+  }
+
+  if (!event) {
+    return (
+      <Page width="3xl">
+        <EmptyState
+          title="Event not found"
+          description="This event may have been removed, or the link is incorrect."
+          action={<Button to="/events" variant="secondary">Back to events</Button>}
+        />
+      </Page>
+    );
+  }
+
+  const deadline = eventDeadline(event);
+
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto">
-        {/* Back button */}
-        <div className="mb-6">
-          <Link
-            to="/events"
-            className="inline-flex items-center text-[#1a4b8e] hover:text-[#153c70] transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
-            </svg>
-            Back to Events
-          </Link>
+    <Page width="5xl">
+      <Link to="/events" className="link text-sm text-ink-3">
+        ← All events
+      </Link>
+
+      <header className="reveal mt-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <span className="eyebrow eyebrow-accent">
+              {event.clubId?.name || "Recruitment event"}
+            </span>
+            <h1 className="display mt-2 text-3xl sm:text-4xl">{event.title}</h1>
+            {event.shortDescription && (
+              <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-2">
+                {event.shortDescription}
+              </p>
+            )}
+          </div>
+          <Badge tone={STATUS_TONE[event.status] || "neutral"} className="capitalize">
+            {event.status || "published"}
+          </Badge>
+        </div>
+        <hr className="rule animate-draw mt-8" style={{ animationDelay: "200ms" }} />
+      </header>
+
+      <div className="mt-10 grid gap-8 lg:grid-cols-3">
+        <div className="space-y-8 lg:col-span-2">
+          <section className="reveal" style={{ "--d": "100ms" }}>
+            <h2 className="display text-xl">Event details</h2>
+            <MetaGrid cols={2} className="mt-6">
+              <Meta
+                label="Deadline"
+                value={deadline ? formatDateTime(deadline, { dateOnly: true }) : "Not set"}
+              />
+              <Meta label="Max participants" value={event.maxParticipants} />
+              <Meta label="Rounds" value={event.numberOfRounds} />
+              <Meta
+                label="Created"
+                value={event.createdAt ? formatDateTime(event.createdAt) : "—"}
+              />
+              <Meta
+                label="Registration"
+                value={
+                  <span className="capitalize">
+                    {event.registrationType?.replace("_", " ") || "Team"}
+                  </span>
+                }
+              />
+              <Meta label="Eligibility" value={event.eligibility || "Open to all"} />
+            </MetaGrid>
+          </section>
+
+          {event.longDescription && (
+            <section className="reveal ruled-top pt-8" style={{ "--d": "150ms" }}>
+              <h2 className="display text-xl">Full description</h2>
+              <p className="mt-4 whitespace-pre-wrap leading-[1.75] text-ink-2">
+                {event.longDescription}
+              </p>
+            </section>
+          )}
+
+          {event.roundDetails?.length > 0 && (
+            <section className="reveal ruled-top pt-8" style={{ "--d": "200ms" }}>
+              <h2 className="display text-xl">Selection rounds</h2>
+              <ol className="relative mt-6 space-y-6 pl-8">
+                <span
+                  className="absolute bottom-2 left-[0.6875rem] top-2 w-px bg-line"
+                  aria-hidden="true"
+                />
+                {event.roundDetails.map((round, index) => (
+                  <li key={index} className="relative">
+                    <span className="absolute -left-8 grid h-6 w-6 place-items-center rounded-full border border-line bg-surface text-[0.6875rem] font-semibold text-ink-2">
+                      {round.Round || index + 1}
+                    </span>
+                    <p className="font-semibold">
+                      {round.Type || round.type || `Round ${index + 1}`}
+                    </p>
+                    {(round.Description || round.description) && (
+                      <p className="mt-1.5 text-sm leading-relaxed text-ink-3">
+                        {round.Description || round.description}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
         </div>
 
-        {isLoading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-[#1a4b8e]"></div>
-          </div>
-        ) : event ? (
-          <>
-            {/* Event Header */}
-            <div className="bg-[#1a4b8e] rounded-lg shadow-lg overflow-hidden mb-6">
-              <div className="px-6 py-8">
-                <h1 className="text-2xl md:text-3xl font-bold text-white">{event.title}</h1>
-                {event.shortDescription && (
-                  <p className="mt-2 text-blue-100 text-lg">{event.shortDescription}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Event Details */}
-            <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-              <div className="p-6">
-                <h2 className="text-xl font-semibold text-gray-800 mb-4">Event Details</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <div className="mb-4">
-                      <p className="text-sm text-gray-500">Registration Deadline</p>
-                      <p className="font-medium text-gray-800">{event.registerationDeadline}</p>
-                    </div>
-                    <div className="mb-4">
-                      <p className="text-sm text-gray-500">Max Participants</p>
-                      <p className="font-medium text-gray-800">{event.maxParticipants}</p>
-                    </div>
-                    <div className="mb-4">
-                      <p className="text-sm text-gray-500">Eligibility</p>
-                      <p className="font-medium text-gray-800">{event.eligibility}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="mb-4">
-                      <p className="text-sm text-gray-500">Number of Rounds</p>
-                      <p className="font-medium text-gray-800">{event.numberOfRounds}</p>
-                    </div>
-                    <div className="mb-4">
-                      <p className="text-sm text-gray-500">Created At</p>
-                      <p className="font-medium text-gray-800">{event.createdAt ? new Date(event.createdAt).toLocaleString() : '-'}</p>
-                    </div>
-                  </div>
-                </div>
-                {event.longDescription && (
-                  <div className="mt-6">
-                    <h3 className="text-lg font-medium text-gray-800 mb-2">Long Description</h3>
-                    <div className="prose max-w-none text-gray-600">
-                      <p className="whitespace-pre-wrap">{event.longDescription}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Contact Info */}
-            {event.ContactInfo && event.ContactInfo.length > 0 && (
-              <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-                <div className="p-6">
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Contact Information</h2>
-                  <ul className="list-disc pl-6 text-gray-700">
-                    {event.ContactInfo.map((info, idx) => (
-                      <li key={idx}>{info}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
-
-            {/* Round Details */}
-            {event.roundDetails && event.roundDetails.length > 0 && (
-              <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-                <div className="p-6">
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Round Details</h2>
-                  <ul className="list-disc pl-6 text-gray-700">
-                    {event.roundDetails.map((round, idx) => (
-                     
-                      <div key={idx}>
-                       <h3>Round - {round.Round} {round.Type}</h3>
-                       
-                      </div>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="bg-white rounded-lg shadow-md p-6 text-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">Event not found</h3>
-            <p className="mt-1 text-sm text-gray-500">This event might have been removed or the ID is invalid.</p>
-            <div className="mt-6">
-              <Link
-                to="/events"
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#1a4b8e] hover:bg-[#153c70] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1a4b8e]"
-              >
-                Go back to Events
-              </Link>
-            </div>
-          </div>
-        )}
+        <aside className="lg:sticky lg:top-24 lg:h-fit">
+          {event.ContactInfo?.length > 0 && (
+            <Card className="reveal p-6" style={{ "--d": "120ms" }}>
+              <h2 className="eyebrow">Contact information</h2>
+              <ul className="mt-4 space-y-2.5">
+                {event.ContactInfo.map((info, index) => (
+                  <li
+                    key={index}
+                    className="break-words rounded-sm bg-paper-2 px-3.5 py-2.5 text-sm"
+                  >
+                    {info}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+        </aside>
       </div>
-    </div>
-  )
+    </Page>
+  );
 }
-
-export default Event

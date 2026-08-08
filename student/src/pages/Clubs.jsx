@@ -1,143 +1,161 @@
-import React, { useState, useEffect } from 'react'
-import axios from 'axios'
-import { toast } from 'react-toastify'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from "react";
+import axios from "axios";
+import { toast } from "react-toastify";
+import { Link } from "react-router-dom";
+import {
+  Button,
+  EmptyState,
+  Input,
+  Monogram,
+  Page,
+  PageHeader,
+  Skeleton,
+} from "../components/ui";
 
-const Clubs = () => {
-  const [clubs, setClubs] = useState(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
+function SearchIcon() {
+  return (
+    <svg
+      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-4"
+      viewBox="0 0 20 20"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M13.5 13.5L17 17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
 
-  async function fetchClubs() {
-    setIsLoading(true);
-    try {
-      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getAllClubs`);
+/** Club logo with a monogram fallback that survives a broken image URL. */
+function ClubMark({ club }) {
+  const [failed, setFailed] = useState(false);
+  if (!club.clubLogo || failed) return <Monogram name={club.name} size="lg" />;
+  return (
+    <img
+      src={club.clubLogo}
+      alt=""
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="h-16 w-16 flex-none rounded-md border border-line object-cover"
+    />
+  );
+}
 
-      if (response.data.success) {
-        setClubs(response.data.clubs);
-      } else {
-        toast.error(response.data.msg);
-      }
-    } catch {
-     
-      toast.error("Failed to load clubs");
-    } finally {
-      setIsLoading(false);
-    }
-  }
+export default function Clubs() {
+  const [clubs, setClubs] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
+    async function fetchClubs() {
+      setIsLoading(true);
+      try {
+        const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getAllClubs`);
+        if (response.data.success) setClubs(response.data.clubs);
+        else toast.error(response.data.msg);
+      } catch {
+        toast.error("Failed to load clubs");
+      } finally {
+        setIsLoading(false);
+      }
+    }
     fetchClubs();
-  }, [])
-  
-  // Filter clubs based on search term
-  const filteredClubs = clubs ? clubs.filter(club => 
-    club.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (club.shortDescription && club.shortDescription.toLowerCase().includes(searchTerm.toLowerCase()))
-  ) : [];
+  }, []);
+
+  const filteredClubs = useMemo(() => {
+    if (!clubs) return [];
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return clubs;
+    return clubs.filter(
+      (club) =>
+        club.name?.toLowerCase().includes(query) ||
+        club.shortDescription?.toLowerCase().includes(query),
+    );
+  }, [clubs, searchTerm]);
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Campus Clubs</h1>
-          <p className="mt-2 text-lg text-gray-600">
-            Discover and join student clubs that match your interests
-          </p>
-          
-          {/* Search Input */}
-          <div className="mt-6 max-w-lg">
-            <div className="relative rounded-md shadow-sm">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                placeholder="Search clubs..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="focus:ring-[#1a4b8e] focus:border-[#1a4b8e] block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md"
-              />
-            </div>
-          </div>
-        </div>
+    <Page>
+      <PageHeader
+        eyebrow="Directory"
+        title="Clubs and societies"
+        description="Every student group on campus, with their recruitment events and information sessions."
+      />
 
+      <div className="relative mt-8 max-w-md">
+        <label className="sr-only" htmlFor="search">
+          Search clubs
+        </label>
+        <SearchIcon />
+        <Input
+          id="search"
+          type="search"
+          className="pl-9"
+          placeholder="Search clubs…"
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+        />
+      </div>
+
+      <div className="mt-8">
         {isLoading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-[#1a4b8e]"></div>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="card p-6">
+                <Skeleton className="h-16 w-16 rounded-md" />
+                <Skeleton className="mt-4 h-5 w-2/3" />
+                <Skeleton className="mt-3 h-3 w-full" />
+                <Skeleton className="mt-2 h-3 w-4/5" />
+              </div>
+            ))}
           </div>
-        ) : clubs && clubs.length > 0 ? (
+        ) : filteredClubs.length === 0 ? (
+          <EmptyState
+            title={searchTerm ? "No matching clubs" : "No clubs listed"}
+            description={
+              searchTerm
+                ? "Try a different name or keyword."
+                : "The club directory hasn't been published yet."
+            }
+            action={
+              searchTerm && (
+                <Button variant="secondary" onClick={() => setSearchTerm("")}>
+                  Clear search
+                </Button>
+              )
+            }
+          />
+        ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <p className="mb-5 text-sm text-ink-3" role="status">
+              <span className="tabular font-semibold text-ink">{filteredClubs.length}</span>{" "}
+              {filteredClubs.length === 1 ? "club" : "clubs"}
+            </p>
+            <div className="stagger grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {filteredClubs.map((club) => (
-                <Link 
-                  key={club._id} 
+                <Link
+                  key={club._id}
                   to={`/club/${club._id}`}
-                  className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300"
+                  className="card card-interactive group flex flex-col p-6"
                 >
-                  <div className="h-28 bg-[#1a4b8e] flex items-center justify-center">
-                    {club.clubLogo ? (
-                      <div className="h-20 w-20 rounded-full bg-white p-1 flex items-center justify-center overflow-hidden">
-                        <img 
-                          src={club.clubLogo} 
-                          alt={`${club.name} logo`}
-                          className="h-full w-full object-cover rounded-full"
-                          onError={(e) => {
-                            const parent = e.currentTarget.parentNode;
-                            parent.textContent = club.name.charAt(0);
-                            parent.style.color = "#1a4b8e";
-                            parent.style.fontSize = "1.875rem";
-                            parent.style.fontWeight = "700";
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      <div className="h-16 w-16 rounded-full bg-white flex items-center justify-center text-[#1a4b8e] text-2xl font-bold">
-                        {club.name.charAt(0)}
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-5">
-                    <h2 className="text-xl font-semibold text-gray-900">{club.name}</h2>
-                    {club.shortDescription && (
-                      <p className="mt-2 text-gray-600 line-clamp-3">{club.shortDescription}</p>
-                    )}
-                    <div className="mt-4 flex justify-end">
-                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-[#1a4b8e]">
-                        View Details
-                      </span>
-                    </div>
-                  </div>
+                  <ClubMark club={club} />
+                  <h2 className="display mt-5 text-lg leading-snug">{club.name}</h2>
+                  {club.shortDescription && (
+                    <p className="mt-2.5 line-clamp-3 flex-1 text-sm leading-relaxed text-ink-3">
+                      {club.shortDescription}
+                    </p>
+                  )}
+                  <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-accent">
+                    View club
+                    <span className="transition-transform duration-300 group-hover:translate-x-1">
+                      →
+                    </span>
+                  </span>
                 </Link>
               ))}
             </div>
-            
-            {/* No results message */}
-            {filteredClubs.length === 0 && (
-              <div className="bg-white rounded-lg shadow-md p-6 text-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No clubs found</h3>
-                <p className="mt-1 text-sm text-gray-500">Try adjusting your search term.</p>
-              </div>
-            )}
           </>
-        ) : (
-          <div className="bg-white rounded-lg shadow-md p-6 text-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No clubs available</h3>
-            <p className="mt-1 text-sm text-gray-500">Check back later for club updates.</p>
-          </div>
         )}
       </div>
-    </div>
-  )
+    </Page>
+  );
 }
-
-export default Clubs

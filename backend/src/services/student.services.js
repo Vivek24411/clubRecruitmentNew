@@ -55,6 +55,6 @@ module.exports.sendNotificationEmail = async (email, { title, message, link }) =
 
 
 module.exports.checkEmailDomain = (email) => {
-    const domain = String(email || '').trim().toLowerCase().split('@')[1];
-    return domain === 'iitr.ac.in';
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    return /^[a-z]+_[a-z]{1,2}@[a-z]+\.iitr\.ac\.in$/.test(normalizedEmail);
 }

@@ -12,7 +12,16 @@ axios.defaults.withCredentials = true;
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
-    <ToastContainer />
+    <ToastContainer
+      position="bottom-right"
+      autoClose={3500}
+      hideProgressBar
+      newestOnTop
+      closeOnClick
+      pauseOnHover
+      draggable
+      theme="colored"
+    />
     <BrowserRouter>
       <AdminContext>
         <App />

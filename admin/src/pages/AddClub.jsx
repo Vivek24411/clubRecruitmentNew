@@ -1,248 +1,218 @@
-import axios from 'axios';
-import React from 'react'
-import { toast } from 'react-toastify';
+import { useRef, useState } from "react";
+import axios from "axios";
+import { toast } from "react-toastify";
+import { Button, Card, Field, Input, Page, PageHeader } from "../components/ui";
 
-const AddClub = () => {
-    const [name, setName] = React.useState("");
-    const [userName, setUserName] = React.useState("");
-    const [password, setPassword] = React.useState("");
-    const [isLoading, setIsLoading] = React.useState(false);
-    const [clubLogo, setClubLogo] = React.useState(null);
-    const [clubLogoPreview, setClubLogoPreview] = React.useState(null);
+export default function AddClub() {
+  const [name, setName] = useState("");
+  const [userName, setUserName] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [clubLogo, setClubLogo] = useState(null);
+  const [clubLogoPreview, setClubLogoPreview] = useState(null);
+  const fileInput = useRef(null);
 
+  function uploadClubLogo(event) {
+    const file = event.target.files[0];
+    if (!file) {
+      setClubLogo(null);
+      setClubLogoPreview(null);
+      return;
+    }
+    setClubLogo(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setClubLogoPreview(reader.result);
+    reader.readAsDataURL(file);
+  }
 
-    async function uploadClublogo(e){
-        const file = e.target.files[0];
-        if(file){
-            setClubLogo(file);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setClubLogoPreview(reader.result);
-            };
-            reader.readAsDataURL(file);
+  function clearLogo() {
+    setClubLogo(null);
+    setClubLogoPreview(null);
+    if (fileInput.current) fileInput.current.value = "";
+  }
 
-        } else {
-            setClubLogo(null);
-            setClubLogoPreview(null);
-        }
+  const handleAddClub = async (event) => {
+    event.preventDefault();
+
+    if (!name || !userName || !password) {
+      toast.warning("Please fill all fields");
+      return;
+    }
+    if (password.length < 10) {
+      toast.warning("Password must be at least 10 characters long");
+      return;
+    }
+    if (clubLogo && !["image/jpeg", "image/png", "image/webp"].includes(clubLogo.type)) {
+      toast.warning("Choose a JPG, PNG, or WebP image");
+      return;
+    }
+    if (clubLogo && clubLogo.size > 5 * 1024 * 1024) {
+      toast.warning("Club logo must be smaller than 5MB");
+      return;
     }
 
+    const formData = new FormData();
+    formData.append("name", name);
+    formData.append("userName", userName);
+    formData.append("password", password);
+    if (clubLogo) formData.append("clubLogo", clubLogo);
 
-    const handleAddClub = async(e) => {
-        e.preventDefault();
-        
-        if (!name || !userName || !password) {
-            toast.warning("Please fill all fields");
-            return;
-        }
-        if (password.length < 10) {
-            toast.warning("Password must be at least 10 characters long");
-            return;
-        }
-        if (clubLogo && !['image/jpeg', 'image/png', 'image/webp'].includes(clubLogo.type)) {
-            toast.warning("Choose a JPG, PNG, or WebP image");
-            return;
-        }
-        if (clubLogo && clubLogo.size > 5 * 1024 * 1024) {
-            toast.warning("Club logo must be smaller than 5MB");
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('name', name);
-        formData.append('userName', userName);
-        formData.append('password', password);
-        if(clubLogo){
-            formData.append('clubLogo', clubLogo);
-        }
-        
-        setIsLoading(true);
-        try {
-            const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/admin/addClub`, formData);
-
-            if(response.data.success){
-               toast.success(response.data.msg);
-               // Reset form after successful submission
-               setName("");
-               setUserName("");
-               setPassword("");
-               setClubLogo(null);
-               setClubLogoPreview(null);
-            } else {
-                toast.error(response.data.msg);
-            }
-        } catch (error) {
-            console.error("Error adding club:", error);
-            toast.error(error.response?.data?.msg || "Failed to add club");
-        } finally {
-            setIsLoading(false);
-        }
+    setIsLoading(true);
+    try {
+      const response = await axios.post(
+        `${import.meta.env.VITE_BASE_URI}/admin/addClub`,
+        formData,
+      );
+      if (response.data.success) {
+        toast.success(response.data.msg);
+        setName("");
+        setUserName("");
+        setPassword("");
+        clearLogo();
+      } else {
+        toast.error(response.data.msg);
+      }
+    } catch (error) {
+      console.error("Error adding club:", error);
+      toast.error(error.response?.data?.msg || "Failed to add club");
+    } finally {
+      setIsLoading(false);
     }
-    
-    return (
-        <div className="px-4 py-8 md:px-6 lg:px-8 max-w-6xl mx-auto">
-            {/* Page Header */}
-            <div className="mb-8">
-                <h1 className="text-2xl md:text-3xl font-bold text-gray-800">Add New Club</h1>
-                <p className="text-gray-600 mt-2">Create a new club account with administrative privileges</p>
-            </div>
-            
-            {/* Card Container */}
-            <div className="bg-white rounded-2xl shadow-md p-6 md:p-8">
-                <form onSubmit={handleAddClub}>
-                    <div className="space-y-6">
-                        {/* Club Name Field */}
-                        <div>
-                            <label htmlFor="clubName" className="block text-sm font-medium text-gray-700 mb-1">
-                                Club Name
-                            </label>
-                            <input
-                                type="text"
-                                id="clubName"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="Enter club name"
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-800 focus:border-blue-800 outline-none transition"
-                                required
-                            />
-                        </div>
-                        
-                        {/* Username Field */}
-                        <div>
-                            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-                                Username
-                            </label>
-                            <input
-                                type="text"
-                                id="username"
-                                value={userName}
-                                onChange={(e) => setUserName(e.target.value)}
-                                placeholder="Enter club username"
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-800 focus:border-blue-800 outline-none transition"
-                                required
-                            />
-                        </div>
-                        
-                        {/* Password Field */}
-                        <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                                Password
-                            </label>
-                            <input
-                                type="password"
-                                id="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Enter secure password"
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-800 focus:border-blue-800 outline-none transition"
-                                required
-                                minLength={10}
-                                maxLength={72}
-                            />
-                            <p className="mt-1 text-xs text-gray-500">Password must be at least 10 characters long</p>
-                        </div>
-                        
-                        {/* Club Logo Upload Field */}
-                        <div>
-                            <label htmlFor="clubLogo" className="block text-sm font-medium text-gray-700 mb-1">
-                                Club Logo
-                            </label>
-                            <div className="mt-1 flex flex-col md:flex-row items-start gap-4">
-                                <div className="flex-1 w-full md:w-auto">
-                                    <div className="border-2 border-dashed border-gray-300 rounded-lg px-6 py-8 text-center hover:border-blue-500 transition cursor-pointer" onClick={() => document.getElementById('clubLogo').click()}>
-                                        <div className="space-y-1 text-center">
-                                            <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                                                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                            </svg>
-                                            <div className="text-sm text-gray-600">
-                                                <label htmlFor="clubLogo" className="cursor-pointer text-blue-600 hover:text-blue-700">
-                                                    Upload a club logo
-                                                </label>
-                                                <p className="mt-1 text-xs text-gray-500">PNG, JPG, or WebP (max. 5MB)</p>
-                                            </div>
-                                        </div>
-                                        <input 
-                                            id="clubLogo" 
-                                            name="clubLogo" 
-                                            type="file" 
-                                            className="sr-only" 
-                                            accept="image/jpeg,image/png,image/webp"
-                                            onChange={uploadClublogo}
-                                        />
-                                    </div>
-                                </div>
-                                
-                                {clubLogoPreview && (
-                                    <div className="flex flex-col items-center">
-                                        <div className="relative w-32 h-32 border rounded-md overflow-hidden">
-                                            <img 
-                                                src={clubLogoPreview} 
-                                                alt="Club logo preview" 
-                                                className="w-full h-full object-cover"
-                                            />
-                                            <button 
-                                                type="button"
-                                                onClick={() => {
-                                                    setClubLogo(null);
-                                                    setClubLogoPreview(null);
-                                                }}
-                                                className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 hover:bg-red-700 focus:outline-none"
-                                                title="Remove image"
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                        <p className="text-sm text-gray-500 mt-2">Preview</p>
-                                    </div>
-                                )}
-                            </div>
-                            <p className="mt-2 text-xs text-gray-500">Upload a logo to represent the club on the platform</p>
-                        </div>
-                        
-                        {/* Submit Button */}
-                        <div className="mt-8">
-                            <button
-                                type="submit"
-                                disabled={isLoading}
-                                className="w-full md:w-auto px-6 py-3 bg-[#1a4b8e] text-white font-medium rounded-lg hover:bg-[#13396a] transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70 disabled:cursor-not-allowed"
-                            >
-                                {isLoading ? (
-                                    <span className="flex items-center justify-center">
-                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        Creating...
-                                    </span>
-                                ) : "Add Club"}
-                            </button>
-                        </div>
-                    </div>
-                </form>
-                
-                {/* Information Card */}
-                <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-start">
-                        <div className="flex-shrink-0">
-                            <svg className="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
-                            </svg>
-                        </div>
-                        <div className="ml-3">
-                            <h3 className="text-sm font-medium text-blue-800">Important Information</h3>
-                            <div className="mt-2 text-sm text-blue-700">
-                                <p>
-                                    After creating a club account, the club administrator will be able to create and manage events, review applications, and more.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
+  };
+
+  return (
+    <Page width="5xl">
+      <PageHeader
+        eyebrow="Provisioning"
+        title="Add a club"
+        description="Create a club account. Its officers will sign in with these credentials to run their own recruitment."
+      />
+
+      <form onSubmit={handleAddClub} className="mt-10 space-y-6">
+        {/* Credentials ----------------------------------------------------- */}
+        <Card className="reveal p-6">
+          <h2 className="display text-xl">Account</h2>
+          <div className="mt-6 grid gap-5 sm:grid-cols-2">
+            <Field label="Club name" id="clubName" required className="sm:col-span-2">
+              <Input
+                id="clubName"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="e.g. Society for Data Science"
+                required
+              />
+            </Field>
+
+            <Field label="Username" id="username" required hint="Used to sign in.">
+              <Input
+                id="username"
+                value={userName}
+                onChange={(event) => setUserName(event.target.value)}
+                placeholder="e.g. sdslabs"
+                autoComplete="off"
+                required
+              />
+            </Field>
+
+            <Field
+              label="Password"
+              id="password"
+              required
+              hint="At least 10 characters. Share it with the club securely."
+            >
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Enter a secure password"
+                autoComplete="new-password"
+                minLength={10}
+                maxLength={72}
+                required
+              />
+            </Field>
+          </div>
+        </Card>
+
+        {/* Logo ------------------------------------------------------------ */}
+        <Card className="reveal p-6" style={{ "--d": "80ms" }}>
+          <h2 className="display text-xl">Logo</h2>
+          <p className="mt-1.5 text-sm text-ink-3">Optional. PNG, JPG, or WebP under 5&nbsp;MB.</p>
+
+          <div className="mt-6 flex flex-col gap-5 sm:flex-row sm:items-start">
+            <button
+              type="button"
+              onClick={() => fileInput.current?.click()}
+              className="flex-1 rounded-sm border border-dashed border-line-2 px-6 py-10 text-center transition-colors duration-300 hover:border-accent hover:bg-accent-tint/30"
+            >
+              <svg
+                className="mx-auto h-9 w-9 text-ink-4"
+                viewBox="0 0 36 36"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M18 24V11m0 0l-5 5m5-5l5 5M6 24v3a3 3 0 003 3h18a3 3 0 003-3v-3"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span className="mt-3 block text-sm font-semibold text-accent">
+                Upload a club logo
+              </span>
+              <span className="mt-1 block text-xs text-ink-3">PNG, JPG, or WebP · max 5 MB</span>
+            </button>
+
+            <input
+              ref={fileInput}
+              id="clubLogo"
+              name="clubLogo"
+              type="file"
+              className="sr-only"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={uploadClubLogo}
+            />
+
+            {clubLogoPreview && (
+              <figure className="animate-scale-in flex-none text-center">
+                <div className="relative h-32 w-32 overflow-hidden rounded-md border border-line">
+                  <img
+                    src={clubLogoPreview}
+                    alt="Club logo preview"
+                    className="h-full w-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={clearLogo}
+                    title="Remove image"
+                    className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full bg-ink/80 text-xs text-white transition-colors duration-200 hover:bg-bad"
+                  >
+                    ✕
+                  </button>
                 </div>
-            </div>
-        </div>
-    )
-}
+                <figcaption className="mt-2 text-xs text-ink-3">Preview</figcaption>
+              </figure>
+            )}
+          </div>
+        </Card>
 
-export default AddClub
+        {/* Note ------------------------------------------------------------ */}
+        <div className="reveal rounded-sm border-l-2 border-accent bg-accent-tint/40 px-5 py-4">
+          <p className="eyebrow eyebrow-accent">Before you create</p>
+          <p className="mt-1.5 text-sm leading-relaxed text-ink-2">
+            Once created, the club can publish events and sessions, review applications, and send
+            decisions. You can suspend the account or reset its password at any time from the Clubs
+            page.
+          </p>
+        </div>
+
+        <Button type="submit" size="lg" loading={isLoading}>
+          {isLoading ? "Creating…" : "Add club"}
+        </Button>
+      </form>
+    </Page>
+  );
+}

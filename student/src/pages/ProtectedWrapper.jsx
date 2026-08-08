@@ -3,9 +3,25 @@ import { Navigate } from "react-router-dom";
 import { StudentContextData } from "../context/StudentContext";
 import StudentLayout from "../components/StudentLayout";
 
+/** Branded hold screen while the session cookie is verified. */
+function SessionCheck() {
+  return (
+    <div className="grid min-h-screen place-items-center bg-paper px-6" role="status">
+      <div className="reveal text-center">
+        <div className="flex items-baseline justify-center gap-2">
+          <span className="display text-2xl">Recruit</span>
+          <span className="eyebrow eyebrow-accent">IITR</span>
+        </div>
+        <hr className="rule-accent animate-draw mx-auto mt-5" style={{ animationDelay: "120ms" }} />
+        <p className="mt-5 text-sm text-ink-3">Checking your session…</p>
+      </div>
+    </div>
+  );
+}
+
 export default function ProtectedWrapper({ children }) {
   const { loggedInStudent, authLoading } = useContext(StudentContextData);
-  if (authLoading) return <div className="grid min-h-screen place-items-center" role="status">Checking your session…</div>;
+  if (authLoading) return <SessionCheck />;
   if (!loggedInStudent) return <Navigate to="/login" replace />;
   return <StudentLayout>{children}</StudentLayout>;
 }

@@ -1,23 +1,32 @@
-import React from 'react'
-import axios from 'axios';
-import { toast } from 'react-toastify';
+import { useState } from "react";
+import axios from "axios";
+import { toast } from "react-toastify";
+import {
+  Button,
+  Card,
+  Field,
+  Input,
+  Page,
+  PageHeader,
+  Select,
+  Textarea,
+} from "../components/ui";
 
-const AddSession = () => {
-  const [title, setTitle] = React.useState("");
-  const [shortDescription, setShortDescription] = React.useState("");
-  const [date, setDate] = React.useState("");
-  const [time, setTime] = React.useState("");
-  const [duration, setDuration] = React.useState("");
-  const [longDescription, setLongDescription] = React.useState("");
-  const [venue, setVenue] = React.useState("");
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [capacity, setCapacity] = React.useState("");
-  const [status, setStatus] = React.useState("draft");
+export default function AddSession() {
+  const [title, setTitle] = useState("");
+  const [shortDescription, setShortDescription] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [duration, setDuration] = useState("");
+  const [longDescription, setLongDescription] = useState("");
+  const [venue, setVenue] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [capacity, setCapacity] = useState("");
+  const [status, setStatus] = useState("draft");
 
-  const handleSubmit = async (e) => { 
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setIsLoading(true);
-    
     try {
       const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/addSession`, {
         title,
@@ -31,9 +40,8 @@ const AddSession = () => {
         status,
       });
 
-      if(response.data.success){
+      if (response.data.success) {
         toast.success(response.data.msg);
-        // Reset form after successful submission
         setTitle("");
         setShortDescription("");
         setDate("");
@@ -43,7 +51,7 @@ const AddSession = () => {
         setVenue("");
         setCapacity("");
         setStatus("draft");
-      }else{
+      } else {
         toast.error(response.data.msg);
       }
     } catch (error) {
@@ -52,205 +60,156 @@ const AddSession = () => {
     } finally {
       setIsLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="bg-gray-50 min-h-screen py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800">Create New Session</h1>
-          <p className="mt-2 text-gray-600">Schedule a new recruitment or information session for students</p>
-        </div>
+    <Page width="5xl">
+      <PageHeader
+        eyebrow="New session"
+        title="Schedule an information session"
+        description="Give students a chance to meet your club and understand how selection works."
+      />
 
-        {/* Form Card */}
-        <div className="bg-white rounded-2xl shadow-md overflow-hidden">
-          {/* Form Header */}
-          <div className="bg-[#1a4b8e] px-6 py-4">
-            <h2 className="text-xl font-medium text-white">Session Details</h2>
+      <form onSubmit={handleSubmit} className="mt-10 space-y-6">
+        {/* About ---------------------------------------------------------- */}
+        <Card className="reveal p-6">
+          <h2 className="display text-xl">About</h2>
+          <div className="mt-6 space-y-5">
+            {/* This was previously a date input by mistake — it is free text. */}
+            <Field label="Session title" id="title" required>
+              <Input
+                id="title"
+                type="text"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                required
+                placeholder="e.g. Intro to Design at IITR"
+              />
+            </Field>
+
+            <Field
+              label="Short description"
+              id="shortDescription"
+              required
+              hint="One line. Appears in listings."
+            >
+              <Input
+                id="shortDescription"
+                value={shortDescription}
+                onChange={(event) => setShortDescription(event.target.value)}
+                required
+                placeholder="Brief description"
+              />
+            </Field>
+
+            <Field
+              label="Detailed description"
+              id="longDescription"
+              required
+              hint="Include any special instructions, requirements, or what attendees should expect."
+            >
+              <Textarea
+                id="longDescription"
+                rows={6}
+                value={longDescription}
+                onChange={(event) => setLongDescription(event.target.value)}
+                required
+                placeholder="Provide detailed information about this session"
+              />
+            </Field>
           </div>
+        </Card>
 
-          {/* Form Body */}
-          <form onSubmit={handleSubmit} className="p-6">
-            <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
-              {/* Title */}
-              <div className="sm:col-span-6">
-                <label htmlFor="title" className="block text-sm font-medium text-gray-700">
-                  Session Title
-                </label>
-                <div className="mt-1">
-                  <input
-                    type="date"
-                    id="title"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    required
-                    placeholder="Enter a descriptive title for your session"
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-[#1a4b8e] focus:border-[#1a4b8e] sm:text-sm border px-3 py-2"
-                  />
-                </div>
-              </div>
+        {/* Schedule ------------------------------------------------------- */}
+        <Card className="reveal p-6" style={{ "--d": "80ms" }}>
+          <h2 className="display text-xl">Schedule and venue</h2>
+          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Date" id="date" required>
+              <Input
+                id="date"
+                type="date"
+                value={date}
+                onChange={(event) => setDate(event.target.value)}
+                required
+              />
+            </Field>
 
-              {/* Short Description */}
-              <div className="sm:col-span-6">
-                <label htmlFor="shortDescription" className="block text-sm font-medium text-gray-700">
-                  Short Description
-                </label>
-                <div className="mt-1">
-                  <input
-                    type="text"
-                    id="shortDescription"
-                    value={shortDescription}
-                    onChange={(e) => setShortDescription(e.target.value)}
-                    required
-                    placeholder="Brief description (will appear in listings)"
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-[#1a4b8e] focus:border-[#1a4b8e] sm:text-sm border px-3 py-2"
-                  />
-                </div>
-              </div>
+            <Field label="Start time" id="time" required>
+              <Input
+                id="time"
+                type="time"
+                value={time}
+                onChange={(event) => setTime(event.target.value)}
+                required
+              />
+            </Field>
 
-              {/* Date and Time - side by side on larger screens */}
-              <div className="sm:col-span-3">
-                <label htmlFor="date" className="block text-sm font-medium text-gray-700">
-                  Date
-                </label>
-                <div className="mt-1">
-                  <input
-                    type="date"
-                    id="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    required
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-[#1a4b8e] focus:border-[#1a4b8e] sm:text-sm border px-3 py-2"
-                  />
-                </div>
-              </div>
+            <Field label="Duration" id="duration" required hint="In minutes.">
+              <Input
+                id="duration"
+                type="number"
+                min="1"
+                className="tabular"
+                value={duration}
+                onChange={(event) => setDuration(event.target.value)}
+                required
+                placeholder="60"
+              />
+            </Field>
 
-              <div className="sm:col-span-3">
-                <label htmlFor="time" className="block text-sm font-medium text-gray-700">
-                  Start Time
-                </label>
-                <div className="mt-1">
-                  <input
-                    type="time"
-                    id="time"
-                    value={time}
-                    onChange={(e) => setTime(e.target.value)}
-                    required
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-[#1a4b8e] focus:border-[#1a4b8e] sm:text-sm border px-3 py-2"
-                  />
-                </div>
-              </div>
+            <Field label="Capacity" id="capacity" hint="Blank means unlimited.">
+              <Input
+                id="capacity"
+                type="number"
+                min="1"
+                className="tabular"
+                value={capacity}
+                onChange={(event) => setCapacity(event.target.value)}
+                placeholder="Unlimited"
+              />
+            </Field>
 
-              {/* Duration and Venue - side by side on larger screens */}
-              <div className="sm:col-span-3">
-                <label htmlFor="duration" className="block text-sm font-medium text-gray-700">
-                  Duration (minutes)
-                </label>
-                <div className="mt-1">
-                  <input
-                    type="number"
-                    min="1"
-                    id="duration"
-                    value={duration}
-                    onChange={(e) => setDuration(e.target.value)}
-                    required
-                    placeholder="e.g. 60"
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-[#1a4b8e] focus:border-[#1a4b8e] sm:text-sm border px-3 py-2"
-                  />
-                </div>
-              </div>
+            <Field label="Venue" id="venue" required className="sm:col-span-2">
+              <Input
+                id="venue"
+                value={venue}
+                onChange={(event) => setVenue(event.target.value)}
+                required
+                placeholder="e.g. LHC 101"
+              />
+            </Field>
+          </div>
+        </Card>
 
-              <div className="sm:col-span-3">
-                <label htmlFor="venue" className="block text-sm font-medium text-gray-700">
-                  Venue
-                </label>
-                <div className="mt-1">
-                  <input
-                    type="text"
-                    id="venue"
-                    value={venue}
-                    onChange={(e) => setVenue(e.target.value)}
-                    required
-                    placeholder="Location of the session"
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-[#1a4b8e] focus:border-[#1a4b8e] sm:text-sm border px-3 py-2"
-                  />
-                </div>
-              </div>
-
-              <div className="sm:col-span-3">
-                <label htmlFor="capacity" className="block text-sm font-medium text-gray-700">Capacity (optional)</label>
-                <input id="capacity" type="number" min="1" value={capacity} onChange={(e) => setCapacity(e.target.value)} className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2" placeholder="Unlimited when blank" />
-              </div>
-
-              <div className="sm:col-span-3">
-                <label htmlFor="status" className="block text-sm font-medium text-gray-700">Visibility</label>
-                <select id="status" value={status} onChange={(e) => setStatus(e.target.value)} className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"><option value="draft">Save as draft</option><option value="published">Publish now</option></select>
-              </div>
-
-              {/* Detailed Description */}
-              <div className="sm:col-span-6">
-                <label htmlFor="longDescription" className="block text-sm font-medium text-gray-700">
-                  Detailed Description
-                </label>
-                <div className="mt-1">
-                  <textarea
-                    id="longDescription"
-                    value={longDescription}
-                    onChange={(e) => setLongDescription(e.target.value)}
-                    required
-                    rows={5}
-                    placeholder="Provide detailed information about this session"
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-[#1a4b8e] focus:border-[#1a4b8e] sm:text-sm border px-3 py-2"
-                  />
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  Include any special instructions, requirements, or what attendees should expect
-                </p>
-              </div>
-            </div>
-
-            {/* Submit Button */}
-            <div className="mt-8">
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full sm:w-auto flex justify-center py-3 px-6 border border-transparent shadow-sm text-base font-medium rounded-md text-white bg-[#1a4b8e] hover:bg-[#15407a] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1a4b8e] disabled:opacity-70 disabled:cursor-not-allowed"
+        {/* Publish -------------------------------------------------------- */}
+        <Card className="reveal p-6" style={{ "--d": "150ms" }}>
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+            <Field
+              label="Visibility"
+              id="status"
+              className="sm:w-56"
+              hint="Published sessions are visible to every student."
+            >
+              <Select
+                id="status"
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
               >
-                {isLoading ? (
-                  <span className="flex items-center">
-                    <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Creating Session...
-                  </span>
-                ) : (
-                  "Create Session"
-                )}
-              </button>
-            </div>
-          </form>
+                <option value="draft">Save as draft</option>
+                <option value="published">Publish now</option>
+              </Select>
+            </Field>
 
-          {/* Information Footer */}
-          <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
-            <div className="flex items-start">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-[#1a4b8e]" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-gray-600">
-                  Sessions will be visible to all students after creation. Make sure all information is accurate.
-                </p>
-              </div>
-            </div>
+            <Button type="submit" size="lg" loading={isLoading}>
+              {isLoading
+                ? "Creating…"
+                : status === "published"
+                  ? "Create and publish"
+                  : "Create draft"}
+            </Button>
           </div>
-        </div>
-      </div>
-    </div>
+        </Card>
+      </form>
+    </Page>
   );
 }
-
-export default AddSession

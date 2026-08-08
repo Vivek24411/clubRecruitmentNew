@@ -1,30 +1,35 @@
-import React from "react";
+import { useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { useNavigate, Link } from "react-router-dom";
+import AuthShell from "../components/AuthShell";
+import { Button, Field, Input } from "../components/ui";
+import { isIitrInstituteEmail } from "../utils/email";
 
-const ForgotPassword = () => {
+export default function ForgotPassword() {
   const navigate = useNavigate();
-  const [email, setEmail] = React.useState("");
-  const [newPassword, setNewPassword] = React.useState("");
-  const [otp, setOtp] = React.useState("");
-  const [step, setStep] = React.useState(1); // Step 1: Email, Step 2: OTP and New Password
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [email, setEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [step, setStep] = useState(1); // 1: request code, 2: set new password
+  const [isLoading, setIsLoading] = useState(false);
 
   async function sendOTP() {
     if (!email) {
       toast.error("Please enter your email");
       return;
     }
-    
+    if (!isIitrInstituteEmail(email)) {
+      toast.error("Use the format name_s@branch.iitr.ac.in");
+      return;
+    }
     setIsLoading(true);
     try {
-      const response = await axios.post(
-        `${import.meta.env.VITE_BASE_URI}/student/sendOtp`,
-        { email, purpose: "password_reset" }
-      );
-
+      const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/student/sendOtp`, {
+        email,
+        purpose: "password_reset",
+      });
       if (response.data.success) {
         toast.success("OTP sent to your email");
         setStep(2);
@@ -43,7 +48,6 @@ const ForgotPassword = () => {
       toast.error("Please enter the OTP");
       return;
     }
-    
     if (newPassword.length < 10) {
       toast.error("Password must be at least 10 characters");
       return;
@@ -52,28 +56,20 @@ const ForgotPassword = () => {
       toast.error("Passwords do not match");
       return;
     }
-    
+
     setIsLoading(true);
     try {
-      const response = await axios.post(
-        `${import.meta.env.VITE_BASE_URI}/student/verifyOtp`,
-        {
-          email,
-          otp,
-          purpose: "password_reset",
-        }
-      );
+      const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/student/verifyOtp`, {
+        email,
+        otp,
+        purpose: "password_reset",
+      });
 
       if (response.data.success) {
         const passwordResponse = await axios.post(
           `${import.meta.env.VITE_BASE_URI}/student/forgotPassword`,
-          {
-            email,
-            newPassword,
-            resetToken: response.data.verificationToken,
-          }
+          { email, newPassword, resetToken: response.data.verificationToken },
         );
-
         if (passwordResponse.data.success) {
           toast.success("Password reset successful, please login");
           navigate("/login");
@@ -91,101 +87,109 @@ const ForgotPassword = () => {
   }
 
   return (
-    <div className="bg-[#1a4b8e] min-h-screen flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl p-6 sm:p-8 w-full max-w-md shadow-lg">
-        <h1 className="text-2xl sm:text-3xl font-bold text-center mb-6">
-          {step === 1 ? "Forgot Password" : "Reset Password"}
-        </h1>
-        
-        {step === 1 ? (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="block font-medium">IITR Email</label>
-              <input
-                type="email"
-                placeholder="Enter your IITR email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            
-            <button 
-              onClick={sendOTP}
-              disabled={isLoading}
-              className={`w-full bg-[#1a4b8e] text-white font-bold py-3 rounded-lg ${
-                isLoading ? "opacity-70 cursor-not-allowed" : "hover:bg-blue-800"
-              }`}
-            >
-              {isLoading ? "Sending..." : "Send OTP"}
-            </button>
-            
-            <div className="text-center mt-4">
-              <Link to="/login" className="text-[#1a4b8e] font-medium hover:underline">
-                Back to Login
-              </Link>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="block font-medium">Enter OTP</label>
-              <input
-                type="text"
-                placeholder="Enter OTP sent to your email"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <label className="block font-medium">New Password</label>
-              <input
-                type="password"
-                maxLength={72}
-                minLength={10}
-                placeholder="Enter new password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="block font-medium">Confirm New Password</label>
-              <input
-                type="password"
-                maxLength={72}
-                minLength={10}
-                placeholder="Repeat new password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            
-            <div className="flex space-x-3">
-              <button 
-                onClick={() => setStep(1)}
-                className="w-1/3 bg-gray-200 text-gray-800 font-medium py-3 rounded-lg hover:bg-gray-300"
-              >
-                Back
-              </button>
-              <button 
-                onClick={verifyOTP}
-                disabled={isLoading}
-                className={`w-2/3 bg-[#1a4b8e] text-white font-bold py-3 rounded-lg ${
-                  isLoading ? "opacity-70 cursor-not-allowed" : "hover:bg-blue-800"
-                }`}
-              >
-                {isLoading ? "Resetting..." : "Reset Password"}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
+    <AuthShell
+      eyebrow="Account recovery"
+      title={step === 1 ? "Reset your password" : "Choose a new password"}
+      description={
+        step === 1
+          ? "Enter your IITR email and we'll send a one-time code."
+          : `Enter the code sent to ${email}, then pick a new password.`
+      }
+      footer={
+        <p>
+          Remembered it?{" "}
+          <Link to="/login" className="link link-accent">
+            Back to sign in
+          </Link>
+        </p>
+      }
+    >
+      {step === 1 ? (
+        <form
+          className="space-y-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            sendOTP();
+          }}
+        >
+          <Field label="IITR email" id="email" required>
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              placeholder="name_s@branch.iitr.ac.in"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </Field>
+          <Button type="submit" size="lg" block loading={isLoading}>
+            {isLoading ? "Sending…" : "Send code"}
+          </Button>
+        </form>
+      ) : (
+        <form
+          className="space-y-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            verifyOTP();
+          }}
+        >
+          <Field label="One-time code" id="otp">
+            <Input
+              id="otp"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="6-digit code"
+              className="tabular text-center text-lg tracking-[0.4em]"
+              value={otp}
+              onChange={(event) => setOtp(event.target.value)}
+            />
+          </Field>
 
-export default ForgotPassword;
+          <Field label="New password" id="newPassword" hint="At least 10 characters.">
+            <Input
+              id="newPassword"
+              type="password"
+              minLength={10}
+              maxLength={72}
+              autoComplete="new-password"
+              placeholder="Enter new password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+            />
+          </Field>
+
+          <Field
+            label="Confirm new password"
+            id="confirmPassword"
+            error={
+              confirmPassword && confirmPassword !== newPassword
+                ? "Passwords do not match."
+                : undefined
+            }
+          >
+            <Input
+              id="confirmPassword"
+              type="password"
+              minLength={10}
+              maxLength={72}
+              autoComplete="new-password"
+              placeholder="Repeat new password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+            />
+          </Field>
+
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" size="lg" onClick={() => setStep(1)}>
+              Back
+            </Button>
+            <Button type="submit" size="lg" block loading={isLoading}>
+              {isLoading ? "Resetting…" : "Reset password"}
+            </Button>
+          </div>
+        </form>
+      )}
+    </AuthShell>
+  );
+}
