@@ -1,4 +1,6 @@
 export function isIitrInstituteEmail(value) {
   const normalizedEmail = String(value || "").trim().toLowerCase();
-  return /^[a-z]+_[a-z]{1,2}@[a-z]+\.iitr\.ac\.in$/.test(normalizedEmail);
+  if (!/^[^\s@]+@[^\s@]+$/.test(normalizedEmail)) return false;
+  const domain = normalizedEmail.slice(normalizedEmail.lastIndexOf("@") + 1);
+  return domain === "iitr.ac.in" || domain.endsWith(".iitr.ac.in");
 }

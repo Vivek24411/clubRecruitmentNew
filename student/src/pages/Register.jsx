@@ -56,7 +56,7 @@ function StepRail({ step, labels }) {
 
 const DETAIL_FIELDS = [
   { key: "name", label: "Full name", type: "text", placeholder: "Ada Lovelace", autoComplete: "name" },
-  { key: "email", label: "IITR email", type: "email", placeholder: "name_s@branch.iitr.ac.in", autoComplete: "email" },
+  { key: "email", label: "IITR email", type: "email", placeholder: "you@iitr.ac.in", autoComplete: "email" },
   { key: "password", label: "Password", type: "password", placeholder: "At least 10 characters", autoComplete: "new-password", minLength: 10, maxLength: 72 },
   { key: "enrollmentNumber", label: "Enrollment number", type: "text", placeholder: "22114001" },
   { key: "phoneNumber", label: "Phone number", type: "tel", placeholder: "98765 43210", autoComplete: "tel" },
@@ -97,7 +97,7 @@ export default function Register() {
         purpose: "signup",
       });
       if (response.data.success) {
-        toast.success("OTP sent successfully");
+        toast.success(response.data.msg || "OTP accepted for delivery");
         setOtpInput(true);
       } else {
         toast.error(response.data.msg || "Failed to send OTP");

@@ -21,7 +21,7 @@ export default function ForgotPassword() {
       return;
     }
     if (!isIitrInstituteEmail(email)) {
-      toast.error("Use the format name_s@branch.iitr.ac.in");
+      toast.error("Please enter a valid IITR email");
       return;
     }
     setIsLoading(true);
@@ -31,7 +31,7 @@ export default function ForgotPassword() {
         purpose: "password_reset",
       });
       if (response.data.success) {
-        toast.success("OTP sent to your email");
+        toast.success(response.data.msg || "If the account exists, an OTP has been sent");
         setStep(2);
       } else {
         toast.error(response.data.msg || "Failed to send OTP");
@@ -117,7 +117,7 @@ export default function ForgotPassword() {
               id="email"
               type="email"
               autoComplete="email"
-              placeholder="name_s@branch.iitr.ac.in"
+              placeholder="you@iitr.ac.in"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
             />

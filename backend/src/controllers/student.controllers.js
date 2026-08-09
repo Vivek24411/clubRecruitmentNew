@@ -134,11 +134,16 @@ module.exports.sendOtp = async (req, res) => {
     )
   ]);
 
-  if (accountExists) await sendOtp(email, otp);
+  if (accountExists) {
+    const delivery = await sendOtp(email, otp);
+    console.info('OTP email accepted by Resend:', { emailId: delivery?.id || 'unknown', purpose });
+  }
 
   return res.json({
     success: true,
-    msg: purpose === "password_reset" ? "If the account exists, an OTP has been sent" : "OTP sent successfully",
+    msg: purpose === "password_reset"
+      ? "If the account exists, an OTP has been sent"
+      : "OTP accepted for delivery. Check spam if it does not arrive shortly",
   });
   }catch(err){
     console.error('Error in sendOtp controller:', err);

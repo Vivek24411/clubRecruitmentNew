@@ -15,7 +15,8 @@ Set these values in the deployment environment (never commit them):
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD_HASH` (a bcrypt hash; plaintext `ADMIN_PASSWORD` is development-only)
 - `ALLOWED_ORIGINS` (comma-separated exact frontend origins, without paths)
-- `EMAIL_USER` and `EMAIL_PASS`
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL` (optional; defaults to `Recruit IITR <noreply@devx.live>`)
 - `STUDENT_APP_ORIGIN` (optional, used to create links in notification emails)
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`
 - `TRUST_PROXY_HOPS` when the deployment is behind a non-standard number of trusted proxies (production defaults to `1`)
@@ -31,6 +32,19 @@ npm run migrate:v2
 ```
 
 The migration is idempotent. It backfills event deadlines and event memberships, records legacy withdrawn applications, reconciles RSVP counters, removes the obsolete session TTL index, and creates the new history/rate-limit indexes. Conflicting legacy team memberships are retained deterministically and reported for manual review.
+
+## Demo data for testing
+
+The demo seeder creates four students, two clubs, three events, two sessions, team and individual applications, RSVPs, and notifications. It only upserts reserved `.example.test` identities and records prefixed with `[Demo]`, so rerunning it does not create duplicates. Email notifications are disabled for the demo students.
+
+Review the configured `MONGODB_URI`, then explicitly confirm the target and run:
+
+```sh
+cd backend
+ALLOW_DEMO_SEED=true npm run seed:demo
+```
+
+Default test credentials are printed after a successful run. Override them with `DEMO_PASSWORD` and `DEMO_CLUB_PASSWORD` when needed. The dummy email addresses are intended for login and UI testing; they intentionally cannot receive password-reset email.
 
 ## Verification commands
 
