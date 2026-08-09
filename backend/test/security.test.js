@@ -21,16 +21,17 @@ test("cookie auth is used when a legacy client sends Bearer undefined", () => {
   assert.equal(getSessionToken(req, "student"), "real-token");
 });
 
-test("college email validation accepts the IITR student email format", () => {
+test("college email validation accepts any email on the IITR domain", () => {
   assert.equal(checkEmailDomain("vivek_s@es.iitr.ac.in"), true);
   assert.equal(checkEmailDomain("vivek_sh@ec.iitr.ac.in"), true);
   assert.equal(checkEmailDomain("VIVEK_S@ES.IITR.AC.IN"), true);
-  assert.equal(checkEmailDomain("student@iitr.ac.in"), false);
-  assert.equal(checkEmailDomain("student@es.iitr.ac.in"), false);
-  assert.equal(checkEmailDomain("vivek_sharma@es.iitr.ac.in"), false);
+  assert.equal(checkEmailDomain("student@iitr.ac.in"), true);
+  assert.equal(checkEmailDomain("student@es.iitr.ac.in"), true);
+  assert.equal(checkEmailDomain("vivek.sharma+clubs@dept.sub.iitr.ac.in"), true);
   assert.equal(checkEmailDomain("student@evil-iitr.ac.in"), false);
   assert.equal(checkEmailDomain("student@iitr.ac.in.evil.example"), false);
   assert.equal(checkEmailDomain("student@example.com"), false);
+  assert.equal(checkEmailDomain("not-an-email-iitr.ac.in"), false);
 });
 
 test("mutating requests reject untrusted browser origins", () => {

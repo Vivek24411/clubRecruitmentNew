@@ -1,52 +1,41 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
+const DEFAULT_FROM_EMAIL = 'Recruit IITR <noreply@devx6.live>';
+let resendClient;
 
+function getResendClient() {
+    if (!process.env.RESEND_API_KEY) {
+        throw new Error('RESEND_API_KEY is not configured');
+    }
+    if (!resendClient) resendClient = new Resend(process.env.RESEND_API_KEY);
+    return resendClient;
+}
 
-
+async function sendEmail({ to, subject, text }) {
+    const { error } = await getResendClient().emails.send({
+        from: process.env.RESEND_FROM_EMAIL?.trim() || DEFAULT_FROM_EMAIL,
+        to,
+        subject,
+        text,
+    });
+    if (error) throw new Error(`Resend email failed: ${error.message || error.name || 'unknown error'}`);
+}
 
 module.exports.sendOtp = async (email, otp) => {
-
-    const transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 465,
-        secure: true,
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 10000,
-        auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS
-        }
-    });
-
-
-    const mailOptions = {
-        from: process.env.EMAIL_USER,
+    await sendEmail({
         to: email,
         subject: 'OTP Verification',
-        text: `Your OTP is ${otp}`
-    };
-
-    await transporter.sendMail(mailOptions);
+        text: `Your OTP is ${otp}`,
+    });
 };
 
 module.exports.sendNotificationEmail = async (email, { title, message, link }) => {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return;
-    const transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 465,
-        secure: true,
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 10000,
-        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-    });
+    if (!process.env.RESEND_API_KEY) return;
     let detailsUrl = null;
     if (process.env.STUDENT_APP_ORIGIN && link?.startsWith('/') && !link.startsWith('//')) {
         try { detailsUrl = new URL(link, process.env.STUDENT_APP_ORIGIN).href; } catch { detailsUrl = null; }
     }
-    await transporter.sendMail({
-        from: process.env.EMAIL_USER,
+    await sendEmail({
         to: email,
         subject: String(title || "Recruitment update").replace(/[\r\n]/g, " "),
         text: `${message || "You have a new recruitment update."}${detailsUrl ? `\n\nView details: ${detailsUrl}` : ""}`,
@@ -56,5 +45,7 @@ module.exports.sendNotificationEmail = async (email, { title, message, link }) =
 
 module.exports.checkEmailDomain = (email) => {
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    return /^[a-z]+_[a-z]{1,2}@[a-z]+\.iitr\.ac\.in$/.test(normalizedEmail);
+    if (!/^[^\s@]+@[^\s@]+$/.test(normalizedEmail)) return false;
+    const domain = normalizedEmail.slice(normalizedEmail.lastIndexOf('@') + 1);
+    return domain === 'iitr.ac.in' || domain.endsWith('.iitr.ac.in');
 }

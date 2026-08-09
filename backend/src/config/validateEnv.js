@@ -12,7 +12,7 @@ function validateEnv() {
   if (process.env.NODE_ENV === "production" && !process.env.ADMIN_PASSWORD_HASH) throw new Error("ADMIN_PASSWORD_HASH is required in production");
   if (process.env.NODE_ENV === "production" && !process.env.ALLOWED_ORIGINS) throw new Error("ALLOWED_ORIGINS is required in production");
   if (process.env.NODE_ENV === "production") {
-    const productionServices = ["EMAIL_USER", "EMAIL_PASS", "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"];
+    const productionServices = ["RESEND_API_KEY", "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"];
     const missingServices = productionServices.filter((key) => !process.env[key]);
     if (missingServices.length) throw new Error(`Missing production service configuration: ${missingServices.join(", ")}`);
   }
