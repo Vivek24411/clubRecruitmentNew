@@ -250,6 +250,7 @@ module.exports.register = async (req, res) => {
     return res.status(201).json({
       success: true,
       msg: "Registration successful",
+      token,
       student: publicStudent(student),
     });
   } catch (err) {
@@ -289,6 +290,7 @@ module.exports.login = async (req, res) => {
   return res.json({
     success: true,
     msg: "Login successful",
+    token,
     student: publicStudent(student),
   });
 };

@@ -58,7 +58,7 @@ module.exports.clubLogin = async (req, res) => {
   const token = await club.createToken();
   setSessionCookie(res, "club", token);
   await writeAudit({ actorRole: "club", actorId: club._id, action: "auth.login", targetType: "club", targetId: club._id });
-  return res.json({ success: true, msg: "Club logged in successfully" });
+  return res.json({ success: true, msg: "Club logged in successfully", token });
 };
 
 module.exports.logout = async (req, res) => {

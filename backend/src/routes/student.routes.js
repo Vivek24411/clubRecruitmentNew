@@ -40,8 +40,10 @@ const {
 const { studentAuth } = require("../middlewares/auth.middlewares");
 const rateLimit = require("../middlewares/rateLimit");
 const validateRequest = require("../middlewares/validateRequest");
+const { checkEmailDomain } = require("../services/student.services");
 const router = express.Router();
 const fitsBcrypt = (value) => Buffer.byteLength(String(value), "utf8") <= 72;
+const isIitrEmail = (value) => checkEmailDomain(value);
 
 const otpRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyPrefix: "otp", persistent: true });
 const verifyRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "otp-verify", persistent: true });
@@ -51,7 +53,7 @@ router.post(
   "/sendOtp",
   otpRateLimit,
   [
-    body("email").isEmail().normalizeEmail().isLength({ max: 254 }).withMessage("Invalid email address"),
+    body("email").custom(isIitrEmail).withMessage("Invalid IITR email address").bail().normalizeEmail().isLength({ max: 254 }),
     body("purpose").optional().isIn(["signup", "password_reset"]),
   ],
   validateRequest,
@@ -59,13 +61,13 @@ router.post(
 );
 
 router.post("/verifyOtp", verifyRateLimit, [
-    body("email").isEmail().withMessage("Invalid email address"),
+    body("email").custom(isIitrEmail).withMessage("Invalid IITR email address"),
     body("otp").isLength({ min: 6, max: 6 }).isNumeric().withMessage("Invalid OTP"),
     body("purpose").optional().isIn(["signup", "password_reset"]),
 ], validateRequest, verifyOtp);
 
 router.post("/register",[
-    body('email').isEmail().withMessage("Invalid email address"),
+    body('email').custom(isIitrEmail).withMessage("Invalid IITR email address"),
     body('password').isLength({ min: 10, max: 128 }).custom(fitsBcrypt).withMessage("Password must be 10–72 bytes long"),
     body('name').isString().trim().isLength({ min: 2, max: 100 }).withMessage("Name must be between 2 and 100 characters"),
     body('branch').isString().trim().isLength({ min: 2, max: 100 }).withMessage("Branch must be between 2 and 100 characters"),
@@ -76,7 +78,7 @@ router.post("/register",[
 ], validateRequest, register);
 
 router.post("/login", loginRateLimit, [
-    body('email').isEmail().withMessage("Invalid email address"),
+    body('email').custom(isIitrEmail).withMessage("Invalid IITR email address"),
     body('password').isLength({ min: 4, max: 128 }).withMessage("Invalid password")
 ], validateRequest, login);
 
@@ -137,7 +139,7 @@ router.get('/getEventDetails',studentAuth,[
 
 router.post('/addMemberOffer', studentAuth, [
   body('eventId').isMongoId().withMessage("Invalid event ID"),
-  body('memberEmail').isEmail().normalizeEmail().isLength({ max: 254 }).withMessage("Invalid member email")
+  body('memberEmail').custom(isIitrEmail).withMessage("Invalid member email").bail().normalizeEmail().isLength({ max: 254 })
 ], validateRequest, addMemberOffer);
 
 router.post('/acceptMemberOffer', studentAuth, [
@@ -152,7 +154,7 @@ router.post('/declineMemberOffer', studentAuth, [
 
 router.post('/cancelMemberOffer', studentAuth, [
   body('eventId').isMongoId(),
-  body('memberEmail').isEmail().normalizeEmail(),
+  body('memberEmail').custom(isIitrEmail).normalizeEmail(),
 ], validateRequest, cancelMemberOffer)
 
 router.post('/removeTeamMember', studentAuth, [
@@ -183,7 +185,7 @@ router.post('/sessionRsvp', studentAuth, [body('sessionId').isMongoId()], valida
 router.post('/sessionRsvp/cancel', studentAuth, [body('sessionId').isMongoId()], validateRequest, cancelSessionRsvp)
 
 router.post('/forgotPassword',[
-  body("email").isEmail().withMessage("Invalid email address"),
+  body("email").custom(isIitrEmail).withMessage("Invalid IITR email address"),
   body("newPassword").isLength({ min: 10, max: 128 }).custom(fitsBcrypt).withMessage("Password must be 10–72 bytes long"),
   body("resetToken").isString().isLength({ min: 20, max: 128 }).withMessage("Reset verification is required")
 ], validateRequest, forgotPassword)

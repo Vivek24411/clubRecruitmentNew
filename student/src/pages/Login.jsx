@@ -22,10 +22,11 @@ export default function Login() {
         password,
       });
       if (response.data.success) {
+        localStorage.setItem("token", response.data.token);
         toast.success(response.data.msg || "Login successful");
         setLoggedInStudent(true);
         await refreshProfile();
-        navigate("/");
+        navigate("/", { replace: true });
       } else {
         toast.error(response.data.msg || "Login failed");
       }

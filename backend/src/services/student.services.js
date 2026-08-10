@@ -124,7 +124,8 @@ module.exports.sendNotificationEmail = async (email, { title, message, link }) =
 
 module.exports.checkEmailDomain = (email) => {
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+$/.test(normalizedEmail)) return false;
-    const domain = normalizedEmail.slice(normalizedEmail.lastIndexOf('@') + 1);
+    const atIndex = normalizedEmail.lastIndexOf('@');
+    if (atIndex <= 0) return false;
+    const domain = normalizedEmail.slice(atIndex + 1);
     return domain === 'iitr.ac.in' || domain.endsWith('.iitr.ac.in');
 }

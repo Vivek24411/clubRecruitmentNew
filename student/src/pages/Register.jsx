@@ -129,10 +129,11 @@ export default function Register() {
             { ...form, verificationToken: response.data.verificationToken },
           );
           if (registerResponse.data.success) {
+            localStorage.setItem("token", registerResponse.data.token);
             toast.success("Registration successful");
             setLoggedInStudent(true);
             await refreshProfile();
-            navigate("/");
+            navigate("/", { replace: true });
           } else {
             toast.error(registerResponse.data.msg || "Registration failed");
             setRegistering(false);

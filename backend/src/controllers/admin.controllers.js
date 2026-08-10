@@ -40,6 +40,7 @@ module.exports.login = async (req, res) => {
     return res.json({
       success: true,
       msg: "Admin logged in successfully",
+      token,
     });
   } else {
     return res.json({ success: false, msg: "Invalid admin credentials" });

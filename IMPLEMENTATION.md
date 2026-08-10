@@ -21,7 +21,7 @@ Set these values in the deployment environment (never commit them):
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`
 - `TRUST_PROXY_HOPS` when the deployment is behind a non-standard number of trusted proxies (production defaults to `1`)
 
-Production authentication uses Secure, HttpOnly cookies. Every frontend must use HTTPS and point `VITE_BASE_URI` to the backend origin. If the proxy topology changes, review Express's `trust proxy` value before deployment because it controls client-IP rate limiting.
+Production authentication uses Secure, HttpOnly cookies with a bearer-token fallback for browsers that block cross-site cookies. Every frontend must use HTTPS and point `VITE_BASE_URI` to the backend origin. If the proxy topology changes, review Express's `trust proxy` value before deployment because it controls client-IP rate limiting.
 
 ## Existing database upgrade
 

@@ -27,10 +27,11 @@ export default function Login() {
         password,
       });
       if (response.data.success) {
+        localStorage.setItem("clubToken", response.data.token);
         toast.success("Login successful");
         setLoggedInClub(true);
         await refreshClubProfile();
-        navigate("/");
+        navigate("/", { replace: true });
       } else {
         toast.error(response.data.msg);
       }
