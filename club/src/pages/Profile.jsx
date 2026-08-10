@@ -10,6 +10,7 @@ import {
   Field,
   Input,
   Meta,
+  Modal,
   Monogram,
   Page,
   PageHeader,
@@ -54,6 +55,265 @@ function SocialRow({ label, href }) {
       <span className="font-medium">{label}</span>
       <span className="text-ink-4">↗</span>
     </a>
+  );
+}
+
+function PasswordSecurity({ club, onPasswordChanged }) {
+  const [open, setOpen] = useState(false);
+  const [method, setMethod] = useState("current");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const errorMessage = (error, fallback) =>
+    error.response?.data?.msg || error.message || fallback;
+
+  function clearForm() {
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setOtp("");
+    setOtpSent(false);
+  }
+
+  function selectMethod(nextMethod) {
+    setMethod(nextMethod);
+    clearForm();
+  }
+
+  function validateNewPassword() {
+    if (newPassword.length < 10) {
+      toast.error("Password must be at least 10 characters");
+      return false;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return false;
+    }
+    return true;
+  }
+
+  async function changeWithCurrentPassword(event) {
+    event.preventDefault();
+    if (!validateNewPassword()) return;
+
+    setIsSubmitting(true);
+    try {
+      const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/changePassword`, {
+        currentPassword,
+        newPassword,
+      });
+      if (!response.data.success) throw new Error(response.data.msg);
+      await onPasswordChanged("Password changed successfully. Please sign in again");
+    } catch (error) {
+      toast.error(errorMessage(error, "Unable to change password"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function requestOtp() {
+    if (!club?.contactEmail) {
+      toast.error("Add a contact email to your profile before using OTP recovery");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await axios.post(
+        `${import.meta.env.VITE_BASE_URI}/club/password-reset/request`,
+        { userName: club.userName, email: club.contactEmail },
+      );
+      if (!response.data.success) throw new Error(response.data.msg);
+      setOtpSent(true);
+      toast.success(`A one-time code was sent to ${club.contactEmail}`);
+    } catch (error) {
+      toast.error(errorMessage(error, "Unable to send OTP"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function changeWithOtp(event) {
+    event.preventDefault();
+    if (!validateNewPassword()) return;
+    if (!/^\d{6}$/.test(otp)) {
+      toast.error("Enter the 6-digit OTP");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const account = { userName: club.userName, email: club.contactEmail };
+      const verification = await axios.post(
+        `${import.meta.env.VITE_BASE_URI}/club/password-reset/verify`,
+        { ...account, otp },
+      );
+      if (!verification.data.success) throw new Error(verification.data.msg);
+
+      const response = await axios.post(
+        `${import.meta.env.VITE_BASE_URI}/club/password-reset/complete`,
+        {
+          ...account,
+          newPassword,
+          resetToken: verification.data.verificationToken,
+        },
+      );
+      if (!response.data.success) throw new Error(response.data.msg);
+      await onPasswordChanged("Password reset successfully. Please sign in again");
+    } catch (error) {
+      toast.error(errorMessage(error, "Unable to reset password"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const passwordFields = (
+    <>
+      <Field label="New password" id={`${method}-new-password`} hint="At least 10 characters.">
+        <Input
+          id={`${method}-new-password`}
+          type="password"
+          minLength={10}
+          maxLength={72}
+          autoComplete="new-password"
+          required
+          value={newPassword}
+          onChange={(event) => setNewPassword(event.target.value)}
+        />
+      </Field>
+      <Field
+        label="Confirm new password"
+        id={`${method}-confirm-password`}
+        error={
+          confirmPassword && confirmPassword !== newPassword
+            ? "Passwords do not match."
+            : undefined
+        }
+      >
+        <Input
+          id={`${method}-confirm-password`}
+          type="password"
+          minLength={10}
+          maxLength={72}
+          autoComplete="new-password"
+          required
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+        />
+      </Field>
+    </>
+  );
+
+  return (
+    <>
+      <Card className="p-6">
+        <p className="eyebrow eyebrow-accent">Account security</p>
+        <h2 className="display mt-2 text-xl">Password</h2>
+        <p className="mt-2 text-sm leading-relaxed text-ink-3">
+          Change it using your current password or a code sent to your contact email.
+        </p>
+        <Button className="mt-5" variant="secondary" block onClick={() => setOpen(true)}>
+          Change password
+        </Button>
+      </Card>
+
+      <Modal
+        open={open}
+        onClose={() => {
+          if (!isSubmitting) {
+            setOpen(false);
+            clearForm();
+          }
+        }}
+        title="Change club password"
+        description="Choose how you want to confirm your identity. All existing sessions will be signed out."
+      >
+        <div className="grid grid-cols-2 gap-2" role="group" aria-label="Password confirmation method">
+          <Button
+            type="button"
+            size="sm"
+            variant={method === "current" ? "primary" : "secondary"}
+            onClick={() => selectMethod("current")}
+          >
+            Current password
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={method === "otp" ? "primary" : "secondary"}
+            onClick={() => selectMethod("otp")}
+          >
+            Email OTP
+          </Button>
+        </div>
+
+        {method === "current" ? (
+          <form className="mt-5 space-y-4" onSubmit={changeWithCurrentPassword}>
+            <Field label="Current password" id="current-password" required>
+              <Input
+                id="current-password"
+                type="password"
+                maxLength={128}
+                autoComplete="current-password"
+                required
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+              />
+            </Field>
+            {passwordFields}
+            <Button type="submit" block loading={isSubmitting}>
+              {isSubmitting ? "Changing…" : "Change password"}
+            </Button>
+          </form>
+        ) : (
+          <div className="mt-5">
+            {!club?.contactEmail ? (
+              <p className="rounded-sm bg-paper-2 p-4 text-sm leading-relaxed text-ink-3">
+                Add a contact email to your club profile before using OTP recovery.
+              </p>
+            ) : !otpSent ? (
+              <div>
+                <p className="text-sm leading-relaxed text-ink-3">
+                  We&rsquo;ll send a 6-digit code to <strong>{club.contactEmail}</strong>.
+                </p>
+                <Button className="mt-4" type="button" block loading={isSubmitting} onClick={requestOtp}>
+                  {isSubmitting ? "Sending…" : "Send OTP"}
+                </Button>
+              </div>
+            ) : (
+              <form className="space-y-4" onSubmit={changeWithOtp}>
+                <Field label="One-time code" id="profile-password-otp" required>
+                  <Input
+                    id="profile-password-otp"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    className="tabular text-center text-lg tracking-[0.4em]"
+                    required
+                    value={otp}
+                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  />
+                </Field>
+                {passwordFields}
+                <div className="flex gap-2">
+                  <Button type="button" variant="secondary" onClick={requestOtp} loading={isSubmitting}>
+                    Resend
+                  </Button>
+                  <Button type="submit" block loading={isSubmitting}>
+                    {isSubmitting ? "Resetting…" : "Reset password"}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+      </Modal>
+    </>
   );
 }
 
@@ -112,6 +372,12 @@ export default function Profile() {
     await signOut();
     navigate("/login");
     toast.success("Logged out successfully");
+  }
+
+  async function passwordChanged(message) {
+    await signOut();
+    toast.success(message);
+    navigate("/login", { replace: true });
   }
 
   if (isLoading) {
@@ -316,6 +582,8 @@ export default function Profile() {
                 <Meta label="Contact phone" value={clubProfile?.contactPhone} />
               </dl>
             </Card>
+
+            <PasswordSecurity club={clubProfile} onPasswordChanged={passwordChanged} />
 
             {hasSocials && (
               <div>

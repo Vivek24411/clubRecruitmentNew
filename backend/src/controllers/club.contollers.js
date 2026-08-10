@@ -1,15 +1,36 @@
 const { validationResult } = require("express-validator");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 const clubModel = require("../models/club.model");
+const otpModel = require("../models/otp.model");
+const verificationTokenModel = require("../models/verificationToken.model");
 const sessionModel = require("../models/session.model");
 const eventModel = require("../models/event.model");
 const registerationEventModel = require("../models/registerationEvent.model");
 const sessionRsvpModel = require("../models/sessionRsvp.model");
 const { clearSessionCookie, setSessionCookie } = require("../utils/auth");
 const { notifyStudent, notifyTeam } = require("../services/notification.services");
+const { sendOtp } = require("../services/student.services");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
 const DUMMY_PASSWORD_HASH = "$2b$12$4Qj6z7mmoEgcnxHLS0xDR.jjYdMm05/mtrLZVBInMaqjKAuvz9taa";
+const CLUB_PASSWORD_RESET_PURPOSE = "club_password_reset";
+
+const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
+const normalizeUserName = (userName) => String(userName || "").trim().toLowerCase();
+const tokenHash = (token) => crypto.createHash("sha256").update(token).digest("hex");
+const clubRecoveryKey = (userName, email) =>
+  `club:${normalizeUserName(userName)}:${normalizeEmail(email)}`;
+
+async function consumeClubResetToken({ userName, email, token }) {
+  if (!token) return null;
+  return verificationTokenModel.findOneAndDelete({
+    email: clubRecoveryKey(userName, email),
+    purpose: CLUB_PASSWORD_RESET_PURPOSE,
+    tokenHash: tokenHash(token),
+    expiresAt: { $gt: new Date() },
+  });
+}
 
 async function ownedEvent(eventId, clubId) {
   return eventModel.findOne({ _id: eventId, clubId });
@@ -64,6 +85,166 @@ module.exports.clubLogin = async (req, res) => {
 module.exports.logout = async (req, res) => {
   clearSessionCookie(res, "club");
   return res.json({ success: true, msg: "Logged out successfully" });
+};
+
+module.exports.changePassword = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array(), success: false, msg: "Enter valid password details" });
+  }
+
+  const { currentPassword, newPassword } = req.body;
+
+  try {
+    const club = await clubModel.findById(req.club._id).select("+password +tokenVersion");
+    if (!club || !(await bcrypt.compare(currentPassword, club.password))) {
+      return res.status(400).json({ success: false, msg: "Current password is incorrect" });
+    }
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ success: false, msg: "New password must be different from the current password" });
+    }
+
+    club.password = await bcrypt.hash(newPassword, 12);
+    club.tokenVersion = (club.tokenVersion || 0) + 1;
+    await club.save();
+    await writeAudit({
+      actorRole: "club",
+      actorId: club._id,
+      action: "auth.password_change",
+      targetType: "club",
+      targetId: club._id,
+    });
+
+    clearSessionCookie(res, "club");
+    return res.json({ success: true, msg: "Password changed successfully; existing sessions were revoked" });
+  } catch (error) {
+    console.error("Club password change failed:", error);
+    return res.status(500).json({ success: false, msg: "Unable to change password. Please try again" });
+  }
+};
+
+module.exports.sendPasswordResetOtp = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array(), success: false, msg: "Enter valid account details" });
+  }
+
+  const userName = normalizeUserName(req.body.userName);
+  const email = normalizeEmail(req.body.email);
+  const recoveryKey = clubRecoveryKey(userName, email);
+  const genericMessage = "If those details match a club account, an OTP has been sent";
+
+  try {
+    const club = await clubModel.findOne({ userName }).select("contactEmail");
+    const accountMatches = club && normalizeEmail(club.contactEmail) === email;
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    const hashedOtp = await bcrypt.hash(otp, 10);
+
+    if (!accountMatches) {
+      return res.json({ success: true, msg: genericMessage });
+    }
+
+    await otpModel.findOneAndUpdate(
+      { email: recoveryKey, purpose: CLUB_PASSWORD_RESET_PURPOSE },
+      { otp: hashedOtp, attempts: 0, createdAt: new Date() },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    await sendOtp(email, otp);
+
+    return res.json({ success: true, msg: genericMessage });
+  } catch (error) {
+    console.error("Club password reset OTP failed:", error);
+    return res.status(500).json({ success: false, msg: "Unable to send OTP. Please try again" });
+  }
+};
+
+module.exports.verifyPasswordResetOtp = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array(), success: false, msg: "Enter a valid 6-digit OTP" });
+  }
+
+  const recoveryKey = clubRecoveryKey(req.body.userName, req.body.email);
+
+  try {
+    const otpRecord = await otpModel.findOne({
+      email: recoveryKey,
+      purpose: CLUB_PASSWORD_RESET_PURPOSE,
+      createdAt: { $gt: new Date(Date.now() - 5 * 60 * 1000) },
+    });
+    if (!otpRecord) {
+      return res.status(400).json({ success: false, msg: "OTP expired or not found" });
+    }
+
+    const isMatch = await bcrypt.compare(req.body.otp, otpRecord.otp);
+    if (!isMatch) {
+      otpRecord.attempts += 1;
+      if (otpRecord.attempts >= 5) await otpModel.deleteOne({ _id: otpRecord._id });
+      else await otpRecord.save();
+      return res.status(400).json({ success: false, msg: "Invalid OTP" });
+    }
+
+    await otpModel.deleteOne({ _id: otpRecord._id });
+    await verificationTokenModel.deleteMany({
+      email: recoveryKey,
+      purpose: CLUB_PASSWORD_RESET_PURPOSE,
+    });
+    const verificationToken = crypto.randomBytes(32).toString("base64url");
+    await verificationTokenModel.create({
+      email: recoveryKey,
+      purpose: CLUB_PASSWORD_RESET_PURPOSE,
+      tokenHash: tokenHash(verificationToken),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+
+    return res.json({ success: true, verificationToken });
+  } catch (error) {
+    console.error("Club password reset OTP verification failed:", error);
+    return res.status(500).json({ success: false, msg: "Unable to verify OTP. Please try again" });
+  }
+};
+
+module.exports.resetPassword = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array(), success: false, msg: "Enter a valid new password" });
+  }
+
+  const userName = normalizeUserName(req.body.userName);
+  const email = normalizeEmail(req.body.email);
+
+  try {
+    const verified = await consumeClubResetToken({
+      userName,
+      email,
+      token: req.body.resetToken,
+    });
+    if (!verified) {
+      return res.status(400).json({ success: false, msg: "Reset verification expired or invalid" });
+    }
+
+    const club = await clubModel.findOne({ userName }).select("+password +tokenVersion contactEmail");
+    if (!club || normalizeEmail(club.contactEmail) !== email) {
+      return res.status(400).json({ success: false, msg: "Reset verification expired or invalid" });
+    }
+
+    club.password = await bcrypt.hash(req.body.newPassword, 12);
+    club.tokenVersion = (club.tokenVersion || 0) + 1;
+    await club.save();
+    await writeAudit({
+      actorRole: "club",
+      actorId: club._id,
+      action: "auth.password_reset",
+      targetType: "club",
+      targetId: club._id,
+    });
+
+    clearSessionCookie(res, "club");
+    return res.json({ success: true, msg: "Password reset successfully; existing sessions were revoked" });
+  } catch (error) {
+    console.error("Club password reset failed:", error);
+    return res.status(500).json({ success: false, msg: "Unable to reset password. Please try again" });
+  }
 };
 
 module.exports.addSession = async (req, res) => {

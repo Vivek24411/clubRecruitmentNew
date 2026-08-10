@@ -1,13 +1,17 @@
 const express = require("express");
 const router = express.Router();
 const { body, param, query } = require("express-validator");
-const { clubLogin, logout, addSession, getProfile, updateProfile, getSessions, getSession, addEvent, getEvents, getEvent, getDashBoard, getEventsRegisteredStudents, finalizeStudent, scheduleInterview, selectStudentForRound, updateEvent, updateEventStatus, updateSession, updateApplication, bulkUpdateApplications, exportApplications, getSessionAttendees, markAttendance } = require("../controllers/club.contollers");
+const { clubLogin, logout, changePassword, sendPasswordResetOtp, verifyPasswordResetOtp, resetPassword, addSession, getProfile, updateProfile, getSessions, getSession, addEvent, getEvents, getEvent, getDashBoard, getEventsRegisteredStudents, finalizeStudent, scheduleInterview, selectStudentForRound, updateEvent, updateEventStatus, updateSession, updateApplication, bulkUpdateApplications, exportApplications, getSessionAttendees, markAttendance } = require("../controllers/club.contollers");
 const { clubAuth } = require("../middlewares/auth.middlewares");
 const upload = require("../middlewares/upload");
 const rateLimit = require("../middlewares/rateLimit");
 const validateRequest = require("../middlewares/validateRequest");
 
 const loginRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "club-login", persistent: true });
+const resetRequestRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyPrefix: "club-password-reset", persistent: true });
+const resetVerifyRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "club-password-reset-verify", persistent: true });
+const passwordChangeRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyPrefix: "club-password-change", persistent: true });
+const fitsBcrypt = (value) => Buffer.byteLength(String(value), "utf8") <= 72;
 
 router.post(
   "/login",
@@ -21,6 +25,29 @@ router.post(
 );
 
 router.post('/logout', logout)
+
+router.post('/changePassword', clubAuth, passwordChangeRateLimit, [
+  body("currentPassword").isString().isLength({ min: 1, max: 128 }),
+  body("newPassword").isLength({ min: 10, max: 128 }).custom(fitsBcrypt).withMessage("Password must be 10–72 bytes long"),
+], validateRequest, changePassword)
+
+router.post('/password-reset/request', resetRequestRateLimit, [
+  body("userName").isString().trim().isLength({ min: 1, max: 80 }),
+  body("email").isEmail().bail().customSanitizer((value) => value.trim().toLowerCase()).isLength({ max: 254 }),
+], validateRequest, sendPasswordResetOtp)
+
+router.post('/password-reset/verify', resetVerifyRateLimit, [
+  body("userName").isString().trim().isLength({ min: 1, max: 80 }),
+  body("email").isEmail().bail().customSanitizer((value) => value.trim().toLowerCase()).isLength({ max: 254 }),
+  body("otp").isLength({ min: 6, max: 6 }).isNumeric(),
+], validateRequest, verifyPasswordResetOtp)
+
+router.post('/password-reset/complete', resetVerifyRateLimit, [
+  body("userName").isString().trim().isLength({ min: 1, max: 80 }),
+  body("email").isEmail().bail().customSanitizer((value) => value.trim().toLowerCase()).isLength({ max: 254 }),
+  body("newPassword").isLength({ min: 10, max: 128 }).custom(fitsBcrypt).withMessage("Password must be 10–72 bytes long"),
+  body("resetToken").isString().isLength({ min: 20, max: 128 }),
+], validateRequest, resetPassword)
 
 router.post(
   "/addSession",

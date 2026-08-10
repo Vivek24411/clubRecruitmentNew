@@ -12,6 +12,7 @@ import AddEvent from './pages/AddEvent'
 import UserProtectedWrapper from './pages/UserProtectedWrapper'
 import EventRegisteredStudents from './pages/EventRegisteredStudents'
 import EditEvent from './pages/EditEvent'
+import ForgotPassword from './pages/ForgotPassword'
 
 const App = () => {
   return (
@@ -19,6 +20,7 @@ const App = () => {
     <Routes>
     <Route path='/' element={<UserProtectedWrapper><Dashboard /></UserProtectedWrapper>} />
     <Route path='/login' element={<Login />} />
+    <Route path='/forgotPassword' element={<ForgotPassword />} />
     <Route path='/profile' element={<UserProtectedWrapper><Profile /></UserProtectedWrapper>} />
     <Route path='/session/:sessionId' element={<UserProtectedWrapper><Session /></UserProtectedWrapper>} />
     <Route path='/sessions' element={<UserProtectedWrapper><Sessions /></UserProtectedWrapper>} />

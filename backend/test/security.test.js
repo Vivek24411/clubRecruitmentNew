@@ -7,6 +7,9 @@ const { getSessionToken, signSession, verifySession } = require("../src/utils/au
 const { checkEmailDomain } = require("../src/services/student.services");
 const { requireTrustedOrigin } = require("../src/middlewares/security");
 const rateLimit = require("../src/middlewares/rateLimit");
+const otpModel = require("../src/models/otp.model");
+const verificationTokenModel = require("../src/models/verificationToken.model");
+const clubRouter = require("../src/routes/club.routes");
 
 test("session tokens are role-bound and carry the revocation version", () => {
   const token = signSession({ subject: "student-id", role: "student", version: 3 });
@@ -59,4 +62,19 @@ test("rate limiter returns 429 after the configured allowance", () => {
   assert.equal(continued, 1);
   assert.equal(res.statusCode, 429);
   assert.ok(res.headers["Retry-After"]);
+});
+
+test("club password recovery has dedicated OTP and verification-token purposes", () => {
+  assert.ok(otpModel.schema.path("purpose").enumValues.includes("club_password_reset"));
+  assert.ok(verificationTokenModel.schema.path("purpose").enumValues.includes("club_password_reset"));
+});
+
+test("club router exposes the complete password recovery flow", () => {
+  const routePaths = clubRouter.stack
+    .map((layer) => layer.route?.path)
+    .filter(Boolean);
+  assert.ok(routePaths.includes("/password-reset/request"));
+  assert.ok(routePaths.includes("/password-reset/verify"));
+  assert.ok(routePaths.includes("/password-reset/complete"));
+  assert.ok(routePaths.includes("/changePassword"));
 });

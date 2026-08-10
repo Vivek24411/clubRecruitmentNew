@@ -1,7 +1,7 @@
 import { useContext, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ClubContextData } from "../context/ClubContext.jsx";
 import AuthShell from "../components/AuthShell";
 import { Button, Field, Input } from "../components/ui";
@@ -49,8 +49,8 @@ export default function Login() {
       description="Manage recruitment events, information sessions, and applications."
       footer={
         <p className="text-ink-3">
-          Credentials are issued by the recruitment admin. If you cannot sign in, contact them to
-          have your club account reset.
+          Credentials are issued by the recruitment admin. If you cannot access your registered
+          contact email, ask the admin for help.
         </p>
       }
     >
@@ -78,6 +78,12 @@ export default function Login() {
             onChange={(event) => setPassword(event.target.value)}
           />
         </Field>
+
+        <div className="flex justify-end">
+          <Link to="/forgotPassword" className="link text-sm text-ink-3">
+            Forgot password?
+          </Link>
+        </div>
 
         <Button type="submit" size="lg" block loading={isLoading}>
           {isLoading ? "Signing in…" : "Sign in"}
