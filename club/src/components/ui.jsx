@@ -99,7 +99,7 @@ export function useCountUp(target, duration = 1100) {
 export function Page({ width = "7xl", className, children }) {
   const max = { "3xl": "max-w-3xl", "5xl": "max-w-5xl", "7xl": "max-w-7xl" }[width];
   return (
-    <div className={cx("mx-auto px-4 py-10 sm:px-6 lg:py-14", max, className)}>{children}</div>
+    <div className={cx("mx-auto min-w-0 w-full px-4 py-8 sm:px-6 sm:py-10 lg:py-14", max, className)}>{children}</div>
   );
 }
 
@@ -370,7 +370,7 @@ export function MetaGrid({ children, className, cols = 2 }) {
     <dl
       className={cx(
         "grid gap-x-6 gap-y-5",
-        cols === 2 ? "grid-cols-2" : cols === 3 ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2 sm:grid-cols-4",
+        cols === 2 ? "grid-cols-1 sm:grid-cols-2" : cols === 3 ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
         className,
       )}
     >

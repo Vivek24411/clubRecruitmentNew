@@ -3,7 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { safeExternalUrl } from "../utils/url";
-import { Button, Card, EmptyState, Meta, Monogram, Page, Skeleton } from "../components/ui";
+import { Button, Card, EmptyState, Field, Input, Meta, Monogram, Page, Select, Skeleton } from "../components/ui";
 
 /** Club logo with a monogram fallback that survives a broken image URL. */
 function ClubMark({ club }) {
@@ -14,7 +14,7 @@ function ClubMark({ club }) {
       src={club.clubLogo}
       alt=""
       onError={() => setFailed(true)}
-      className="h-16 w-16 flex-none rounded-md border border-line object-cover"
+      className="h-16 w-16 flex-none rounded-md border border-line bg-surface object-contain p-1"
     />
   );
 }
@@ -49,6 +49,7 @@ export default function Club() {
   const [clubDetails, setClubDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const { clubId } = useParams();
+  const [saving, setSaving] = useState(false);
 
   const fetchClubDetails = useCallback(async () => {
     try {
@@ -104,6 +105,22 @@ export default function Club() {
   const hasProse =
     clubDetails.longDescription || clubDetails.achivements || clubDetails.recruitmentMethods;
 
+  const saveAccount = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const { data } = await axios.patch(`${import.meta.env.VITE_BASE_URI}/admin/clubs/${clubId}/details`, {
+        accountEmail: clubDetails.accountEmail,
+        contactEmail: clubDetails.contactEmail,
+        category: clubDetails.category,
+      });
+      if (!data.success) throw new Error(data.msg);
+      setClubDetails(data.club);
+      toast.success(data.msg);
+    } catch (error) { toast.error(error.response?.data?.msg || error.message); }
+    finally { setSaving(false); }
+  };
+
   return (
     <Page width="5xl">
       <Link to="/clubs" className="link text-sm text-ink-3">
@@ -148,6 +165,15 @@ export default function Club() {
         </div>
 
         <aside className="space-y-6 lg:sticky lg:top-24 lg:h-fit">
+          <Card as="form" onSubmit={saveAccount} className="p-6">
+            <h2 className="eyebrow">Account settings</h2>
+            <div className="mt-4 space-y-4">
+              <Field label="Category" id="category"><Select id="category" value={clubDetails.category || "technical"} onChange={(event) => setClubDetails({ ...clubDetails, category: event.target.value })}><option value="technical">Technical</option><option value="cultural">Cultural</option></Select></Field>
+              <Field label="Recovery email" id="accountEmail" required><Input id="accountEmail" type="email" value={clubDetails.accountEmail || ""} onChange={(event) => setClubDetails({ ...clubDetails, accountEmail: event.target.value })} required /></Field>
+              <Field label="Public contact email" id="contactEmail"><Input id="contactEmail" type="email" value={clubDetails.contactEmail || ""} onChange={(event) => setClubDetails({ ...clubDetails, contactEmail: event.target.value })} /></Field>
+              <Button size="sm" loading={saving}>Save account</Button>
+            </div>
+          </Card>
           <Card className="p-6">
             <h2 className="eyebrow">Contact</h2>
             <dl className="mt-4 space-y-4">

@@ -33,6 +33,7 @@ export default function Session() {
   const [attendees, setAttendees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [walkInEmail, setWalkInEmail] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -87,6 +88,17 @@ export default function Session() {
     } catch (error) {
       toast.error(error.response?.data?.msg || error.message);
     }
+  };
+
+  const addWalkIn = async (event) => {
+    event.preventDefault();
+    try {
+      const { data } = await axios.patch(`${import.meta.env.VITE_BASE_URI}/club/sessions/${sessionId}/attendance`, { studentEmail: walkInEmail, status: "attended" });
+      if (!data.success) throw new Error(data.msg);
+      toast.success(data.msg);
+      setWalkInEmail("");
+      await load();
+    } catch (error) { toast.error(error.response?.data?.msg || error.message); }
   };
 
   const visible = useMemo(() => {
@@ -176,6 +188,10 @@ export default function Session() {
               />
             </Field>
 
+            <Field label="Full description" id="longDescription">
+              <Textarea id="longDescription" rows="4" value={session.longDescription || ""} onChange={(event) => set("longDescription", event.target.value)} />
+            </Field>
+
             <div className="grid grid-cols-2 gap-4">
               <Field label="Date" id="date">
                 <Input
@@ -201,6 +217,10 @@ export default function Session() {
                 value={session.venue || ""}
                 onChange={(event) => set("venue", event.target.value)}
               />
+            </Field>
+
+            <Field label="Duration in minutes" id="duration">
+              <Input id="duration" type="number" min="1" max="1440" value={session.duration || ""} onChange={(event) => set("duration", Number(event.target.value))} />
             </Field>
 
             <div className="grid grid-cols-2 gap-4">
@@ -257,6 +277,10 @@ export default function Session() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
+            <form onSubmit={addWalkIn} className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <Input type="email" aria-label="Walk-in student email" placeholder="Walk-in student IITR email" value={walkInEmail} onChange={(event) => setWalkInEmail(event.target.value)} required />
+              <Button size="sm" className="sm:flex-none">Add walk-in</Button>
+            </form>
           </div>
 
           <div className="max-h-[36rem] overflow-auto">

@@ -36,7 +36,7 @@ function ClubMark({ club }) {
       alt=""
       loading="lazy"
       onError={() => setFailed(true)}
-      className="h-16 w-16 flex-none rounded-md border border-line object-cover"
+      className="h-16 w-16 flex-none rounded-md border border-line bg-surface object-contain p-1"
     />
   );
 }
@@ -45,6 +45,7 @@ export default function Clubs() {
   const [clubs, setClubs] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [category, setCategory] = useState("all");
 
   useEffect(() => {
     async function fetchClubs() {
@@ -65,13 +66,13 @@ export default function Clubs() {
   const filteredClubs = useMemo(() => {
     if (!clubs) return [];
     const query = searchTerm.trim().toLowerCase();
-    if (!query) return clubs;
     return clubs.filter(
       (club) =>
-        club.name?.toLowerCase().includes(query) ||
-        club.shortDescription?.toLowerCase().includes(query),
+        (category === "all" || club.category === category) &&
+        (!query || club.name?.toLowerCase().includes(query) ||
+        club.shortDescription?.toLowerCase().includes(query)),
     );
-  }, [clubs, searchTerm]);
+  }, [category, clubs, searchTerm]);
 
   return (
     <Page>
@@ -81,7 +82,8 @@ export default function Clubs() {
         description="Every student group on campus, with their recruitment events and information sessions."
       />
 
-      <div className="relative mt-8 max-w-md">
+      <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="relative max-w-md flex-1">
         <label className="sr-only" htmlFor="search">
           Search clubs
         </label>
@@ -94,6 +96,8 @@ export default function Clubs() {
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
         />
+      </div>
+        <div className="flex rounded-sm border border-line bg-surface p-1" role="group" aria-label="Club category">{[["all", "All"], ["technical", "Technical"], ["cultural", "Cultural"]].map(([value, label]) => <button key={value} type="button" className={`px-3 py-1.5 text-sm font-semibold ${category === value ? "bg-ink text-white" : "text-ink-3"}`} onClick={() => setCategory(value)}>{label}</button>)}</div>
       </div>
 
       <div className="mt-8">

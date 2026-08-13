@@ -1,5 +1,5 @@
 const express = require("express");
-const { query, body } = require("express-validator");
+const { query, body, param } = require("express-validator");
 const {
   register,
   verifyOtp,
@@ -36,10 +36,13 @@ const {
   rsvpSession,
   cancelSessionRsvp,
   getSessionRsvp,
+  getAcademicOptions,
 } = require("../controllers/student.controllers");
 const { studentAuth } = require("../middlewares/auth.middlewares");
 const rateLimit = require("../middlewares/rateLimit");
 const validateRequest = require("../middlewares/validateRequest");
+const upload = require("../middlewares/upload");
+const { getMyEventWorkflow, submitRoundWork } = require("../controllers/workflow.controllers");
 const { checkEmailDomain } = require("../services/student.services");
 const router = express.Router();
 const fitsBcrypt = (value) => Buffer.byteLength(String(value), "utf8") <= 72;
@@ -66,12 +69,16 @@ router.post("/verifyOtp", verifyRateLimit, [
     body("purpose").optional().isIn(["signup", "password_reset"]),
 ], validateRequest, verifyOtp);
 
+router.get('/academic-options', getAcademicOptions)
+
 router.post("/register",[
     body('email').custom(isIitrEmail).withMessage("Invalid IITR email address"),
     body('password').isLength({ min: 10, max: 128 }).custom(fitsBcrypt).withMessage("Password must be 10–72 bytes long"),
     body('name').isString().trim().isLength({ min: 2, max: 100 }).withMessage("Name must be between 2 and 100 characters"),
     body('branch').isString().trim().isLength({ min: 2, max: 100 }).withMessage("Branch must be between 2 and 100 characters"),
-    body('year').isString().trim().isLength({ min: 1, max: 20 }).withMessage("Year must be valid"),
+    body('academicYear').optional().isInt({ min: 1, max: 5 }).withMessage("Year must be valid"),
+    body('year').optional().custom((value) => [1, 2, 3, 4, 5, 'First year', 'Second year', 'Third year', 'Fourth year', 'Fifth year'].includes(value)).withMessage("Year must be valid"),
+    body().custom((value) => value.academicYear || value.year).withMessage("Academic year is required"),
     body('phoneNumber').isMobilePhone('any').withMessage("Invalid phone number"),
     body('enrollmentNumber').isString().isLength({ min: 5, max: 30 }).withMessage("Invalid enrollment number"),
     body('verificationToken').isString().isLength({ min: 20, max: 128 }).withMessage("Email verification is required")
@@ -88,8 +95,6 @@ router.get('/getProfile',studentAuth,getProfile)
 
 router.patch('/profile', studentAuth, [
   body('name').optional().isString().trim().isLength({ min: 2, max: 100 }),
-  body('branch').optional().isString().trim().isLength({ min: 2, max: 100 }),
-  body('year').optional().isString().trim().isLength({ min: 1, max: 20 }),
   body('phoneNumber').optional().isMobilePhone('any'),
   body('notificationPreferences').optional().isObject(),
   body('notificationPreferences.email').optional().isBoolean(),
@@ -183,6 +188,18 @@ router.post('/notifications/read-all', studentAuth, markAllNotificationsRead)
 router.get('/sessionRsvp', studentAuth, [query('sessionId').isMongoId()], validateRequest, getSessionRsvp)
 router.post('/sessionRsvp', studentAuth, [body('sessionId').isMongoId()], validateRequest, rsvpSession)
 router.post('/sessionRsvp/cancel', studentAuth, [body('sessionId').isMongoId()], validateRequest, cancelSessionRsvp)
+
+router.get('/events/:eventId/workflow', studentAuth, [
+  param('eventId').isMongoId(),
+], validateRequest, getMyEventWorkflow)
+
+router.put('/events/:eventId/rounds/:roundId/submission', studentAuth, upload.submissionUpload.array('files', 5), [
+  param('eventId').isMongoId(),
+  param('roundId').isMongoId(),
+  body('candidateId').isMongoId(),
+  body('answersJSON').optional().isString().isLength({ max: 50000 }),
+  body('fileKeysJSON').optional().isString().isLength({ max: 2000 }),
+], validateRequest, submitRoundWork)
 
 router.post('/forgotPassword',[
   body("email").custom(isIitrEmail).withMessage("Invalid IITR email address"),

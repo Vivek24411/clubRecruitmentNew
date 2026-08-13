@@ -1,12 +1,16 @@
 import { useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { Button, Card, Field, Input, Page, PageHeader } from "../components/ui";
+import { Button, Card, Field, Input, Page, PageHeader, Select } from "../components/ui";
 
 export default function AddClub() {
   const [name, setName] = useState("");
   const [userName, setUserName] = useState("");
   const [password, setPassword] = useState("");
+  const [accountEmail, setAccountEmail] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [sameEmail, setSameEmail] = useState(true);
+  const [category, setCategory] = useState("technical");
   const [isLoading, setIsLoading] = useState(false);
   const [clubLogo, setClubLogo] = useState(null);
   const [clubLogoPreview, setClubLogoPreview] = useState(null);
@@ -34,7 +38,7 @@ export default function AddClub() {
   const handleAddClub = async (event) => {
     event.preventDefault();
 
-    if (!name || !userName || !password) {
+    if (!name || !userName || !password || !accountEmail) {
       toast.warning("Please fill all fields");
       return;
     }
@@ -55,6 +59,10 @@ export default function AddClub() {
     formData.append("name", name);
     formData.append("userName", userName);
     formData.append("password", password);
+    formData.append("accountEmail", accountEmail);
+    formData.append("contactEmail", sameEmail ? accountEmail : contactEmail);
+    formData.append("useAccountEmailForContact", String(sameEmail));
+    formData.append("category", category);
     if (clubLogo) formData.append("clubLogo", clubLogo);
 
     setIsLoading(true);
@@ -68,6 +76,10 @@ export default function AddClub() {
         setName("");
         setUserName("");
         setPassword("");
+        setAccountEmail("");
+        setContactEmail("");
+        setSameEmail(true);
+        setCategory("technical");
         clearLogo();
       } else {
         toast.error(response.data.msg);
@@ -132,6 +144,17 @@ export default function AddClub() {
                 required
               />
             </Field>
+            <Field label="Account email" id="accountEmail" required hint="Private. Used for OTP password recovery.">
+              <Input id="accountEmail" type="email" value={accountEmail} onChange={(event) => setAccountEmail(event.target.value)} autoComplete="email" required />
+            </Field>
+            <Field label="Club category" id="category" required>
+              <Select id="category" value={category} onChange={(event) => setCategory(event.target.value)}>
+                <option value="technical">Technical club</option>
+                <option value="cultural">Cultural club</option>
+              </Select>
+            </Field>
+            <label className="flex items-center gap-3 text-sm sm:col-span-2"><input type="checkbox" checked={sameEmail} onChange={(event) => setSameEmail(event.target.checked)} />Use the account email as the public contact email</label>
+            {!sameEmail && <Field label="Public contact email" id="contactEmail" className="sm:col-span-2" required><Input id="contactEmail" type="email" value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} required /></Field>}
           </div>
         </Card>
 
@@ -182,7 +205,7 @@ export default function AddClub() {
                   <img
                     src={clubLogoPreview}
                     alt="Club logo preview"
-                    className="h-full w-full object-cover"
+                    className="h-full w-full bg-surface object-contain p-1"
                   />
                   <button
                     type="button"

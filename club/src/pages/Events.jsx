@@ -93,7 +93,7 @@ export default function Events() {
                         src={event.eventBanner}
                         alt=""
                         loading="lazy"
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain"
                         onError={(error) => {
                           error.currentTarget.style.display = "none";
                         }}

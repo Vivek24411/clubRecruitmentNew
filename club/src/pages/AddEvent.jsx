@@ -1,131 +1,82 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
-import {
-  Button,
-  Card,
-  Field,
-  Input,
-  Page,
-  PageHeader,
-  Select,
-  Textarea,
-} from "../components/ui";
+import RoundBuilder from "../components/RoundBuilder";
+import { Button, Card, Field, Input, Page, PageHeader, Select, Textarea } from "../components/ui";
 
-const ROUND_SUGGESTIONS = ["Test", "Submission", "Interview", "Group Discussion", "Task"];
+const YEARS = [
+  [1, "First year"], [2, "Second year"], [3, "Third year"], [4, "Fourth year"], [5, "Fifth year"],
+];
+
+const initialForm = {
+  title: "",
+  eventType: "recruitment",
+  shortDescription: "",
+  longDescription: "",
+  registerationDeadline: "",
+  maxParticipants: 100,
+  registrationType: "individual",
+  minTeamSize: 1,
+  maxTeamSize: 1,
+  eligibility: "",
+  eligibilityYears: [],
+  eligibilityBranches: [],
+  allowPassedOut: false,
+  ContactInfo: [],
+  status: "draft",
+  deadlineNotificationsEnabled: true,
+  rounds: [],
+};
 
 export default function AddEvent() {
-  const [title, setTitle] = useState("");
-  const [shortDescription, setShortDescription] = useState("");
-  const [longDescription, setLongDescription] = useState("");
-  const [registerationDeadline, setRegisterationDeadline] = useState("");
-  const [maxParticipants, setMaxParticipants] = useState(0);
-  const [ContactInfo, setContactInfo] = useState([]);
-  const [eligibility, setEligibility] = useState("");
-  const [numberOfRounds, setNumberOfRounds] = useState(0);
-  const [roundDetails, setRoundDetails] = useState([]);
-  const [eventBanner, setEventBanner] = useState(null);
-  const [eventBannerPreview, setEventBannerPreview] = useState(null);
-  const [registrationType, setRegistrationType] = useState("team");
-  const [minTeamSize, setMinTeamSize] = useState(1);
-  const [status, setStatus] = useState("draft");
+  const [form, setForm] = useState(initialForm);
+  const [banner, setBanner] = useState(null);
+  const [preview, setPreview] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [branches, setBranches] = useState([]);
+  const set = (key, value) => setForm((previous) => ({ ...previous, [key]: value }));
 
-  function handleImageInput(event) {
-    const file = event.target.files[0];
-    if (!file) {
-      setEventBanner(null);
-      setEventBannerPreview(null);
-      return;
-    }
-    setEventBanner(file);
-    const reader = new FileReader();
-    reader.onload = (loaded) => setEventBannerPreview(loaded.target.result);
-    reader.readAsDataURL(file);
-  }
+  useEffect(() => {
+    axios.get(`${import.meta.env.VITE_BASE_URI}/student/academic-options`)
+      .then(({ data }) => data.success && setBranches(data.academicConfiguration.branches || []))
+      .catch(() => {});
+  }, []);
 
-  const setRound = (index, changes) =>
-    setRoundDetails((previous) => {
-      const next = [...previous];
-      next[index] = { Round: index + 1, ...next[index], ...changes };
-      return next;
-    });
-
-  const resetForm = () => {
-    setTitle("");
-    setShortDescription("");
-    setLongDescription("");
-    setRegisterationDeadline("");
-    setMaxParticipants(0);
-    setContactInfo([]);
-    setEligibility("");
-    setNumberOfRounds(0);
-    setRoundDetails([]);
-    setEventBanner(null);
-    setEventBannerPreview(null);
-    setRegistrationType("team");
-    setMinTeamSize(1);
-    setStatus("draft");
+  const selectBanner = (event) => {
+    const file = event.target.files[0] || null;
+    setBanner(file);
+    setPreview(file ? URL.createObjectURL(file) : null);
   };
 
-  const handleSubmit = async (event) => {
+  const submit = async (event) => {
     event.preventDefault();
-
-    if (!eventBanner) {
-      toast.error("Please upload an event banner");
-      return;
+    if (banner && (!['image/jpeg', 'image/png', 'image/webp'].includes(banner.type) || banner.size > 5 * 1024 * 1024)) {
+      return toast.error("Choose a JPG, PNG, or WebP banner smaller than 5 MB");
     }
-    if (!["image/jpeg", "image/png", "image/webp"].includes(eventBanner.type)) {
-      toast.error("Please upload a valid image file (JPG, PNG, or WebP)");
-      return;
-    }
-    if (eventBanner.size > 5 * 1024 * 1024) {
-      toast.error("Image size should be less than 5MB");
-      return;
-    }
-    if (numberOfRounds > 0 && numberOfRounds !== roundDetails.length) {
-      toast.error("Please fill details for all rounds");
-      return;
-    }
-
+    if (!form.rounds.length) return toast.error("Add at least one event round");
     setSubmitting(true);
     try {
-      const formData = new FormData();
-      formData.append("eventBanner", eventBanner);
-      formData.append("title", title);
-      formData.append("shortDescription", shortDescription);
-      formData.append("longDescription", longDescription);
-      formData.append("registerationDeadline", registerationDeadline);
-      formData.append("maxParticipants", maxParticipants);
-      formData.append("registrationType", registrationType);
-      formData.append("minTeamSize", minTeamSize);
-      formData.append("maxTeamSize", registrationType === "individual" ? 1 : maxParticipants);
-      formData.append("status", status);
-      if (ContactInfo && ContactInfo.length > 0) {
-        ContactInfo.forEach((contact, index) => {
-          formData.append(`ContactInfo[${index}]`, contact);
-        });
-      }
-      formData.append("eligibility", eligibility || "");
-      formData.append("numberOfRounds", numberOfRounds);
-      if (roundDetails && roundDetails.length > 0) {
-        formData.append("roundDetailsJSON", JSON.stringify(roundDetails));
-      }
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_BASE_URI}/club/addEvent`,
-        formData,
-      );
-
-      if (response.data.success) {
-        toast.success("Event added successfully");
-        resetForm();
-      } else {
-        toast.error(response.data.msg || "Failed to add event");
-      }
+      const payload = new FormData();
+      const normalized = {
+        ...form,
+        minTeamSize: form.registrationType === "individual" ? 1 : form.minTeamSize,
+        maxTeamSize: form.registrationType === "individual" ? 1 : form.maxTeamSize,
+      };
+      ["title", "eventType", "shortDescription", "longDescription", "registerationDeadline", "maxParticipants", "registrationType", "minTeamSize", "maxTeamSize", "eligibility", "status", "allowPassedOut", "deadlineNotificationsEnabled"].forEach((key) => payload.append(key, normalized[key]));
+      payload.append("numberOfRounds", normalized.rounds.length);
+      payload.append("roundsJSON", JSON.stringify(normalized.rounds));
+      payload.append("eligibilityYearsJSON", JSON.stringify(normalized.eligibilityYears));
+      payload.append("eligibilityBranchesJSON", JSON.stringify(normalized.eligibilityBranches));
+      normalized.ContactInfo.filter(Boolean).forEach((item, index) => payload.append(`ContactInfo[${index}]`, item));
+      if (banner) payload.append("eventBanner", banner);
+      const { data } = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/addEvent`, payload);
+      if (!data.success) throw new Error(data.msg);
+      toast.success(data.msg);
+      setForm(initialForm);
+      setBanner(null);
+      setPreview(null);
     } catch (error) {
-      console.error("Error adding event:", error);
-      toast.error(error.response?.data?.msg || "An error occurred while adding the event");
+      toast.error(error.response?.data?.msg || error.message || "Could not create event");
     } finally {
       setSubmitting(false);
     }
@@ -133,281 +84,52 @@ export default function AddEvent() {
 
   return (
     <Page width="5xl">
-      <PageHeader
-        eyebrow="New pipeline"
-        title="Create a recruitment event"
-        description="Save it as a draft while you work, then publish when you're ready for applications."
-      />
-
-      <form onSubmit={handleSubmit} className="mt-10 space-y-6">
-        {/* Basics --------------------------------------------------------- */}
-        <Card className="reveal p-6">
-          <h2 className="display text-xl">Basics</h2>
-          <div className="mt-6 space-y-5">
-            <Field label="Event title" id="title" required>
-              <Input
-                id="title"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                required
-                placeholder="e.g. Autumn Developer Inductions"
-              />
-            </Field>
-
-            <Field
-              label="Short description"
-              id="shortDescription"
-              required
-              hint="One line. This is what students see on event cards."
-            >
-              <Input
-                id="shortDescription"
-                value={shortDescription}
-                onChange={(event) => setShortDescription(event.target.value)}
-                required
-                placeholder="A brief summary of the event"
-              />
-            </Field>
-
-            <Field label="Full description" id="longDescription" required>
-              <Textarea
-                id="longDescription"
-                rows={6}
-                value={longDescription}
-                onChange={(event) => setLongDescription(event.target.value)}
-                required
-                placeholder="What the role involves, what you look for, rules, and anything else applicants should know."
-              />
-            </Field>
+      <PageHeader eyebrow="New event" title="Build an event pipeline" description="Combine tests, submissions, discussions, presentations, and interviews in the order your event needs." />
+      <form onSubmit={submit} className="mt-10 space-y-6">
+        <Card className="p-5 sm:p-6">
+          <h2 className="display text-xl">Event details</h2>
+          <div className="mt-6 grid gap-5 sm:grid-cols-2">
+            <Field label="Event title" id="title" className="sm:col-span-2" required><Input id="title" value={form.title} onChange={(event) => set("title", event.target.value)} required /></Field>
+            <Field label="Event type" id="eventType"><Select id="eventType" value={form.eventType} onChange={(event) => set("eventType", event.target.value)}><option value="recruitment">Recruitment</option><option value="hackathon">Hackathon</option><option value="competition">Competition</option><option value="workshop">Workshop</option><option value="other">Other</option></Select></Field>
+            <Field label="Visibility" id="status"><Select id="status" value={form.status} onChange={(event) => set("status", event.target.value)}><option value="draft">Draft</option><option value="published">Published</option></Select></Field>
+            <Field label="Short description" id="shortDescription" className="sm:col-span-2" required><Input id="shortDescription" maxLength="500" value={form.shortDescription} onChange={(event) => set("shortDescription", event.target.value)} required /></Field>
+            <Field label="Full description" id="longDescription" className="sm:col-span-2" required><Textarea id="longDescription" rows="6" value={form.longDescription} onChange={(event) => set("longDescription", event.target.value)} required /></Field>
           </div>
         </Card>
 
-        {/* Banner --------------------------------------------------------- */}
-        <Card className="reveal p-6" style={{ "--d": "70ms" }}>
-          <h2 className="display text-xl">
-            Banner <span className="text-accent">*</span>
-          </h2>
-          <p className="mt-1.5 text-sm text-ink-3">JPG, PNG, or WebP under 5&nbsp;MB.</p>
-
-          <Field label="Upload image" id="banner" className="mt-5">
-            <input
-              id="banner"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={handleImageInput}
-              required
-              className="block w-full text-sm text-ink-2 file:mr-4 file:cursor-pointer file:rounded-sm file:border file:border-line-2 file:bg-surface file:px-4 file:py-2 file:text-sm file:font-semibold file:text-ink hover:file:bg-paper-2"
-            />
-          </Field>
-
-          {eventBannerPreview && (
-            <figure className="animate-scale-in mt-5">
-              <img
-                src={eventBannerPreview}
-                alt="Banner preview"
-                className="aspect-[21/7] w-full rounded-sm border border-line object-cover"
-              />
-              <figcaption className="mt-2 text-xs text-ink-3">
-                Preview · {eventBanner?.name} ·{" "}
-                {eventBanner ? (eventBanner.size / 1024 / 1024).toFixed(2) : 0} MB
-              </figcaption>
-            </figure>
-          )}
-        </Card>
-
-        {/* Registration --------------------------------------------------- */}
-        <Card className="reveal p-6" style={{ "--d": "140ms" }}>
-          <h2 className="display text-xl">Registration</h2>
-          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Deadline" id="deadline" required>
-              <Input
-                id="deadline"
-                type="date"
-                value={registerationDeadline}
-                onChange={(event) => setRegisterationDeadline(event.target.value)}
-                required
-              />
-            </Field>
-
-            <Field label="Max participants" id="maxParticipants" required>
-              <Input
-                id="maxParticipants"
-                type="number"
-                min={1}
-                className="tabular"
-                value={maxParticipants}
-                onChange={(event) => setMaxParticipants(Number(event.target.value))}
-                required
-                placeholder="e.g. 100"
-              />
-            </Field>
-
-            <Field label="Registration type" id="registrationType">
-              <Select
-                id="registrationType"
-                value={registrationType}
-                onChange={(event) => setRegistrationType(event.target.value)}
-              >
-                <option value="individual">Individual</option>
-                <option value="team">Team</option>
-                <option value="optional_team">Optional team</option>
-              </Select>
-            </Field>
-
-            <Field
-              label="Minimum team size"
-              id="minTeamSize"
-              hint={registrationType === "individual" ? "Fixed at 1 for individual events." : undefined}
-            >
-              <Input
-                id="minTeamSize"
-                type="number"
-                min="1"
-                className="tabular disabled:bg-paper-2 disabled:text-ink-4"
-                disabled={registrationType === "individual"}
-                value={registrationType === "individual" ? 1 : minTeamSize}
-                onChange={(event) => setMinTeamSize(Number(event.target.value))}
-              />
-            </Field>
-
-            <Field label="Eligibility" id="eligibility">
-              <Input
-                id="eligibility"
-                value={eligibility}
-                onChange={(event) => setEligibility(event.target.value)}
-                placeholder="e.g. First and second year only"
-              />
-            </Field>
-
-            <Field
-              label="Contact info"
-              id="contact"
-              hint="Comma separated — phone numbers or emails."
-            >
-              <Input
-                id="contact"
-                value={ContactInfo.join(", ")}
-                onChange={(event) =>
-                  setContactInfo(event.target.value.split(",").map((value) => value.trim()))
-                }
-                placeholder="98765 43210, lead@club.iitr.ac.in"
-              />
-            </Field>
+        <Card className="p-5 sm:p-6">
+          <h2 className="display text-xl">Registration and eligibility</h2>
+          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Deadline" id="deadline" required><Input id="deadline" type="date" value={form.registerationDeadline} onChange={(event) => set("registerationDeadline", event.target.value)} required /></Field>
+            <Field label="Participant capacity" id="capacity" required><Input id="capacity" type="number" min="1" max="10000" value={form.maxParticipants} onChange={(event) => set("maxParticipants", Number(event.target.value))} required /></Field>
+            <Field label="Registration type" id="registrationType"><Select id="registrationType" value={form.registrationType} onChange={(event) => set("registrationType", event.target.value)}><option value="individual">Individual</option><option value="team">Team only</option><option value="optional_team">Individual or team</option></Select></Field>
+            {form.registrationType !== "individual" && <Field label="Team size" id="minTeam"><div className="grid grid-cols-2 gap-2"><Input aria-label="Minimum team size" id="minTeam" type="number" min="1" value={form.minTeamSize} onChange={(event) => set("minTeamSize", Number(event.target.value))} /><Input aria-label="Maximum team size" type="number" min={form.minTeamSize} value={form.maxTeamSize} onChange={(event) => set("maxTeamSize", Number(event.target.value))} /></div></Field>}
           </div>
-        </Card>
-
-        {/* Rounds --------------------------------------------------------- */}
-        <Card className="reveal p-6" style={{ "--d": "200ms" }}>
-          <h2 className="display text-xl">Selection rounds</h2>
-          <p className="mt-1.5 text-sm text-ink-3">
-            Set how many rounds you run, then describe each one.
-          </p>
-
-          <Field label="Number of rounds" id="numberOfRounds" className="mt-6 max-w-40">
-            <Input
-              id="numberOfRounds"
-              type="number"
-              min={0}
-              className="tabular"
-              value={numberOfRounds}
-              onChange={(event) => setNumberOfRounds(Number(event.target.value))}
-              placeholder="e.g. 3"
-            />
-          </Field>
-
-          <datalist id="round-types">
-            {ROUND_SUGGESTIONS.map((suggestion) => (
-              <option key={suggestion} value={suggestion} />
-            ))}
-          </datalist>
-
-          {numberOfRounds > 0 && (
-            <ol className="relative mt-8 space-y-6 pl-8">
-              <span
-                className="absolute bottom-3 left-[0.6875rem] top-3 w-px bg-line"
-                aria-hidden="true"
-              />
-              {Array.from({ length: numberOfRounds }, (_, index) => (
-                <li key={index} className="reveal relative" style={{ "--d": `${index * 60}ms` }}>
-                  <span className="absolute -left-8 grid h-6 w-6 place-items-center rounded-full border border-line bg-surface text-[0.6875rem] font-semibold text-ink-2">
-                    {index + 1}
-                  </span>
-
-                  <Field label={`Round ${index + 1} type`} id={`round-${index}`}>
-                    <Input
-                      id={`round-${index}`}
-                      list="round-types"
-                      value={roundDetails[index]?.Type || ""}
-                      onChange={(event) => setRound(index, { Type: event.target.value })}
-                      placeholder="Test, Submission, Interview…"
-                    />
-                  </Field>
-
-                  {roundDetails[index]?.Type === "Test" && (
-                    <Field label="Test date" id={`test-${index}`} className="mt-4">
-                      <Input
-                        id={`test-${index}`}
-                        type="date"
-                        value={roundDetails[index]?.TestDate || ""}
-                        onChange={(event) => setRound(index, { TestDate: event.target.value })}
-                      />
-                    </Field>
-                  )}
-
-                  {roundDetails[index]?.Type === "Submission" && (
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                      <Field label="Submission deadline" id={`sub-${index}`}>
-                        <Input
-                          id={`sub-${index}`}
-                          type="date"
-                          value={roundDetails[index]?.SubmissionDeadline || ""}
-                          onChange={(event) =>
-                            setRound(index, { SubmissionDeadline: event.target.value })
-                          }
-                        />
-                      </Field>
-                      <Field label="Google Form link" id={`form-${index}`}>
-                        <Input
-                          id={`form-${index}`}
-                          type="url"
-                          value={roundDetails[index]?.GoogleFormLink || ""}
-                          onChange={(event) =>
-                            setRound(index, { GoogleFormLink: event.target.value })
-                          }
-                          placeholder="https://forms.gle/…"
-                        />
-                      </Field>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
-        </Card>
-
-        {/* Publish -------------------------------------------------------- */}
-        <Card className="reveal p-6" style={{ "--d": "260ms" }}>
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-            <Field label="Visibility" id="status" className="sm:w-56">
-              <Select
-                id="status"
-                value={status}
-                onChange={(event) => setStatus(event.target.value)}
-              >
-                <option value="draft">Save as draft</option>
-                <option value="published">Publish now</option>
-              </Select>
-            </Field>
-
-            <Button type="submit" size="lg" loading={submitting}>
-              {submitting
-                ? "Creating…"
-                : status === "published"
-                  ? "Create and publish"
-                  : "Create draft"}
-            </Button>
+          <div className="mt-6">
+            <p className="label">Eligible academic years</p>
+            <div className="mt-2 flex flex-wrap gap-3">
+              {YEARS.map(([value, label]) => <label key={value} className="flex items-center gap-2 rounded-sm border border-line px-3 py-2 text-sm"><input type="checkbox" checked={form.eligibilityYears.includes(value)} onChange={(event) => set("eligibilityYears", event.target.checked ? [...form.eligibilityYears, value] : form.eligibilityYears.filter((year) => year !== value))} />{label}</label>)}
+              <label className="flex items-center gap-2 rounded-sm border border-line px-3 py-2 text-sm"><input type="checkbox" checked={form.allowPassedOut} onChange={(event) => set("allowPassedOut", event.target.checked)} />Passed out</label>
+            </div>
+            {!form.eligibilityYears.length && !form.allowPassedOut && <p className="hint">No year selected means open to every current student.</p>}
           </div>
+          <div className="mt-5 grid gap-5 sm:grid-cols-2">
+            <Field label="Additional eligibility" id="eligibility"><Textarea id="eligibility" rows="3" className="min-h-0" value={form.eligibility} onChange={(event) => set("eligibility", event.target.value)} /></Field>
+            <Field label="Contact emails or phone numbers" id="contact"><Textarea id="contact" rows="3" className="min-h-0" value={form.ContactInfo.join("\n")} onChange={(event) => set("ContactInfo", event.target.value.split("\n").map((item) => item.trim()))} /></Field>
+          </div>
+          <Field label="Eligible branches" id="eligibleBranch" className="mt-5" hint="Leave empty to allow every branch."><Select id="eligibleBranch" value="" onChange={(event) => event.target.value && !form.eligibilityBranches.includes(event.target.value) && set("eligibilityBranches", [...form.eligibilityBranches, event.target.value])}><option value="">Add a branch</option>{branches.filter((branch) => !form.eligibilityBranches.includes(branch.name)).map((branch) => <option key={branch.name} value={branch.name}>{branch.name}</option>)}</Select><div className="mt-2 flex flex-wrap gap-2">{form.eligibilityBranches.map((branch) => <button key={branch} type="button" className="badge badge-neutral" onClick={() => set("eligibilityBranches", form.eligibilityBranches.filter((item) => item !== branch))}>{branch} x</button>)}</div></Field>
         </Card>
+
+        <Card className="p-5 sm:p-6"><RoundBuilder rounds={form.rounds} onChange={(rounds) => set("rounds", rounds)} registrationType={form.registrationType} /></Card>
+
+        <Card className="p-5 sm:p-6">
+          <h2 className="display text-xl">Event banner</h2>
+          <Field label="JPG, PNG, or WebP under 5 MB" id="banner" className="mt-5"><input id="banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={selectBanner} className="block w-full text-sm file:mr-3 file:rounded-sm file:border file:border-line file:bg-surface file:px-4 file:py-2" /></Field>
+          {preview && <img src={preview} alt="Event banner preview" className="mt-5 aspect-[21/7] w-full rounded-sm border border-line bg-paper-2 object-contain" />}
+          <label className="mt-5 flex items-center gap-3 text-sm"><input type="checkbox" checked={form.deadlineNotificationsEnabled} onChange={(event) => set("deadlineNotificationsEnabled", event.target.checked)} />Allow deadline-change email notifications for this event</label>
+        </Card>
+
+        <Button type="submit" size="lg" loading={submitting}>{submitting ? "Creating..." : form.status === "published" ? "Create and publish" : "Save draft"}</Button>
       </form>
     </Page>
   );

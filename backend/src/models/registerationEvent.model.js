@@ -55,6 +55,16 @@ const registerationEventSchema = new mongoose.Schema({
         type: Number,
         default: null,
     },
+    currentRoundId: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: null,
+    },
+    source: {
+        type: { type: String, enum: ['direct', 'extracted'], default: 'direct' },
+        eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', default: null },
+        roundId: { type: mongoose.Schema.Types.ObjectId, default: null },
+        registrationId: { type: mongoose.Schema.Types.ObjectId, ref: 'RegisterationEvent', default: null },
+    },
     updatedAt: {
         type: Date,
         default: Date.now,

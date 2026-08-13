@@ -8,11 +8,17 @@ const sessionModel = require("../models/session.model");
 const eventModel = require("../models/event.model");
 const registerationEventModel = require("../models/registerationEvent.model");
 const sessionRsvpModel = require("../models/sessionRsvp.model");
+const roundCandidateModel = require("../models/roundCandidate.model");
+const studentModel = require("../models/student.model");
 const { clearSessionCookie, setSessionCookie } = require("../utils/auth");
 const { notifyStudent, notifyTeam } = require("../services/notification.services");
 const { sendOtp } = require("../services/student.services");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
+const {
+  ensureEventRounds,
+  normalizeRounds,
+} = require("../services/eventWorkflow.services");
 const DUMMY_PASSWORD_HASH = "$2b$12$4Qj6z7mmoEgcnxHLS0xDR.jjYdMm05/mtrLZVBInMaqjKAuvz9taa";
 const CLUB_PASSWORD_RESET_PURPOSE = "club_password_reset";
 
@@ -47,6 +53,17 @@ function normalizedRoundDetails(rounds) {
     if (round.GoogleFormLink) normalized.GoogleFormLink = String(round.GoogleFormLink).trim().slice(0, 500);
     return normalized;
   });
+}
+
+function parsedArray(value, fallback = []) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string" || !value) return fallback;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 module.exports.clubLogin = async (req, res) => {
@@ -135,8 +152,8 @@ module.exports.sendPasswordResetOtp = async (req, res) => {
   const genericMessage = "If those details match a club account, an OTP has been sent";
 
   try {
-    const club = await clubModel.findOne({ userName }).select("contactEmail");
-    const accountMatches = club && normalizeEmail(club.contactEmail) === email;
+    const club = await clubModel.findOne({ userName }).select("accountEmail contactEmail");
+    const accountMatches = club && normalizeEmail(club.accountEmail || club.contactEmail) === email;
     const otp = crypto.randomInt(100000, 1000000).toString();
     const hashedOtp = await bcrypt.hash(otp, 10);
 
@@ -223,8 +240,8 @@ module.exports.resetPassword = async (req, res) => {
       return res.status(400).json({ success: false, msg: "Reset verification expired or invalid" });
     }
 
-    const club = await clubModel.findOne({ userName }).select("+password +tokenVersion contactEmail");
-    if (!club || normalizeEmail(club.contactEmail) !== email) {
+    const club = await clubModel.findOne({ userName }).select("+password +tokenVersion accountEmail contactEmail");
+    if (!club || normalizeEmail(club.accountEmail || club.contactEmail) !== email) {
       return res.status(400).json({ success: false, msg: "Reset verification expired or invalid" });
     }
 
@@ -323,13 +340,44 @@ module.exports.updateProfile = async (req, res) => {
   const updateData = Object.fromEntries(
     Object.entries(req.body).filter(([key]) => allowedFields.includes(key))
   );
+  if (req.body.useAccountEmailForContact === true || req.body.useAccountEmailForContact === "true") {
+    updateData.contactEmail = req.club.accountEmail || req.club.contactEmail;
+  }
+  if (req.body.resourcesJSON !== undefined) {
+    updateData.resources = parsedArray(req.body.resourcesJSON).slice(0, 50).map((resource) => ({
+      title: String(resource.title || "").trim().slice(0, 150),
+      description: String(resource.description || "").trim().slice(0, 1000),
+      url: String(resource.url || "").trim().slice(0, 2048),
+      type: ["link", "document", "video", "repository", "other"].includes(resource.type) ? resource.type : "link",
+    })).filter((resource) => resource.title && resource.url);
+  }
+  if (req.body.annualEventsJSON !== undefined) {
+    updateData.annualEvents = parsedArray(req.body.annualEventsJSON).slice(0, 30).map((annualEvent) => ({
+      name: String(annualEvent.name || "").trim().slice(0, 150),
+      description: String(annualEvent.description || "").trim().slice(0, 3000),
+      eligibility: String(annualEvent.eligibility || "").trim().slice(0, 1000),
+      perks: String(annualEvent.perks || "").trim().slice(0, 1000),
+      tentativeDate: String(annualEvent.tentativeDate || "").trim().slice(0, 100),
+      url: String(annualEvent.url || "").trim().slice(0, 2048),
+    })).filter((annualEvent) => annualEvent.name);
+  }
+
+  const oldLogoPublicId = req.club.clubLogoPublicId;
+  if (req.file) {
+    updateData.clubLogo = req.file.path;
+    updateData.clubLogoPublicId = req.file.filename;
+  }
 
   try {
     const club = await clubModel
       .findByIdAndUpdate(req.club._id, updateData, { new: true, runValidators: true })
       .select("-password");
     if (!club) {
+      await destroyUploadedFile(req.file);
       return res.json({ success: false, msg: "Club not found" });
+    }
+    if (req.file && oldLogoPublicId && oldLogoPublicId !== req.file.filename) {
+      await destroyCloudinaryImage(oldLogoPublicId);
     }
     await writeAudit({ actorRole: "club", actorId: req.club._id, action: "profile.update", targetType: "club", targetId: req.club._id, metadata: { fields: Object.keys(updateData) } });
     return res.json({
@@ -338,8 +386,8 @@ module.exports.updateProfile = async (req, res) => {
       club,
     });
   } catch (err) {
-    
-    return res.json({ success: false, msg: "Failed to update club profile" });
+    await destroyUploadedFile(req.file);
+    return res.status(400).json({ success: false, msg: err?.code === 11000 ? "Club name or username is already in use" : "Failed to update club profile" });
   }
 };
 
@@ -398,6 +446,7 @@ module.exports.addEvent = async (req, res) => {
     minTeamSize,
     maxTeamSize,
     status,
+    eventType,
   } = req.body;
   
   // Handle ContactInfo array properly
@@ -413,15 +462,13 @@ module.exports.addEvent = async (req, res) => {
     }
   }
   
-  // Handle roundDetails
-  let roundDetails = [];
-  if (req.body.roundDetailsJSON) {
-    try {
-      roundDetails = normalizedRoundDetails(JSON.parse(req.body.roundDetailsJSON));
-    } catch (err) {
-      console.error("Error parsing roundDetails:", err);
-    }
-  }
+  const rawRounds = parsedArray(req.body.roundsJSON || req.body.roundDetailsJSON);
+  const rounds = normalizeRounds(rawRounds);
+  const roundDetails = req.body.roundsJSON ? [] : normalizedRoundDetails(rawRounds);
+  const eligibilityYears = parsedArray(req.body.eligibilityYearsJSON)
+    .map(Number).filter((year) => year >= 1 && year <= 5);
+  const eligibilityBranches = parsedArray(req.body.eligibilityBranchesJSON)
+    .map((branch) => String(branch).trim()).filter(Boolean).slice(0, 100);
 
 
   let eventBanner = "";
@@ -453,10 +500,16 @@ module.exports.addEvent = async (req, res) => {
       ContactInfo,
       roundDetails,
       eligibility,
-      numberOfRounds,
       eventBanner,
       eventBannerPublicId,
       status: status || "published",
+      eventType: eventType || "recruitment",
+      rounds,
+      numberOfRounds: rounds.length,
+      eligibilityYears,
+      eligibilityBranches,
+      allowPassedOut: req.body.allowPassedOut === true || req.body.allowPassedOut === "true",
+      deadlineNotificationsEnabled: req.body.deadlineNotificationsEnabled !== "false",
     });
 
     await writeAudit({ actorRole: "club", actorId: req.club._id, action: "event.create", targetType: "event", targetId: event._id, metadata: { status: event.status } });
@@ -496,6 +549,7 @@ module.exports.getEvent = async (req, res) => {
       _id: eventId,
       clubId: req.club._id,
     });
+    await ensureEventRounds(event);
    
 
     if (!event) {
@@ -700,10 +754,15 @@ module.exports.updateEvent = async (req, res) => {
     return res.status(404).json({ success: false, msg: "Event not found" });
   }
 
+  const previousDeadline = event.registrationDeadlineAt ? new Date(event.registrationDeadlineAt) : null;
+  const previousRoundDeadlines = new Map((event.rounds || []).map((round) => [
+    String(round._id),
+    round.submissionDeadlineAt ? new Date(round.submissionDeadlineAt).toISOString() : "",
+  ]));
   const allowedFields = [
     "title", "shortDescription", "longDescription", "eligibility", "ContactInfo",
     "registrationType", "minTeamSize", "maxTeamSize", "maxParticipants",
-    "numberOfRounds", "registerationDeadline",
+    "numberOfRounds", "registerationDeadline", "eventType", "deadlineNotificationsEnabled",
   ];
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) event[field] = req.body[field];
@@ -712,6 +771,27 @@ module.exports.updateEvent = async (req, res) => {
     event.registrationDeadlineAt = req.body.registerationDeadline
       ? new Date(`${req.body.registerationDeadline}T23:59:59.999+05:30`)
       : null;
+  }
+  if (req.body.contactInfoJSON !== undefined) {
+    event.ContactInfo = parsedArray(req.body.contactInfoJSON).map((item) => String(item).trim().slice(0, 200)).filter(Boolean).slice(0, 10);
+  }
+  if (req.body.eligibilityYearsJSON !== undefined) {
+    event.eligibilityYears = parsedArray(req.body.eligibilityYearsJSON).map(Number).filter((year) => year >= 1 && year <= 5);
+  }
+  if (req.body.eligibilityBranchesJSON !== undefined) {
+    event.eligibilityBranches = parsedArray(req.body.eligibilityBranchesJSON).map((branch) => String(branch).trim()).filter(Boolean).slice(0, 100);
+  }
+  if (req.body.allowPassedOut !== undefined) event.allowPassedOut = req.body.allowPassedOut === true || req.body.allowPassedOut === "true";
+  if (req.body.roundsJSON !== undefined) {
+    const rounds = normalizeRounds(parsedArray(req.body.roundsJSON));
+    const retainedRoundIds = new Set(rounds.filter((round) => round._id).map((round) => String(round._id)));
+    const removedRoundIds = (event.rounds || []).filter((round) => !retainedRoundIds.has(String(round._id))).map((round) => round._id);
+    if (removedRoundIds.length && await roundCandidateModel.exists({ eventId: event._id, roundId: { $in: removedRoundIds } })) {
+      await destroyUploadedFile(req.file);
+      return res.status(409).json({ success: false, msg: "A round with candidate activity cannot be removed. Keep it and edit its details instead" });
+    }
+    event.rounds = rounds;
+    event.numberOfRounds = rounds.length;
   }
   const oldBannerPublicId = event.eventBannerPublicId;
   if (req.file) {
@@ -726,6 +806,25 @@ module.exports.updateEvent = async (req, res) => {
   }
   if (req.file && oldBannerPublicId && oldBannerPublicId !== req.file.filename) {
     await destroyCloudinaryImage(oldBannerPublicId);
+  }
+  const registrationDeadlineChanged = String(previousDeadline?.toISOString() || "") !== String(event.registrationDeadlineAt?.toISOString() || "");
+  const changedRoundDeadlines = (event.rounds || []).filter((round) =>
+    previousRoundDeadlines.has(String(round._id))
+    && previousRoundDeadlines.get(String(round._id)) !== String(round.submissionDeadlineAt?.toISOString() || ""));
+  const deadlineChanged = registrationDeadlineChanged || changedRoundDeadlines.length > 0;
+  const notifyDeadlineChange = req.body.notifyRegistrants === true || req.body.notifyRegistrants === "true";
+  if (deadlineChanged && notifyDeadlineChange) {
+    const registrations = await registerationEventModel.find({ eventId: event._id, overallStatus: { $ne: "withdrawn" } });
+    await Promise.all(registrations.map((registration) => notifyTeam(registration, {
+      type: "event_deadline_changed",
+      title: `Deadline updated for ${event.title}`,
+      message: registrationDeadlineChanged
+        ? (event.registrationDeadlineAt
+          ? `The registration deadline is now ${new Date(event.registrationDeadlineAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}.`
+          : "The registration deadline was removed. Check the event page for current details.")
+        : `${changedRoundDeadlines.map((round) => round.title).join(", ")} submission deadline was updated. Check the event page for the new timing.`,
+      link: `/event/${event._id}`,
+    })));
   }
   await writeAudit({ actorRole: "club", actorId: req.club._id, action: "event.update", targetType: "event", targetId: event._id });
   return res.json({ success: true, msg: "Event updated successfully", event });
@@ -755,6 +854,7 @@ module.exports.updateSession = async (req, res) => {
   const session = await sessionModel.findOne({ _id: req.params.sessionId, clubId: req.club._id });
   if (!session) return res.status(404).json({ success: false, msg: "Session not found" });
   const previousStatus = session.status;
+  const previousSchedule = { date: session.date, time: session.time, venue: session.venue };
   const confirmedCount = await sessionRsvpModel.countDocuments({
     sessionId: session._id,
     status: { $in: ["confirmed", "attended"] },
@@ -815,6 +915,16 @@ module.exports.updateSession = async (req, res) => {
       title: `${session.title} was cancelled`,
       message: "The club cancelled this session.",
       link: "/sessions",
+    })));
+  }
+  const scheduleChanged = ["date", "time", "venue"].some((field) => String(previousSchedule[field] || "") !== String(session[field] || ""));
+  if (scheduleChanged && session.status !== "cancelled") {
+    const activeRsvps = await sessionRsvpModel.find({ sessionId: session._id, status: { $in: ["confirmed", "waitlisted"] } });
+    await Promise.all(activeRsvps.map((rsvp) => notifyStudent(rsvp.studentId, {
+      type: "session_schedule_changed",
+      title: `${session.title} schedule updated`,
+      message: `The session is now scheduled for ${session.date} at ${session.time}${session.venue ? ` in ${session.venue}` : ""}.`,
+      link: `/session/${session._id}`,
     })));
   }
   await writeAudit({ actorRole: "club", actorId: req.club._id, action: "session.update", targetType: "session", targetId: session._id });
@@ -923,12 +1033,24 @@ module.exports.getSessionAttendees = async (req, res) => {
 module.exports.markAttendance = async (req, res) => {
   const session = await sessionModel.findOne({ _id: req.params.sessionId, clubId: req.club._id });
   if (!session) return res.status(404).json({ success: false, msg: "Session not found" });
-  const existing = await sessionRsvpModel.findOne({
+  const studentId = req.body.studentId || (await studentModel.findOne({ email: normalizeEmail(req.body.studentEmail), status: "active" }).select("_id"))?._id;
+  if (!studentId) return res.status(404).json({ success: false, msg: "Student not found" });
+  let existing = await sessionRsvpModel.findOne({
     sessionId: session._id,
-    studentId: req.body.studentId,
+    studentId,
     status: { $in: ["confirmed", "attended", "absent"] },
   });
-  if (!existing) return res.status(404).json({ success: false, msg: "Confirmed RSVP not found" });
+  if (!existing && req.body.status === "attended") {
+    existing = await sessionRsvpModel.create({
+      sessionId: session._id,
+      studentId,
+      status: "attended",
+      source: "walk_in",
+    });
+    await writeAudit({ actorRole: "club", actorId: req.club._id, action: "session.walk_in", targetType: "session", targetId: session._id, metadata: { studentId } });
+    return res.json({ success: true, msg: "Walk-in attendance recorded", rsvp: existing });
+  }
+  if (!existing) return res.status(404).json({ success: false, msg: "Student attendance record not found" });
   const wasCounted = ["confirmed", "attended"].includes(existing.status);
   const willBeCounted = req.body.status === "attended";
   existing.status = req.body.status;
@@ -940,6 +1062,6 @@ module.exports.markAttendance = async (req, res) => {
       { $inc: { confirmedRsvpCount: willBeCounted ? 1 : -1 } }
     );
   }
-  await writeAudit({ actorRole: "club", actorId: req.club._id, action: "session.attendance", targetType: "session", targetId: session._id, metadata: { studentId: req.body.studentId, status: req.body.status } });
+  await writeAudit({ actorRole: "club", actorId: req.club._id, action: "session.attendance", targetType: "session", targetId: session._id, metadata: { studentId, status: req.body.status } });
   return res.json({ success: true, msg: "Attendance updated", rsvp });
 };

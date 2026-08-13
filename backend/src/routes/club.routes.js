@@ -4,6 +4,14 @@ const { body, param, query } = require("express-validator");
 const { clubLogin, logout, changePassword, sendPasswordResetOtp, verifyPasswordResetOtp, resetPassword, addSession, getProfile, updateProfile, getSessions, getSession, addEvent, getEvents, getEvent, getDashBoard, getEventsRegisteredStudents, finalizeStudent, scheduleInterview, selectStudentForRound, updateEvent, updateEventStatus, updateSession, updateApplication, bulkUpdateApplications, exportApplications, getSessionAttendees, markAttendance } = require("../controllers/club.contollers");
 const { clubAuth } = require("../middlewares/auth.middlewares");
 const upload = require("../middlewares/upload");
+const {
+  getEventWorkflow,
+  publishRoundDecisions,
+  scheduleCandidate,
+  autoScheduleRound,
+  cancelScheduleSlot,
+  extractCandidates,
+} = require("../controllers/workflow.controllers");
 const rateLimit = require("../middlewares/rateLimit");
 const validateRequest = require("../middlewares/validateRequest");
 
@@ -68,7 +76,7 @@ router.post(
 
 router.get('/getProfile',clubAuth,getProfile)
 
-router.post('/updateProfile',clubAuth,[
+router.post('/updateProfile',clubAuth,upload.single('clubLogo'),[
 
   body("name").optional().isString().trim().isLength({ min: 2, max: 150 }),
   body("userName").optional().isString().trim().isLength({ min: 1, max: 80 }),
@@ -81,6 +89,9 @@ router.post('/updateProfile',clubAuth,[
   body("recruitmentMethods").optional().isString().isLength({ max: 10000 }),
   body("contactEmail").optional({ checkFalsy: true }).isEmail().isLength({ max: 254 }),
   body("contactPhone").optional({ checkFalsy: true }).isString().isLength({ max: 30 }),
+  body("useAccountEmailForContact").optional().isBoolean(),
+  body("resourcesJSON").optional().isString().isLength({ max: 60000 }),
+  body("annualEventsJSON").optional().isString().isLength({ max: 100000 }),
 ], validateRequest, updateProfile)
 
 router.get('/getSessions',clubAuth,getSessions)
@@ -103,18 +114,25 @@ router.post('/addEvent',clubAuth,
   body('minTeamSize').optional().isInt({ min: 1 }),
   body('maxTeamSize').optional().isInt({ min: 1, max: 10000 }),
   body('status').optional().isIn(['draft', 'published']),
-  body('roundDetailsJSON').custom((value, { req }) => {
+  body('eventType').optional().isIn(['recruitment', 'hackathon', 'competition', 'workshop', 'other']),
+  body('eligibilityYearsJSON').optional().isString().isLength({ max: 100 }),
+  body('eligibilityBranchesJSON').optional().isString().isLength({ max: 10000 }),
+  body('allowPassedOut').optional().isBoolean(),
+  body('deadlineNotificationsEnabled').optional().isBoolean(),
+  body('roundsJSON').optional().isString().isLength({ max: 200000 }),
+  body('roundDetailsJSON').optional().custom((value, { req }) => {
     const expectedRounds = Number(req.body.numberOfRounds || 0);
-    if (!value) {
+    const roundValue = req.body.roundsJSON || value;
+    if (!roundValue) {
       if (expectedRounds === 0) return true;
       throw new Error('Round details are required');
     }
     try {
-      if (String(value).length > 10000) throw new Error();
-      const rounds = JSON.parse(value);
+      if (String(roundValue).length > 200000) throw new Error();
+      const rounds = JSON.parse(roundValue);
       if (!Array.isArray(rounds) || rounds.length > 20) throw new Error();
       if (expectedRounds !== rounds.length) throw new Error();
-      if (rounds.some((round) => !round || typeof round !== 'object' || typeof round.Type !== 'string' || round.Type.length > 100)) throw new Error();
+      if (rounds.some((round) => !round || typeof round !== 'object' || typeof (round.title || round.Type) !== 'string' || String(round.title || round.Type).length > 120)) throw new Error();
       return true;
     } catch {
       throw new Error('Round details are invalid');
@@ -140,6 +158,14 @@ router.patch('/events/:eventId', clubAuth, upload.single('eventBanner'), [
   body('registrationType').optional().isIn(['individual', 'team', 'optional_team']),
   body('minTeamSize').optional().isInt({ min: 1 }),
   body('maxTeamSize').optional().isInt({ min: 1, max: 10000 }),
+  body('eventType').optional().isIn(['recruitment', 'hackathon', 'competition', 'workshop', 'other']),
+  body('roundsJSON').optional().isString().isLength({ max: 200000 }),
+  body('contactInfoJSON').optional().isString().isLength({ max: 10000 }),
+  body('eligibilityYearsJSON').optional().isString().isLength({ max: 100 }),
+  body('eligibilityBranchesJSON').optional().isString().isLength({ max: 10000 }),
+  body('allowPassedOut').optional().isBoolean(),
+  body('deadlineNotificationsEnabled').optional().isBoolean(),
+  body('notifyRegistrants').optional().isBoolean(),
 ], validateRequest, updateEvent)
 
 router.patch('/events/:eventId/status', clubAuth, [
@@ -203,9 +229,62 @@ router.get('/events/:eventId/applications/export', clubAuth, [param('eventId').i
 router.get('/sessions/:sessionId/attendees', clubAuth, [param('sessionId').isMongoId()], validateRequest, getSessionAttendees)
 router.patch('/sessions/:sessionId/attendance', clubAuth, [
   param('sessionId').isMongoId(),
-  body('studentId').isMongoId(),
+  body('studentId').optional().isMongoId(),
+  body('studentEmail').optional().isEmail().normalizeEmail(),
+  body().custom((value) => value.studentId || value.studentEmail).withMessage('Student ID or email is required'),
   body('status').isIn(['attended', 'absent']),
 ], validateRequest, markAttendance)
+
+router.get('/events/:eventId/workflow', clubAuth, [
+  param('eventId').isMongoId(),
+], validateRequest, getEventWorkflow)
+
+router.post('/events/:eventId/rounds/:roundId/decisions', clubAuth, [
+  param('eventId').isMongoId(),
+  param('roundId').isMongoId(),
+  body('decisions').isArray({ min: 1, max: 250 }),
+  body('decisions.*.candidateId').isMongoId(),
+  body('decisions.*.status').isIn(['advanced', 'rejected']),
+  body('decisions.*.score').optional({ nullable: true }).isFloat({ min: 0 }),
+  body('decisions.*.notes').optional({ nullable: true }).isString().isLength({ max: 4000 }),
+], validateRequest, publishRoundDecisions)
+
+router.post('/events/:eventId/rounds/:roundId/slots', clubAuth, [
+  param('eventId').isMongoId(),
+  param('roundId').isMongoId(),
+  body('candidateId').isMongoId(),
+  body('startAt').isISO8601(),
+  body('endAt').isISO8601(),
+  body('venue').optional({ checkFalsy: true }).isString().isLength({ max: 300 }),
+  body('meetingUrl').optional({ checkFalsy: true }).isURL({ protocols: ['http', 'https'], require_protocol: true }),
+], validateRequest, scheduleCandidate)
+
+router.post('/events/:eventId/rounds/:roundId/slots/auto', clubAuth, [
+  param('eventId').isMongoId(),
+  param('roundId').isMongoId(),
+  body('candidateIds').isArray({ min: 1, max: 250 }),
+  body('candidateIds.*').isMongoId(),
+  body('startAt').isISO8601(),
+  body('endAt').isISO8601(),
+  body('durationMinutes').optional().isInt({ min: 5, max: 480 }),
+  body('bufferMinutes').optional().isInt({ min: 0, max: 120 }),
+  body('venue').optional({ checkFalsy: true }).isString().isLength({ max: 300 }),
+  body('meetingUrl').optional({ checkFalsy: true }).isURL({ protocols: ['http', 'https'], require_protocol: true }),
+], validateRequest, autoScheduleRound)
+
+router.delete('/events/:eventId/slots/:slotId', clubAuth, [
+  param('eventId').isMongoId(),
+  param('slotId').isMongoId(),
+], validateRequest, cancelScheduleSlot)
+
+router.post('/events/:eventId/rounds/:roundId/extract', clubAuth, [
+  param('eventId').isMongoId(),
+  param('roundId').isMongoId(),
+  body('candidateIds').isArray({ min: 1, max: 250 }),
+  body('candidateIds.*').isMongoId(),
+  body('targetEventId').isMongoId(),
+  body('targetRoundId').isMongoId(),
+], validateRequest, extractCandidates)
 
 
 

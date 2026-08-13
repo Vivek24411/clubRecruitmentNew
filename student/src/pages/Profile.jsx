@@ -7,8 +7,6 @@ import { Button, Card, Field, Input, Meta, Monogram, Page, PageHeader } from "..
 
 const DETAIL_FIELDS = [
   ["name", "Full name"],
-  ["branch", "Branch"],
-  ["year", "Year"],
   ["phoneNumber", "Phone number"],
 ];
 
@@ -55,8 +53,6 @@ export default function Profile() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     name: "",
-    branch: "",
-    year: "",
     phoneNumber: "",
     notificationPreferences: { email: true, inApp: true },
   });
@@ -71,8 +67,6 @@ export default function Profile() {
     if (profile)
       setForm({
         name: profile.name || "",
-        branch: profile.branch || "",
-        year: profile.year || "",
         phoneNumber: profile.phoneNumber || "",
         notificationPreferences: {
           email: profile.notificationPreferences?.email !== false,
@@ -165,6 +159,8 @@ export default function Profile() {
                   />
                 </Field>
               ))}
+              <Field id="branch" label="Branch" hint="Contact an administrator if this is incorrect."><Input id="branch" value={profile?.branch || ""} disabled /></Field>
+              <Field id="academicYear" label="Academic year" hint="Advances automatically at the annual June rollover."><Input id="academicYear" value={profile?.year || ""} disabled /></Field>
             </div>
 
             <fieldset className="mt-7 rounded-sm border border-line bg-paper-2 px-5 py-4">

@@ -1,6 +1,6 @@
 const express = require("express");
 const { body, param, query } = require("express-validator");
-const { login, logout, getProfile, addClub, getAllSessions, getSessionDetail, getAllClubs, getClubDetail, getAllEvents, getEventDetail, getDashBoard, getStudents, updateStudentStatus, updateClubStatus, resetClubPassword, moderateEvent, moderateSession, getAuditLogs, getSettings, updateSettings } = require("../controllers/admin.controllers");
+const { login, logout, getProfile, addClub, getAllSessions, getSessionDetail, getAllClubs, getClubDetail, getAllEvents, getEventDetail, getDashBoard, getStudents, updateStudentStatus, updateStudentAcademics, updateClubStatus, updateClubDetails, resetClubPassword, moderateEvent, moderateSession, getAuditLogs, getSettings, updateSettings } = require("../controllers/admin.controllers");
 const { adminAuth } = require("../middlewares/auth.middlewares");
 const router = express.Router();
 const upload = require("../middlewares/upload");
@@ -23,6 +23,10 @@ router.post("/addClub",adminAuth,upload.single('clubLogo'),[
   body("name").isString().trim().isLength({ min: 2, max: 150 }).withMessage("Club name is required"),
   body("userName").isString().trim().isLength({ min: 1, max: 80 }).withMessage("Username is required"),
   body("password").isLength({ min: 10, max: 128 }).custom(fitsBcrypt).withMessage("Password must be 10–72 bytes long"),
+  body("accountEmail").isEmail().normalizeEmail().isLength({ max: 254 }),
+  body("contactEmail").optional({ checkFalsy: true }).isEmail().normalizeEmail().isLength({ max: 254 }),
+  body("category").isIn(["technical", "cultural"]),
+  body("useAccountEmailForContact").optional().isBoolean(),
 ], validateRequest, addClub);
 
 router.get('/getAllSessions',adminAuth,getAllSessions)
@@ -56,10 +60,24 @@ router.patch('/students/:studentId/status', adminAuth, [
   body('status').isIn(['active', 'suspended']),
 ], validateRequest, updateStudentStatus)
 
+router.patch('/students/:studentId/academics', adminAuth, [
+  param('studentId').isMongoId(),
+  body('branch').isString().trim().isLength({ min: 2, max: 100 }),
+  body('academicYear').isInt({ min: 1, max: 5 }).toInt(),
+], validateRequest, updateStudentAcademics)
+
 router.patch('/clubs/:clubId/status', adminAuth, [
   param('clubId').isMongoId(),
   body('status').isIn(['active', 'suspended']),
 ], validateRequest, updateClubStatus)
+
+router.patch('/clubs/:clubId/details', adminAuth, [
+  param('clubId').isMongoId(),
+  body('accountEmail').optional().isEmail().normalizeEmail().isLength({ max: 254 }),
+  body('contactEmail').optional({ checkFalsy: true }).isEmail().normalizeEmail().isLength({ max: 254 }),
+  body('category').optional().isIn(['technical', 'cultural']),
+  body('useAccountEmailForContact').optional().isBoolean(),
+], validateRequest, updateClubDetails)
 
 router.post('/clubs/:clubId/reset-password', adminAuth, [
   param('clubId').isMongoId(),
@@ -96,6 +114,12 @@ router.patch('/settings', adminAuth, [
   body('recruitmentCycle.status').optional().isIn(['draft', 'open', 'closed']),
   body('recruitmentCycle.startAt').optional({ nullable: true }).isISO8601(),
   body('recruitmentCycle.endAt').optional({ nullable: true }).isISO8601(),
+  body('academicConfiguration').optional().isObject(),
+  body('academicConfiguration.rolloverMonth').optional().isInt({ min: 1, max: 12 }),
+  body('academicConfiguration.rolloverDay').optional().isInt({ min: 1, max: 28 }),
+  body('academicConfiguration.branches').optional().isArray({ max: 100 }),
+  body('academicConfiguration.branches.*.name').optional().isString().trim().isLength({ min: 2, max: 100 }),
+  body('academicConfiguration.branches.*.durationYears').optional().isInt().isIn([4, 5]),
 ], validateRequest, updateSettings)
 
 

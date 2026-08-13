@@ -21,3 +21,4 @@
     club.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (club.shortDescription && club.shortDescription.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+

@@ -25,7 +25,7 @@ function ClubMark({ club }) {
       alt=""
       loading="lazy"
       onError={() => setFailed(true)}
-      className="h-12 w-12 flex-none rounded-md border border-line object-cover"
+      className="h-12 w-12 flex-none rounded-md border border-line bg-surface object-contain p-1"
     />
   );
 }

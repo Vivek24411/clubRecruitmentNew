@@ -77,7 +77,7 @@ export default function ForgotPassword() {
       title={step === 1 ? "Reset your club password" : "Choose a new password"}
       description={
         step === 1
-          ? "Enter your club username and registered contact email to receive a one-time code."
+          ? "Enter your club username and private account email to receive a one-time code."
           : `Enter the code sent to ${email}, then choose a new password.`
       }
       footer={
@@ -108,7 +108,7 @@ export default function ForgotPassword() {
               onChange={(event) => setUserName(event.target.value)}
             />
           </Field>
-          <Field label="Registered contact email" id="email" required>
+          <Field label="Account email" id="email" required>
             <Input
               id="email"
               type="email"

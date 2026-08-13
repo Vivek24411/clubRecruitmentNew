@@ -148,7 +148,7 @@ export default function Event() {
             </section>
           )}
 
-          {event.roundDetails?.length > 0 && (
+          {(event.rounds?.length > 0 || event.roundDetails?.length > 0) && (
             <section className="reveal ruled-top pt-8" style={{ "--d": "200ms" }}>
               <h2 className="display text-xl">Selection rounds</h2>
               <ol className="relative mt-6 space-y-6 pl-8">
@@ -156,19 +156,21 @@ export default function Event() {
                   className="absolute bottom-2 left-[0.6875rem] top-2 w-px bg-line"
                   aria-hidden="true"
                 />
-                {event.roundDetails.map((round, index) => (
-                  <li key={index} className="relative">
+                {(event.rounds || event.roundDetails).map((round, index) => (
+                  <li key={round._id || index} className="relative">
                     <span className="absolute -left-8 grid h-6 w-6 place-items-center rounded-full border border-line bg-surface text-[0.6875rem] font-semibold text-ink-2">
                       {index + 1}
                     </span>
                     <p className="font-semibold">
-                      {round.Type || round.type || `Round ${index + 1}`}
+                      {round.title || round.Type || round.type || `Round ${index + 1}`}
                     </p>
                     {(round.Description || round.description) && (
                       <p className="mt-1.5 text-sm leading-relaxed text-ink-3">
                         {round.Description || round.description}
                       </p>
                     )}
+                    {round.interviewMode && <p className="mt-1 text-xs capitalize text-ink-3">{round.interviewMode} interview</p>}
+                    {round.submissionDeadlineAt && <p className="mt-1 text-xs text-ink-3">Submission due {formatDateTime(round.submissionDeadlineAt)}</p>}
                   </li>
                 ))}
               </ol>

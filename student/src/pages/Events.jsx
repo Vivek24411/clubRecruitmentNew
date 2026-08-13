@@ -246,7 +246,7 @@ export default function Events() {
                         src={event.eventBanner}
                         alt=""
                         loading="lazy"
-                        className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+                        className="h-full w-full object-contain transition-transform duration-700 ease-out group-hover:scale-[1.02]"
                         onError={(error) => {
                           error.currentTarget.style.display = "none";
                         }}

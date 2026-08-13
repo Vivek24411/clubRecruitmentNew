@@ -14,6 +14,7 @@ import {
   Monogram,
   Page,
   PageHeader,
+  Select,
   Skeleton,
   Textarea,
 } from "../components/ui";
@@ -30,6 +31,8 @@ const EMPTY = {
   recruitmentMethods: "",
   contactEmail: "",
   contactPhone: "",
+  resources: [],
+  annualEvents: [],
 };
 
 /** A prose block that only renders when the club has filled it in. */
@@ -116,8 +119,8 @@ function PasswordSecurity({ club, onPasswordChanged }) {
   }
 
   async function requestOtp() {
-    if (!club?.contactEmail) {
-      toast.error("Add a contact email to your profile before using OTP recovery");
+    if (!club?.accountEmail && !club?.contactEmail) {
+      toast.error("Ask the administrator to add a recovery email to this account");
       return;
     }
 
@@ -125,11 +128,11 @@ function PasswordSecurity({ club, onPasswordChanged }) {
     try {
       const response = await axios.post(
         `${import.meta.env.VITE_BASE_URI}/club/password-reset/request`,
-        { userName: club.userName, email: club.contactEmail },
+        { userName: club.userName, email: club.accountEmail || club.contactEmail },
       );
       if (!response.data.success) throw new Error(response.data.msg);
       setOtpSent(true);
-      toast.success(`A one-time code was sent to ${club.contactEmail}`);
+      toast.success(`A one-time code was sent to ${club.accountEmail || club.contactEmail}`);
     } catch (error) {
       toast.error(errorMessage(error, "Unable to send OTP"));
     } finally {
@@ -147,7 +150,7 @@ function PasswordSecurity({ club, onPasswordChanged }) {
 
     setIsSubmitting(true);
     try {
-      const account = { userName: club.userName, email: club.contactEmail };
+      const account = { userName: club.userName, email: club.accountEmail || club.contactEmail };
       const verification = await axios.post(
         `${import.meta.env.VITE_BASE_URI}/club/password-reset/verify`,
         { ...account, otp },
@@ -214,7 +217,7 @@ function PasswordSecurity({ club, onPasswordChanged }) {
         <p className="eyebrow eyebrow-accent">Account security</p>
         <h2 className="display mt-2 text-xl">Password</h2>
         <p className="mt-2 text-sm leading-relaxed text-ink-3">
-          Change it using your current password or a code sent to your contact email.
+          Change it using your current password or a code sent to your private account email.
         </p>
         <Button className="mt-5" variant="secondary" block onClick={() => setOpen(true)}>
           Change password
@@ -271,14 +274,14 @@ function PasswordSecurity({ club, onPasswordChanged }) {
           </form>
         ) : (
           <div className="mt-5">
-            {!club?.contactEmail ? (
+            {!club?.accountEmail && !club?.contactEmail ? (
               <p className="rounded-sm bg-paper-2 p-4 text-sm leading-relaxed text-ink-3">
-                Add a contact email to your club profile before using OTP recovery.
+                Ask the administrator to add a recovery email to this account.
               </p>
             ) : !otpSent ? (
               <div>
                 <p className="text-sm leading-relaxed text-ink-3">
-                  We&rsquo;ll send a 6-digit code to <strong>{club.contactEmail}</strong>.
+                  We&rsquo;ll send a 6-digit code to <strong>{club.accountEmail || club.contactEmail}</strong>.
                 </p>
                 <Button className="mt-4" type="button" block loading={isSubmitting} onClick={requestOtp}>
                   {isSubmitting ? "Sending…" : "Send OTP"}
@@ -323,6 +326,7 @@ export default function Profile() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [logo, setLogo] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -339,6 +343,8 @@ export default function Profile() {
         recruitmentMethods: clubProfile.recruitmentMethods || "",
         contactEmail: clubProfile.contactEmail || "",
         contactPhone: clubProfile.contactPhone || "",
+        resources: clubProfile.resources || [],
+        annualEvents: clubProfile.annualEvents || [],
       });
       setIsLoading(false);
     }
@@ -350,19 +356,22 @@ export default function Profile() {
     event.preventDefault();
     setIsSubmitting(true);
     try {
-      const response = await axios.post(
-        `${import.meta.env.VITE_BASE_URI}/club/updateProfile`,
-        form,
-      );
+      const payload = new FormData();
+      ["name", "userName", "shortDescription", "longDescription", "website", "linkedin", "instagram", "achivements", "recruitmentMethods", "contactEmail", "contactPhone"].forEach((key) => payload.append(key, form[key] || ""));
+      payload.append("resourcesJSON", JSON.stringify(form.resources));
+      payload.append("annualEventsJSON", JSON.stringify(form.annualEvents));
+      if (logo) payload.append("clubLogo", logo);
+      const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/updateProfile`, payload);
       if (response.data.success) {
         setClubProfile(response.data.club);
         setEditing(false);
+        setLogo(null);
         toast.success("Profile updated successfully");
       } else {
         toast.error(response.data.msg || "Failed to update profile");
       }
-    } catch {
-      toast.error("An error occurred while updating profile");
+    } catch (error) {
+      toast.error(error.response?.data?.msg || "An error occurred while updating profile");
     } finally {
       setIsSubmitting(false);
     }
@@ -454,6 +463,7 @@ export default function Profile() {
                 />
               </Field>
             </div>
+            <Field label="Replace logo" id="clubLogo" className="mt-5"><input id="clubLogo" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setLogo(event.target.files[0] || null)} className="block w-full text-sm" /></Field>
           </Card>
 
           <Card className="reveal p-6" style={{ "--d": "80ms" }}>
@@ -527,6 +537,16 @@ export default function Profile() {
             </div>
           </Card>
 
+          <Card className="reveal p-6">
+            <div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="display text-xl">Student resources</h2><p className="mt-1.5 text-sm text-ink-3">Useful links, documents, videos, and repositories.</p></div><Button type="button" variant="secondary" size="sm" onClick={() => setForm({ ...form, resources: [...form.resources, { title: "", description: "", url: "", type: "link" }] })}>Add resource</Button></div>
+            <div className="mt-6 space-y-5">{form.resources.map((resource, index) => <div key={resource._id || index} className="grid gap-4 border-t border-line pt-5 first:border-0 first:pt-0 sm:grid-cols-2"><Field label="Title" id={`resource-title-${index}`}><Input id={`resource-title-${index}`} value={resource.title} onChange={(event) => setForm({ ...form, resources: form.resources.map((item, current) => current === index ? { ...item, title: event.target.value } : item) })} required /></Field><Field label="Type" id={`resource-type-${index}`}><Select id={`resource-type-${index}`} value={resource.type || "link"} onChange={(event) => setForm({ ...form, resources: form.resources.map((item, current) => current === index ? { ...item, type: event.target.value } : item) })}><option value="link">Link</option><option value="document">Document</option><option value="video">Video</option><option value="repository">Repository</option><option value="other">Other</option></Select></Field><Field label="URL" id={`resource-url-${index}`} className="sm:col-span-2"><Input id={`resource-url-${index}`} type="url" value={resource.url} onChange={(event) => setForm({ ...form, resources: form.resources.map((item, current) => current === index ? { ...item, url: event.target.value } : item) })} required /></Field><Field label="Description" id={`resource-description-${index}`} className="sm:col-span-2"><Textarea id={`resource-description-${index}`} rows="2" className="min-h-0" value={resource.description || ""} onChange={(event) => setForm({ ...form, resources: form.resources.map((item, current) => current === index ? { ...item, description: event.target.value } : item) })} /></Field><button type="button" className="link text-left text-sm font-semibold text-bad" onClick={() => setForm({ ...form, resources: form.resources.filter((_, current) => current !== index) })}>Remove resource</button></div>)}</div>
+          </Card>
+
+          <Card className="reveal p-6">
+            <div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="display text-xl">Annual events</h2><p className="mt-1.5 text-sm text-ink-3">Recurring club events students should know about.</p></div><Button type="button" variant="secondary" size="sm" onClick={() => setForm({ ...form, annualEvents: [...form.annualEvents, { name: "", description: "", eligibility: "", perks: "", tentativeDate: "", url: "" }] })}>Add annual event</Button></div>
+            <div className="mt-6 space-y-6">{form.annualEvents.map((annualEvent, index) => { const update = (key, value) => setForm({ ...form, annualEvents: form.annualEvents.map((item, current) => current === index ? { ...item, [key]: value } : item) }); return <div key={annualEvent._id || index} className="grid gap-4 border-t border-line pt-6 first:border-0 first:pt-0 sm:grid-cols-2"><Field label="Name" id={`annual-name-${index}`}><Input id={`annual-name-${index}`} value={annualEvent.name} onChange={(event) => update("name", event.target.value)} required /></Field><Field label="Tentative date" id={`annual-date-${index}`}><Input id={`annual-date-${index}`} value={annualEvent.tentativeDate || ""} onChange={(event) => update("tentativeDate", event.target.value)} placeholder="e.g. First week of October" /></Field><Field label="Description" id={`annual-description-${index}`} className="sm:col-span-2"><Textarea id={`annual-description-${index}`} rows="3" className="min-h-0" value={annualEvent.description || ""} onChange={(event) => update("description", event.target.value)} /></Field><Field label="Eligibility" id={`annual-eligibility-${index}`}><Input id={`annual-eligibility-${index}`} value={annualEvent.eligibility || ""} onChange={(event) => update("eligibility", event.target.value)} /></Field><Field label="Perks" id={`annual-perks-${index}`}><Input id={`annual-perks-${index}`} value={annualEvent.perks || ""} onChange={(event) => update("perks", event.target.value)} /></Field><Field label="Website" id={`annual-url-${index}`} className="sm:col-span-2"><Input id={`annual-url-${index}`} type="url" value={annualEvent.url || ""} onChange={(event) => update("url", event.target.value)} /></Field><button type="button" className="link text-left text-sm font-semibold text-bad" onClick={() => setForm({ ...form, annualEvents: form.annualEvents.filter((_, current) => current !== index) })}>Remove annual event</button></div>; })}</div>
+          </Card>
+
           <div className="flex flex-wrap gap-3">
             <Button type="submit" size="lg" loading={isSubmitting}>
               {isSubmitting ? "Saving…" : "Save profile"}
@@ -557,6 +577,8 @@ export default function Profile() {
             )}
             <Prose title="Achievements" body={clubProfile?.achivements} />
             <Prose title="How you recruit" body={clubProfile?.recruitmentMethods} />
+            {clubProfile?.annualEvents?.length > 0 && <section className="ruled-top pt-8"><h2 className="display text-xl">Annual events</h2><div className="mt-5 space-y-4">{clubProfile.annualEvents.map((annualEvent) => <Card key={annualEvent._id} className="p-5"><h3 className="font-semibold">{annualEvent.name}</h3><p className="mt-2 text-sm text-ink-3">{annualEvent.description}</p><div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-ink-2">{annualEvent.tentativeDate && <span>{annualEvent.tentativeDate}</span>}{annualEvent.eligibility && <span>Eligibility: {annualEvent.eligibility}</span>}{annualEvent.perks && <span>Perks: {annualEvent.perks}</span>}</div></Card>)}</div></section>}
+            {clubProfile?.resources?.length > 0 && <section className="ruled-top pt-8"><h2 className="display text-xl">Resources</h2><div className="mt-4 grid gap-3 sm:grid-cols-2">{clubProfile.resources.map((resource) => <a key={resource._id} href={resource.url} target="_blank" rel="noreferrer" className="card card-interactive p-4"><p className="font-semibold">{resource.title}</p><p className="mt-1 text-xs capitalize text-ink-3">{resource.type}</p></a>)}</div></section>}
 
             {!clubProfile?.longDescription &&
               !clubProfile?.achivements &&
@@ -574,7 +596,7 @@ export default function Profile() {
 
           <aside className="space-y-6 lg:sticky lg:top-24 lg:h-fit">
             <Card className="p-6">
-              <Monogram name={clubProfile?.name || "Club"} size="lg" />
+              {clubProfile?.clubLogo ? <img src={clubProfile.clubLogo} alt={`${clubProfile.name} logo`} className="h-16 w-16 rounded-md border border-line bg-surface object-contain p-1" /> : <Monogram name={clubProfile?.name || "Club"} size="lg" />}
               <h2 className="display mt-5 text-xl leading-snug">{clubProfile?.name}</h2>
               <dl className="mt-6 space-y-4 border-t border-line pt-5">
                 <Meta label="Username" value={clubProfile?.userName} />

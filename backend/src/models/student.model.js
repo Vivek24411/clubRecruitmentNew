@@ -32,6 +32,27 @@ const studentSchema = new mongoose.Schema({
     required: true,
     maxlength: 20,
   },
+  academicYear: {
+    type: Number,
+    enum: [1, 2, 3, 4, 5],
+    default: null,
+  },
+  academicStatus: {
+    type: String,
+    enum: ["studying", "passed_out"],
+    default: "studying",
+  },
+  programStartYear: {
+    type: Number,
+    min: 1990,
+    max: 2200,
+    default: null,
+  },
+  courseDurationYears: {
+    type: Number,
+    enum: [4, 5],
+    default: 4,
+  },
   phoneNumber: {
     type: String,
     required: true,

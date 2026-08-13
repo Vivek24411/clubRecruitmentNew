@@ -5,9 +5,12 @@ import {
   Badge,
   Button,
   Input,
+  Field,
   Monogram,
+  Modal,
   Page,
   PageHeader,
+  Select,
   Skeleton,
   TableWrap,
 } from "../components/ui";
@@ -16,6 +19,10 @@ export default function Students() {
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [academicOptions, setAcademicOptions] = useState({ branches: [] });
+  const [editing, setEditing] = useState(null);
+  const [academicForm, setAcademicForm] = useState({ branch: "", academicYear: 1 });
+  const [savingAcademics, setSavingAcademics] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -36,6 +43,40 @@ export default function Students() {
     const timer = setTimeout(load, 250);
     return () => clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    axios
+      .get(`${import.meta.env.VITE_BASE_URI}/admin/settings`)
+      .then(({ data }) => setAcademicOptions(data.settings?.academicConfiguration || { branches: [] }))
+      .catch(() => toast.error("Could not load academic options"));
+  }, []);
+
+  const openAcademicEditor = (student) => {
+    setEditing(student);
+    setAcademicForm({
+      branch: student.branch || academicOptions.branches[0]?.name || "",
+      academicYear: Number(student.academicYear) || 1,
+    });
+  };
+
+  const saveAcademics = async (event) => {
+    event.preventDefault();
+    setSavingAcademics(true);
+    try {
+      const { data } = await axios.patch(
+        `${import.meta.env.VITE_BASE_URI}/admin/students/${editing._id}/academics`,
+        academicForm,
+      );
+      if (!data.success) throw new Error(data.msg);
+      setStudents((items) => items.map((item) => (item._id === editing._id ? data.student : item)));
+      setEditing(null);
+      toast.success(data.msg);
+    } catch (error) {
+      toast.error(error.response?.data?.msg || error.message || "Could not update academics");
+    } finally {
+      setSavingAcademics(false);
+    }
+  };
 
   const setStatus = async (student, status) => {
     if (
@@ -127,6 +168,13 @@ export default function Students() {
                       <Button
                         size="sm"
                         variant="ghost"
+                        onClick={() => openAcademicEditor(student)}
+                      >
+                        Correct course
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
                         className={suspended ? "text-ok" : "text-bad"}
                         onClick={() => setStatus(student, suspended ? "active" : "suspended")}
                       >
@@ -148,6 +196,58 @@ export default function Students() {
           {students.length === 100 ? " (first 100 — refine your search)" : ""}.
         </p>
       )}
+
+      <Modal
+        open={Boolean(editing)}
+        onClose={() => !savingAcademics && setEditing(null)}
+        title="Correct academic details"
+        description={editing ? `Update the verified course details for ${editing.name}. This action is recorded in the audit log.` : ""}
+      >
+        <form onSubmit={saveAcademics} className="space-y-4">
+          <Field label="Branch" id="studentBranch" required>
+            <Select
+              id="studentBranch"
+              value={academicForm.branch}
+              onChange={(event) => {
+                const branch = academicOptions.branches.find((item) => item.name === event.target.value);
+                setAcademicForm({
+                  branch: event.target.value,
+                  academicYear: Math.min(academicForm.academicYear, branch?.durationYears || 4),
+                });
+              }}
+              required
+            >
+              {academicOptions.branches.map((branch) => (
+                <option key={branch.name} value={branch.name}>{branch.name}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Current year" id="studentYear" required>
+            <Select
+              id="studentYear"
+              value={academicForm.academicYear}
+              onChange={(event) => setAcademicForm({ ...academicForm, academicYear: Number(event.target.value) })}
+              required
+            >
+              {Array.from({
+                length: academicOptions.branches.find((branch) => branch.name === academicForm.branch)?.durationYears || 4,
+              }, (_, index) => (
+                <option key={index + 1} value={index + 1}>
+                  {['First', 'Second', 'Third', 'Fourth', 'Fifth'][index]} year
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="secondary" onClick={() => setEditing(null)} disabled={savingAcademics}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={savingAcademics} disabled={!academicForm.branch}>
+              Save correction
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </Page>
   );
 }

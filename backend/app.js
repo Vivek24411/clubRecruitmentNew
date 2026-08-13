@@ -55,7 +55,7 @@ app.use((req, res) => {
 app.use((error, req, res, next) => {
   if (res.headersSent) return next(error);
   const isCorsError = /CORS policy/i.test(error?.message || "");
-  const isUploadError = error?.name === "MulterError" || /images are allowed/i.test(error?.message || "");
+  const isUploadError = error?.name === "MulterError" || /(images are allowed|PDF|video|file too large)/i.test(error?.message || "");
   const isValidationError = ["ValidationError", "CastError"].includes(error?.name);
   const isDuplicateError = error?.code === 11000;
   const status = isCorsError ? 403 : isUploadError || isValidationError ? 400 : isDuplicateError ? 409 : 500;

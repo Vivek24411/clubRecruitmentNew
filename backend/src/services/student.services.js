@@ -99,6 +99,59 @@ function buildOtpEmailHtml(otp) {
 </html>`;
 }
 
+function escapeHtml(value) {
+    return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function buildNotificationEmailHtml({ title, message, detailsUrl, type }) {
+    const safeTitle = escapeHtml(title || "Recruitment update");
+    const safeMessage = escapeHtml(message || "You have a new recruitment update.");
+    const actionLabels = {
+        team_invitation: "Review invitation",
+        round_scheduled: "View schedule",
+        round_advanced: "Open next round",
+        event_deadline_changed: "View updated event",
+        event_extracted: "Open event",
+    };
+    const actionLabel = escapeHtml(actionLabels[type] || "View details");
+    return `<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>${safeTitle}</title>
+</head>
+<body style="margin:0;padding:0;background:#f2f0e9;color:#111612;font-family:Arial,'Helvetica Neue',sans-serif;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${safeMessage}</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f2f0e9;">
+        <tr><td align="center" style="padding:40px 16px;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:580px;background:#fbfaf6;border:1px solid #dcd8cd;border-radius:16px;overflow:hidden;">
+                <tr><td style="height:5px;background:#d55432;font-size:0;line-height:0;">&nbsp;</td></tr>
+                <tr><td style="padding:30px 34px 0;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
+                        <td style="width:42px;height:42px;text-align:center;background:#111612;color:#fbfaf6;border-radius:10px;font-size:18px;font-weight:700;">R</td>
+                        <td style="padding-left:12px;"><div style="font-size:16px;font-weight:700;">Recruit IITR</div><div style="padding-top:3px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#697169;">Application update</div></td>
+                    </tr></table>
+                </td></tr>
+                <tr><td style="padding:32px 34px 12px;">
+                    <h1 style="margin:0 0 12px;font-size:28px;line-height:36px;color:#111612;">${safeTitle}</h1>
+                    <p style="margin:0;font-size:15px;line-height:24px;color:#535b54;">${safeMessage}</p>
+                </td></tr>
+                ${detailsUrl ? `<tr><td style="padding:16px 34px 34px;"><a href="${escapeHtml(detailsUrl)}" style="display:inline-block;padding:13px 20px;background:#111612;color:#ffffff;text-decoration:none;border-radius:7px;font-size:14px;font-weight:700;">${actionLabel}</a><p style="margin:14px 0 0;font-size:12px;line-height:18px;color:#858b85;">If the button does not open, sign in to Recruit IITR and return to this email.</p></td></tr>` : ""}
+                <tr><td style="padding:20px 34px;background:#111612;color:#969c96;font-size:12px;line-height:19px;">This message was sent because your Recruit IITR email notifications are enabled.<br><span style="color:#fbfaf6;">Recruit IITR</span> &middot; Indian Institute of Technology Roorkee</td></tr>
+            </table>
+        </td></tr>
+    </table>
+</body>
+</html>`;
+}
+
 module.exports.sendOtp = async (email, otp) => {
     return sendEmail({
         to: email,
@@ -108,7 +161,7 @@ module.exports.sendOtp = async (email, otp) => {
     });
 };
 
-module.exports.sendNotificationEmail = async (email, { title, message, link }) => {
+module.exports.sendNotificationEmail = async (email, { title, message, link, type }) => {
     if (!process.env.RESEND_API_KEY) return;
     let detailsUrl = null;
     if (process.env.STUDENT_APP_ORIGIN && link?.startsWith('/') && !link.startsWith('//')) {
@@ -118,6 +171,7 @@ module.exports.sendNotificationEmail = async (email, { title, message, link }) =
         to: email,
         subject: String(title || "Recruitment update").replace(/[\r\n]/g, " "),
         text: `${message || "You have a new recruitment update."}${detailsUrl ? `\n\nView details: ${detailsUrl}` : ""}`,
+        html: buildNotificationEmailHtml({ title, message, detailsUrl, type }),
     });
 };
 

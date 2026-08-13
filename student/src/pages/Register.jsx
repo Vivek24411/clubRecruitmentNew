@@ -1,10 +1,10 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { useNavigate, Link } from "react-router-dom";
 import { StudentContextData } from "../context/StudentContext";
 import AuthShell from "../components/AuthShell";
-import { Button, Field, Input } from "../components/ui";
+import { Button, Field, Input, Select } from "../components/ui";
 import { isIitrInstituteEmail } from "../utils/email";
 
 /** Two-dot progress rail; the fill slides as the step advances. */
@@ -60,8 +60,6 @@ const DETAIL_FIELDS = [
   { key: "password", label: "Password", type: "password", placeholder: "At least 10 characters", autoComplete: "new-password", minLength: 10, maxLength: 72 },
   { key: "enrollmentNumber", label: "Enrollment number", type: "text", placeholder: "22114001" },
   { key: "phoneNumber", label: "Phone number", type: "tel", placeholder: "98765 43210", autoComplete: "tel" },
-  { key: "branch", label: "Branch", type: "text", placeholder: "Computer Science" },
-  { key: "year", label: "Year", type: "text", placeholder: "First, Second, Third, Fourth" },
 ];
 
 export default function Register() {
@@ -70,7 +68,7 @@ export default function Register() {
     email: "",
     password: "",
     branch: "",
-    year: "",
+    academicYear: "",
     phoneNumber: "",
     enrollmentNumber: "",
   });
@@ -79,9 +77,16 @@ export default function Register() {
   const [sendingOTP, setSendingOTP] = useState(false);
   const [verifyingOTP, setVerifyingOTP] = useState(false);
   const [registering, setRegistering] = useState(false);
+  const [academicOptions, setAcademicOptions] = useState({ branches: [], years: [] });
 
   const navigate = useNavigate();
   const { setLoggedInStudent, refreshProfile } = useContext(StudentContextData);
+
+  useEffect(() => {
+    axios.get(`${import.meta.env.VITE_BASE_URI}/student/academic-options`)
+      .then(({ data }) => data.success && setAcademicOptions({ branches: data.academicConfiguration.branches || [], years: data.years || [] }))
+      .catch(() => toast.error("Could not load academic options"));
+  }, []);
 
   const set = (key) => (event) => setForm((prev) => ({ ...prev, [key]: event.target.value }));
   async function sendOTP() {
@@ -238,6 +243,21 @@ export default function Register() {
                 />
               </Field>
             ))}
+            <Field id="branch" label="Branch" required>
+              <Select id="branch" required value={form.branch} onChange={set("branch")}>
+                <option value="">Choose branch</option>
+                {academicOptions.branches.map((branch) => <option key={branch.name} value={branch.name}>{branch.name}</option>)}
+              </Select>
+            </Field>
+            <Field id="academicYear" label="Academic year" required>
+              <Select id="academicYear" required value={form.academicYear} onChange={set("academicYear")}>
+                <option value="">Choose year</option>
+                {academicOptions.years.filter((year) => {
+                  const branch = academicOptions.branches.find((item) => item.name === form.branch);
+                  return !branch || year.value <= branch.durationYears;
+                }).map((year) => <option key={year.value} value={year.value}>{year.label}</option>)}
+              </Select>
+            </Field>
           </div>
 
           <Button type="submit" size="lg" block loading={sendingOTP}>

@@ -1,16 +1,20 @@
 const cloudinary = require("../config/cloudinary");
 
-async function destroyCloudinaryImage(publicId) {
+async function destroyCloudinaryAsset(publicId, resourceType = "image") {
   if (!publicId) return;
   try {
-    await cloudinary.uploader.destroy(publicId, { resource_type: "image" });
+    await cloudinary.uploader.destroy(publicId, { resource_type: resourceType || "image" });
   } catch (error) {
-    console.error("Unable to clean up Cloudinary image:", error?.message || "unknown error");
+    console.error("Unable to clean up Cloudinary asset:", error?.message || "unknown error");
   }
 }
 
 function destroyUploadedFile(file) {
-  return destroyCloudinaryImage(file?.filename);
+  return destroyCloudinaryAsset(file?.filename, file?.resourceType || "image");
 }
 
-module.exports = { destroyCloudinaryImage, destroyUploadedFile };
+function destroyCloudinaryImage(publicId) {
+  return destroyCloudinaryAsset(publicId, "image");
+}
+
+module.exports = { destroyCloudinaryAsset, destroyCloudinaryImage, destroyUploadedFile };

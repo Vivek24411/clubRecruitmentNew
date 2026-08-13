@@ -17,10 +17,23 @@ const { notifyStudent } = require("../services/notification.services");
 const { writeAudit } = require("../services/audit.services");
 const platformSettingsModel = require("../models/platformSettings.model");
 const applicationHistoryModel = require("../models/applicationHistory.model");
+const {
+  eventEligibility,
+  inferProgramStartYear,
+  normalizedAcademicConfiguration,
+  parseAcademicYear,
+  syncAcademicState,
+  YEAR_LABELS,
+} = require("../services/academic.services");
+const {
+  ensureEventRounds,
+  initializeRegistrationWorkflow,
+  syncRegistrationParticipants,
+} = require("../services/eventWorkflow.services");
 
 const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
 const tokenHash = (token) => crypto.createHash("sha256").update(token).digest("hex");
-const PUBLIC_CLUB_FIELDS = "name shortDescription longDescription website linkedin instagram achivements recruitmentMethods contactEmail contactPhone clubLogo status";
+const PUBLIC_CLUB_FIELDS = "name category shortDescription longDescription website linkedin instagram achivements recruitmentMethods contactEmail contactPhone clubLogo resources annualEvents status";
 const DUMMY_PASSWORD_HASH = "$2b$12$4Qj6z7mmoEgcnxHLS0xDR.jjYdMm05/mtrLZVBInMaqjKAuvz9taa";
 
 function publicStudent(student) {
@@ -207,7 +220,7 @@ module.exports.register = async (req, res) => {
       return res.json({ errors: errors.array(), success: false });
     }
 
-    const { name, password, branch, year, phoneNumber, enrollmentNumber, verificationToken } = req.body;
+    const { name, password, branch, phoneNumber, enrollmentNumber, verificationToken } = req.body;
     const email = normalizeEmail(req.body.email);
 
     if (!checkEmailDomain(email)) {
@@ -232,13 +245,28 @@ module.exports.register = async (req, res) => {
       return res.status(400).json({ success: false, msg: "Email verification expired or invalid" });
     }
 
+    const settings = await platformSettingsModel.findOne({ key: "global" });
+    const academicConfiguration = normalizedAcademicConfiguration(settings);
+    const selectedYear = parseAcademicYear(req.body.academicYear || req.body.year);
+    const configuredBranch = academicConfiguration.branches.find((item) => item.name === branch);
+    if (!configuredBranch) {
+      return res.status(400).json({ success: false, msg: "Choose a branch from the available branch list" });
+    }
+    const courseDurationYears = configuredBranch.durationYears;
+    if (selectedYear > courseDurationYears) {
+      return res.status(400).json({ success: false, msg: "The selected year is not valid for this course" });
+    }
     const hashedPassword = await bcrypt.hash(password, 12);
     const student = await studentModel.create({
       name,
       email,
       password: hashedPassword,
       branch,
-      year,
+      year: YEAR_LABELS[selectedYear],
+      academicYear: selectedYear,
+      academicStatus: "studying",
+      programStartYear: inferProgramStartYear(selectedYear, new Date(), academicConfiguration),
+      courseDurationYears,
       phoneNumber,
       enrollmentNumber
     });
@@ -284,6 +312,9 @@ module.exports.login = async (req, res) => {
     return res.status(403).json({ success: false, msg: "Student account is suspended" });
   }
 
+  const settings = await platformSettingsModel.findOne({ key: "global" });
+  await syncAcademicState(student, settings);
+
   const token = await student.createToken();
   setSessionCookie(res, "student", token);
   await writeAudit({ actorRole: "student", actorId: student._id, action: "auth.login", targetType: "student", targetId: student._id });
@@ -301,6 +332,8 @@ module.exports.getProfile = async (req, res) => {
     if (!student) {
       return res.status(404).json({ success: false, msg: "Student not found" });
     }
+    const settings = await platformSettingsModel.findOne({ key: "global" });
+    await syncAcademicState(student, settings);
     return res.json({ success: true, student: publicStudent(student) });
   } catch (error) {
     console.error("Error fetching student profile:", error);
@@ -314,7 +347,7 @@ module.exports.logout = async (req, res) => {
 };
 
 module.exports.updateProfile = async (req, res) => {
-  const allowed = ["name", "branch", "year", "phoneNumber", "notificationPreferences"];
+  const allowed = ["name", "phoneNumber", "notificationPreferences"];
   const update = Object.fromEntries(
     Object.entries(req.body).filter(([key]) => allowed.includes(key))
   );
@@ -390,6 +423,16 @@ module.exports.getAllClubs = async (req, res) => {
   }
 };
 
+module.exports.getAcademicOptions = async (req, res) => {
+  const settings = await platformSettingsModel.findOne({ key: "global" });
+  const academicConfiguration = normalizedAcademicConfiguration(settings);
+  return res.json({
+    success: true,
+    academicConfiguration,
+    years: Object.entries(YEAR_LABELS).map(([value, label]) => ({ value: Number(value), label })),
+  });
+};
+
 module.exports.getClub = async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -438,7 +481,9 @@ module.exports.getEvent = async (req, res) => {
     if (!event || !event.clubId) {
       return res.json({ success: false, msg: "Event not found" });
     }
-    return res.json({ success: true, event, registrationOpen: platformRegistrationIsOpen(settings) });
+    await ensureEventRounds(event);
+    const eligibility = eventEligibility(event, req.student, settings);
+    return res.json({ success: true, event, registrationOpen: platformRegistrationIsOpen(settings), eligibility });
   } catch (error) {
    
     return res.status(500).json({ success: false, msg: "Server error" });
@@ -509,6 +554,7 @@ module.exports.registerEvent = async (req, res, next) => {
     if (!event) {
       return res.json({ success: false, msg: "Event not found" });
     }
+    await ensureEventRounds(event);
 
     if (!platformRegistrationIsOpen(settings)) {
       return res.status(403).json({ success: false, msg: "Recruitment registrations are currently closed" });
@@ -518,6 +564,11 @@ module.exports.registerEvent = async (req, res, next) => {
 
     if (!registrationIsOpen(event)) {
       return res.status(400).json({ success: false, msg: "Registration is closed" });
+    }
+
+    const eligibility = eventEligibility(event, req.student, settings);
+    if (!eligibility.eligible) {
+      return res.status(403).json({ success: false, msg: eligibility.reason });
     }
 
     const existingMembership = await eventMembershipModel.findOne({ eventId, studentId });
@@ -593,6 +644,7 @@ module.exports.registerEvent = async (req, res, next) => {
       { eventId, membersOffered: studentId },
       { $pull: { membersOffered: studentId } }
     );
+    await initializeRegistrationWorkflow(event, registeration);
     await writeAudit({ actorRole: "student", actorId: studentId, action: "event.register", targetType: "event", targetId: eventId });
 
    
@@ -692,6 +744,11 @@ module.exports.addMemberOffer = async (req, res, next) => {
     const member = await studentModel.findOne({ email: normalizeEmail(memberEmail), status: "active" });
     if (!member) {
       return res.json({ success: false, msg: "Member not found" });
+    }
+    const settings = await platformSettingsModel.findOne({ key: "global" });
+    const memberEligibility = eventEligibility(event, member, settings);
+    if (!memberEligibility.eligible) {
+      return res.status(400).json({ success: false, msg: `This student is not eligible: ${memberEligibility.reason}` });
     }
 
     const alreadyRegistered = await registerationEventModel.findOne({
@@ -803,6 +860,12 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
     if (!await requireActiveEventClub(event, res)) return;
     if (!await requireOpenRecruitment(res)) return;
 
+    const settings = await platformSettingsModel.findOne({ key: "global" });
+    const invitationEligibility = eventEligibility(event, req.student, settings);
+    if (!invitationEligibility.eligible) {
+      return res.status(403).json({ success: false, msg: invitationEligibility.reason });
+    }
+
     const captainRegisteration = await registerationEventModel.findOne({
       eventId,
       studentId: studentId,
@@ -864,6 +927,7 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
       { eventId, _id: { $ne: captainRegisteration._id } },
       { $pull: { membersOffered: memberId } }
     );
+    await syncRegistrationParticipants(event, joinedRegistration);
     await notifyStudent(joinedRegistration.studentId, {
       type: "team_joined",
       title: "Team invitation accepted",

@@ -3,7 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { safeExternalUrl } from "../utils/url";
-import { Button, Card, EmptyState, Monogram, Page, Skeleton } from "../components/ui";
+import { Badge, Button, Card, EmptyState, Monogram, Page, Skeleton } from "../components/ui";
 
 /** Club logo with a monogram fallback that survives a broken image URL. */
 function ClubMark({ club }) {
@@ -14,7 +14,7 @@ function ClubMark({ club }) {
       src={club.clubLogo}
       alt=""
       onError={() => setFailed(true)}
-      className="h-16 w-16 flex-none rounded-md border border-line object-cover"
+      className="h-16 w-16 flex-none rounded-md border border-line bg-surface object-contain p-1"
     />
   );
 }
@@ -145,7 +145,7 @@ export default function Club() {
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
           <ClubMark club={club} />
           <div className="min-w-0 flex-1">
-            <p className="eyebrow eyebrow-accent">Student club</p>
+            <div className="flex flex-wrap items-center gap-2"><p className="eyebrow eyebrow-accent">Student club</p><Badge className="capitalize">{club.category || "technical"}</Badge></div>
             <h1 className="display mt-2 text-3xl sm:text-4xl">{club.name}</h1>
             {club.shortDescription && (
               <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-2">
@@ -180,6 +180,12 @@ export default function Club() {
           )}
           <Prose title="Achievements" body={club.achivements} />
           <Prose title="How they recruit" body={club.recruitmentMethods} />
+          {club.annualEvents?.length > 0 && (
+            <section className="ruled-top pt-8"><h2 className="display text-xl">Annual events</h2><div className="mt-5 space-y-4">{club.annualEvents.map((annualEvent) => <Card key={annualEvent._id} className="p-5"><div className="flex flex-wrap items-start justify-between gap-3"><h3 className="font-semibold">{annualEvent.name}</h3>{annualEvent.tentativeDate && <Badge tone="info">{annualEvent.tentativeDate}</Badge>}</div>{annualEvent.description && <p className="mt-3 text-sm leading-relaxed text-ink-3">{annualEvent.description}</p>}<dl className="mt-4 grid gap-3 sm:grid-cols-2">{annualEvent.eligibility && <div><dt className="eyebrow">Eligibility</dt><dd className="mt-1 text-sm">{annualEvent.eligibility}</dd></div>}{annualEvent.perks && <div><dt className="eyebrow">Perks</dt><dd className="mt-1 text-sm">{annualEvent.perks}</dd></div>}</dl>{safeExternalUrl(annualEvent.url) && <a href={safeExternalUrl(annualEvent.url)} target="_blank" rel="noreferrer" className="link link-accent mt-4 inline-block text-sm font-semibold">Event website</a>}</Card>)}</div></section>
+          )}
+          {club.resources?.length > 0 && (
+            <section className="ruled-top pt-8"><h2 className="display text-xl">Resources</h2><div className="mt-4 grid gap-3 sm:grid-cols-2">{club.resources.map((resource) => <a key={resource._id} href={safeExternalUrl(resource.url)} target="_blank" rel="noreferrer" className="card card-interactive p-4"><p className="font-semibold">{resource.title}</p>{resource.description && <p className="mt-2 text-sm text-ink-3">{resource.description}</p>}<p className="mt-2 text-xs capitalize text-accent">{resource.type}</p></a>)}</div></section>
+          )}
 
           {!club.longDescription && !club.achivements && !club.recruitmentMethods && (
             <p className="text-sm text-ink-3">

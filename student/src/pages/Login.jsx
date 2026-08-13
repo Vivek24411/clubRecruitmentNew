@@ -26,7 +26,9 @@ export default function Login() {
         toast.success(response.data.msg || "Login successful");
         setLoggedInStudent(true);
         await refreshProfile();
-        navigate("/", { replace: true });
+        const returnTo = sessionStorage.getItem("studentReturnTo");
+        sessionStorage.removeItem("studentReturnTo");
+        navigate(returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/", { replace: true });
       } else {
         toast.error(response.data.msg || "Login failed");
       }

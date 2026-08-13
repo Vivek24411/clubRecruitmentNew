@@ -22,6 +22,12 @@ function SessionCheck() {
 export default function ProtectedWrapper({ children }) {
   const { loggedInStudent, authLoading } = useContext(StudentContextData);
   if (authLoading) return <SessionCheck />;
-  if (!loggedInStudent) return <Navigate to="/login" replace />;
+  if (!loggedInStudent) {
+    const intended = `${window.location.pathname}${window.location.search}`;
+    if (intended !== "/login" && intended.startsWith("/") && !intended.startsWith("//")) {
+      sessionStorage.setItem("studentReturnTo", intended);
+    }
+    return <Navigate to="/login" replace />;
+  }
   return <StudentLayout>{children}</StudentLayout>;
 }

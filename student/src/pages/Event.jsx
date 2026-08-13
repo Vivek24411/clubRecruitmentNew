@@ -3,6 +3,7 @@ import axios from "axios";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { daysUntil, eventDeadline, formatDateTime } from "../utils/date";
+import EventWorkflow from "../components/EventWorkflow";
 import {
   Badge,
   Button,
@@ -29,7 +30,7 @@ function RoundTimeline({ rounds }) {
             {index + 1}
           </span>
           <p className="font-semibold">
-            {round.Type || round.type || `Round ${index + 1}`}
+            {round.title || round.Type || round.type || `Round ${index + 1}`}
           </p>
           {(round.Description || round.description) && (
             <p className="mt-1.5 text-sm leading-relaxed text-ink-3">
@@ -68,6 +69,7 @@ export default function Event() {
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [platformOpen, setPlatformOpen] = useState(true);
+  const [eligibility, setEligibility] = useState({ eligible: true, reason: "" });
 
   const load = useCallback(async () => {
     try {
@@ -80,6 +82,7 @@ export default function Event() {
       if (!eventResponse.data.success) throw new Error(eventResponse.data.msg);
       setEvent(eventResponse.data.event);
       setPlatformOpen(eventResponse.data.registrationOpen !== false);
+      setEligibility(eventResponse.data.eligibility || { eligible: true, reason: "" });
       setView(Number(applicationResponse.data.Show));
       setDetail(applicationResponse.data.detail);
     } catch (error) {
@@ -134,7 +137,7 @@ export default function Event() {
   }
 
   const deadline = eventDeadline(event);
-  const open = platformOpen && event.status === "published" && (!deadline || deadline > new Date());
+  const open = platformOpen && eligibility.eligible !== false && event.status === "published" && (!deadline || deadline > new Date());
   const isTeamEvent = event.registrationType !== "individual";
   const registration = view === 1 || view === 2 ? detail : null;
   const maxTeam = event.maxTeamSize || event.maxParticipants || 1;
@@ -195,7 +198,7 @@ export default function Event() {
         <img
           src={event.eventBanner}
           alt=""
-          className="reveal mt-8 aspect-[21/7] w-full rounded-md border border-line object-cover"
+          className="reveal mt-8 aspect-[21/7] w-full rounded-md border border-line bg-paper-2 object-contain"
           style={{ "--d": "80ms" }}
           onError={(error) => {
             error.currentTarget.style.display = "none";
@@ -242,17 +245,23 @@ export default function Event() {
                 <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{event.eligibility}</p>
               </div>
             )}
+            {event.eligibilityYears?.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {event.eligibilityYears.map((year) => <Badge key={year}>{["", "First", "Second", "Third", "Fourth", "Fifth"][year]} year</Badge>)}
+              </div>
+            )}
           </section>
 
-          {event.roundDetails?.length > 0 && (
+          {(event.rounds?.length > 0 || event.roundDetails?.length > 0) && (
             <section className="reveal ruled-top pt-8" style={{ "--d": "180ms" }}>
               <h2 className="display text-xl">Selection process</h2>
               <p className="mt-2 text-sm text-ink-3">
-                {event.roundDetails.length} rounds from application to decision.
+                {(event.rounds || event.roundDetails).length} rounds from application to decision.
               </p>
-              <RoundTimeline rounds={event.roundDetails} />
+              <RoundTimeline rounds={event.rounds || event.roundDetails} />
             </section>
           )}
+          {registration && <EventWorkflow eventId={eventId} />}
         </div>
 
         {/* --------------------------------------------------------------- */}
@@ -267,6 +276,8 @@ export default function Event() {
                 <p className="mt-2.5 text-sm leading-relaxed text-ink-3">
                   {!platformOpen
                     ? "The platform recruitment cycle is currently closed."
+                    : eligibility.eligible === false
+                      ? eligibility.reason
                     : isTeamEvent
                       ? "Register as captain, then invite teammates by their institute email."
                       : "Submit an individual application."}

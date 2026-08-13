@@ -44,6 +44,7 @@ export default function Settings() {
     registrationEnabled: true,
     maintenanceMessage: "",
     recruitmentCycle: { name: "", status: "open", startAt: "", endAt: "" },
+    academicConfiguration: { rolloverMonth: 6, rolloverDay: 1, branches: [] },
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -55,6 +56,11 @@ export default function Settings() {
         if (data.success)
           setSettings({
             ...data.settings,
+            academicConfiguration: {
+              rolloverMonth: data.settings.academicConfiguration?.rolloverMonth || 6,
+              rolloverDay: data.settings.academicConfiguration?.rolloverDay || 1,
+              branches: data.settings.academicConfiguration?.branches || [],
+            },
             recruitmentCycle: {
               ...data.settings.recruitmentCycle,
               startAt: localDateTimeValue(data.settings.recruitmentCycle?.startAt),
@@ -119,6 +125,13 @@ export default function Settings() {
   }
 
   const accepting = settings.registrationEnabled;
+  const updateBranch = (index, changes) => setSettings({
+    ...settings,
+    academicConfiguration: {
+      ...settings.academicConfiguration,
+      branches: settings.academicConfiguration.branches.map((branch, current) => current === index ? { ...branch, ...changes } : branch),
+    },
+  });
 
   return (
     <Page width="3xl">
@@ -228,6 +241,15 @@ export default function Settings() {
               placeholder="e.g. Round 2 interview slots open on Monday."
             />
           </Field>
+        </Card>
+
+        <Card className="reveal p-6" style={{ "--d": "190ms" }}>
+          <div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="display text-xl">Academic progression</h2><p className="mt-1.5 text-sm text-ink-3">Year changes are derived from the student's programme start year at this annual June rollover.</p></div><Button type="button" variant="secondary" size="sm" onClick={() => setSettings({ ...settings, academicConfiguration: { ...settings.academicConfiguration, branches: [...settings.academicConfiguration.branches, { name: "", durationYears: 4 }] } })}>Add branch</Button></div>
+          <div className="mt-6 grid gap-5 sm:grid-cols-2">
+            <Field label="Rollover month" id="rolloverMonth"><Select id="rolloverMonth" value={settings.academicConfiguration.rolloverMonth} onChange={(event) => setSettings({ ...settings, academicConfiguration: { ...settings.academicConfiguration, rolloverMonth: Number(event.target.value) } })}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{new Date(2026, index, 1).toLocaleString("en", { month: "long" })}</option>)}</Select></Field>
+            <Field label="Rollover day" id="rolloverDay"><Input id="rolloverDay" type="number" min="1" max="28" value={settings.academicConfiguration.rolloverDay} onChange={(event) => setSettings({ ...settings, academicConfiguration: { ...settings.academicConfiguration, rolloverDay: Number(event.target.value) } })} /></Field>
+          </div>
+          <div className="mt-6 space-y-3">{settings.academicConfiguration.branches.map((branch, index) => <div key={branch._id || index} className="grid gap-3 sm:grid-cols-[1fr_10rem_auto]"><Input aria-label={`Branch ${index + 1} name`} value={branch.name} onChange={(event) => updateBranch(index, { name: event.target.value })} placeholder="Branch name" required /><Select aria-label={`Branch ${index + 1} duration`} value={branch.durationYears || 4} onChange={(event) => updateBranch(index, { durationYears: Number(event.target.value) })}><option value="4">4-year course</option><option value="5">5-year course</option></Select><Button type="button" variant="danger" size="sm" onClick={() => setSettings({ ...settings, academicConfiguration: { ...settings.academicConfiguration, branches: settings.academicConfiguration.branches.filter((_, current) => current !== index) } })}>Remove</Button></div>)}</div>
         </Card>
 
         <Button type="submit" size="lg" loading={saving}>

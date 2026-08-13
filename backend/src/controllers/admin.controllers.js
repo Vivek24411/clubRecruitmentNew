@@ -12,6 +12,11 @@ const sessionRsvpModel = require("../models/sessionRsvp.model");
 const { writeAudit } = require("../services/audit.services");
 const { notifyStudent, notifyTeam } = require("../services/notification.services");
 const { destroyUploadedFile } = require("../utils/uploads");
+const {
+  YEAR_LABELS,
+  inferProgramStartYear,
+  normalizedAcademicConfiguration,
+} = require("../services/academic.services");
 
 function escapedRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -64,7 +69,11 @@ module.exports.addClub = async (req, res) => {
     return res.status(400).json({ errors: error.array(), success: false, msg: "Please correct the club details" });
   }
 
-  const { name, userName, password } = req.body;
+  const { name, userName, password, category } = req.body;
+  const accountEmail = String(req.body.accountEmail || "").trim().toLowerCase();
+  const contactEmail = req.body.useAccountEmailForContact === true || req.body.useAccountEmailForContact === "true"
+    ? accountEmail
+    : String(req.body.contactEmail || "").trim().toLowerCase();
   const clubLogo = req.file ? req.file.path : null;
   const clubLogoPublicId = req.file ? req.file.filename : null;
 
@@ -78,12 +87,21 @@ module.exports.addClub = async (req, res) => {
       return res.status(409).json({ success: false, msg: "Club with this username already exists" });
     }
     const hashedPassword = await bcrypt.hash(password, 12);
-    const newClub = await clubModel.create({ name: name.trim(), userName: userName.trim().toLowerCase(), password: hashedPassword, clubLogo, clubLogoPublicId });
+    const newClub = await clubModel.create({
+      name: name.trim(),
+      userName: userName.trim().toLowerCase(),
+      password: hashedPassword,
+      accountEmail,
+      contactEmail,
+      category,
+      clubLogo,
+      clubLogoPublicId,
+    });
     await writeAudit({ actorRole: "admin", actorId: req.admin.email, action: "club.create", targetType: "club", targetId: newClub._id });
     return res.status(201).json({ success: true, msg: "Club added successfully", club: await clubModel.findById(newClub._id) });
   } catch (error) {
     await destroyUploadedFile(req.file);
-    if (error?.code === 11000) return res.status(409).json({ success: false, msg: "Club name or username already exists" });
+    if (error?.code === 11000) return res.status(409).json({ success: false, msg: "Club name, username, or account email already exists" });
     throw error;
   }
 };
@@ -221,6 +239,39 @@ module.exports.updateStudentStatus = async (req, res) => {
   return res.json({ success: true, msg: `Student ${student.status}`, student: safeStudent });
 };
 
+module.exports.updateStudentAcademics = async (req, res) => {
+  const student = await studentModel.findById(req.params.studentId);
+  if (!student) return res.status(404).json({ success: false, msg: "Student not found" });
+
+  const settings = await platformSettingsModel.findOne({ key: "global" });
+  const configuration = normalizedAcademicConfiguration(settings);
+  const branch = configuration.branches.find((item) => item.name === req.body.branch);
+  const academicYear = Number(req.body.academicYear);
+  if (!branch) {
+    return res.status(400).json({ success: false, msg: "Choose a branch from the configured branch list" });
+  }
+  if (academicYear > branch.durationYears) {
+    return res.status(400).json({ success: false, msg: "The selected year is not valid for this course" });
+  }
+
+  student.branch = branch.name;
+  student.courseDurationYears = branch.durationYears;
+  student.academicYear = academicYear;
+  student.academicStatus = "studying";
+  student.programStartYear = inferProgramStartYear(academicYear, new Date(), configuration);
+  student.year = YEAR_LABELS[academicYear];
+  await student.save();
+  await writeAudit({
+    actorRole: "admin",
+    actorId: req.admin.email,
+    action: "student.academics_update",
+    targetType: "student",
+    targetId: student._id,
+    metadata: { branch: student.branch, academicYear },
+  });
+  return res.json({ success: true, msg: "Student academics corrected", student });
+};
+
 module.exports.updateClubStatus = async (req, res) => {
   const club = await clubModel.findById(req.params.clubId).select("+tokenVersion");
   if (!club) return res.status(404).json({ success: false, msg: "Club not found" });
@@ -231,6 +282,27 @@ module.exports.updateClubStatus = async (req, res) => {
   const safeClub = club.toObject();
   delete safeClub.tokenVersion;
   return res.json({ success: true, msg: `Club ${club.status}`, club: safeClub });
+};
+
+module.exports.updateClubDetails = async (req, res) => {
+  const club = await clubModel.findById(req.params.clubId);
+  if (!club) return res.status(404).json({ success: false, msg: "Club not found" });
+  for (const field of ["category", "accountEmail", "contactEmail"]) {
+    if (req.body[field] !== undefined) {
+      club[field] = typeof req.body[field] === "string" ? req.body[field].trim().toLowerCase() : req.body[field];
+    }
+  }
+  if (req.body.useAccountEmailForContact) club.contactEmail = club.accountEmail;
+  try {
+    await club.save();
+  } catch (error) {
+    return res.status(error?.code === 11000 ? 409 : 400).json({
+      success: false,
+      msg: error?.code === 11000 ? "That account email is already assigned to another club" : "Unable to update club details",
+    });
+  }
+  await writeAudit({ actorRole: "admin", actorId: req.admin.email, action: "club.details_update", targetType: "club", targetId: club._id, metadata: { fields: Object.keys(req.body) } });
+  return res.json({ success: true, msg: "Club details updated", club });
 };
 
 module.exports.resetClubPassword = async (req, res) => {
@@ -302,7 +374,13 @@ module.exports.getSettings = async (req, res) => {
     { $setOnInsert: { key: "global" } },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
-  return res.json({ success: true, settings });
+  return res.json({
+    success: true,
+    settings: {
+      ...settings.toObject(),
+      academicConfiguration: normalizedAcademicConfiguration(settings),
+    },
+  });
 };
 
 module.exports.updateSettings = async (req, res) => {
@@ -310,6 +388,7 @@ module.exports.updateSettings = async (req, res) => {
     registrationEnabled: req.body.registrationEnabled,
     maintenanceMessage: req.body.maintenanceMessage,
     recruitmentCycle: req.body.recruitmentCycle,
+    academicConfiguration: req.body.academicConfiguration,
     updatedAt: new Date(),
     updatedBy: req.admin.email,
   };
