@@ -151,7 +151,7 @@ export default function Dashboard() {
                     value={formatDateTime(eventDeadline(nextEvent), { dateOnly: true })}
                   />
                   <Meta label="Rounds" value={nextEvent.numberOfRounds || "—"} />
-                  <Meta label="Max participants" value={nextEvent.maxParticipants || "—"} />
+                  <Meta label="Participant limit" value={nextEvent.maxParticipants ? `${nextEvent.maxParticipants} people` : "Unlimited"} />
                   <Meta label="Eligibility" value={nextEvent.eligibility || "Open to all"} />
                 </MetaGrid>
 

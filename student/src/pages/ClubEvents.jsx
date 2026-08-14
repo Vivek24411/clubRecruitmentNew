@@ -95,7 +95,7 @@ export default function ClubEvents() {
                       value={
                         event.registrationType === "individual"
                           ? "Individual"
-                          : `Up to ${event.maxTeamSize || event.maxParticipants || 1}`
+                          : `Up to ${event.maxTeamSize || 1}`
                       }
                     />
                     <Meta label="Rounds" value={event.numberOfRounds || "—"} />

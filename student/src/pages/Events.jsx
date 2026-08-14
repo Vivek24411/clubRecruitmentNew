@@ -306,7 +306,7 @@ export default function Events() {
                         <dd className="font-medium">
                           {event.registrationType === "individual"
                             ? "Individual"
-                            : `Up to ${event.maxTeamSize || event.maxParticipants || 1}`}
+                            : `Up to ${event.maxTeamSize || 1}`}
                         </dd>
                       </div>
                       <div className="flex justify-between gap-3">

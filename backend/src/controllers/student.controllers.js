@@ -145,6 +145,19 @@ async function activeEventMembership(eventId, studentId) {
   return null;
 }
 
+async function activeParticipantCount(eventId) {
+  const registrations = await registerationEventModel.find({
+    eventId,
+    overallStatus: { $ne: "withdrawn" },
+  }).select("studentId membersAccepted").lean();
+  const participantIds = new Set();
+  registrations.forEach((registration) => {
+    if (registration.studentId) participantIds.add(String(registration.studentId));
+    (registration.membersAccepted || []).forEach((studentId) => participantIds.add(String(studentId)));
+  });
+  return participantIds.size;
+}
+
 async function clearRegistrationWorkflow(registrationId) {
   const [submissions, slots] = await Promise.all([
     roundSubmissionModel.find({ registrationId }).select("files"),
@@ -182,6 +195,23 @@ async function removeWithdrawnRegistrationRecords(filter) {
     overallStatus: "withdrawn",
   });
   return result.deletedCount;
+}
+
+async function removeDetachedRegistrationRecords(filter) {
+  const registrations = await registerationEventModel.find(filter).select("_id");
+  if (!registrations.length) return { removed: 0, blocked: 0 };
+  const registrationIds = registrations.map((registration) => registration._id);
+  const attachedIds = new Set((await eventMembershipModel.find({
+    registrationId: { $in: registrationIds },
+  }).select("registrationId").lean()).map((membership) => String(membership.registrationId)));
+  const removableIds = registrationIds.filter((registrationId) => !attachedIds.has(String(registrationId)));
+  for (const registrationId of removableIds) {
+    await clearRegistrationWorkflow(registrationId);
+  }
+  if (removableIds.length) {
+    await registerationEventModel.deleteMany({ _id: { $in: removableIds } });
+  }
+  return { removed: removableIds.length, blocked: registrationIds.length - removableIds.length };
 }
 
 module.exports.sendOtp = async (req, res) => {
@@ -719,6 +749,10 @@ module.exports.registerEvent = async (req, res, next) => {
       });
     }
 
+    if (event.maxParticipants && await activeParticipantCount(eventId) >= event.maxParticipants) {
+      return res.status(409).json({ success: false, msg: "This event has reached its participant limit" });
+    }
+
     const roundDetailsStudent = (event.roundDetails || []).map((round) => ({
       ...round,
       selected: false,
@@ -833,9 +867,9 @@ module.exports.getEventDetails = async (req, res, next) => {
       overallStatus: { $ne: "withdrawn" },
     })
     .populate("eventId")
-    .populate("studentId", "name email")
-    .populate("membersAccepted", "name email")
-    .populate("membersOffered", "name email");
+    .populate("studentId", "name email profilePicture")
+    .populate("membersAccepted", "name email profilePicture")
+    .populate("membersOffered", "name email profilePicture");
 
   if (captainExists) {
     return res.json({
@@ -852,8 +886,8 @@ module.exports.getEventDetails = async (req, res, next) => {
       overallStatus: { $ne: "withdrawn" },
     })
     .populate("eventId")
-    .populate("studentId", "name email")
-    .populate("membersAccepted", "name email");
+    .populate("studentId", "name email profilePicture")
+    .populate("membersAccepted", "name email profilePicture");
 
   if (memberAccepted) {
     return res.json({
@@ -870,8 +904,8 @@ module.exports.getEventDetails = async (req, res, next) => {
       overallStatus: { $ne: "withdrawn" },
     })
     .populate("eventId")
-    .populate("studentId", "name email")
-    .populate("membersAccepted", "name email");
+    .populate("studentId", "name email profilePicture")
+    .populate("membersAccepted", "name email profilePicture");
 
   if (memberOffered && memberOffered.length > 0) {
     return res.json({ success: true, detail: memberOffered, Show: 3 });
@@ -986,7 +1020,7 @@ module.exports.addMemberOffer = async (req, res, next) => {
       return res.status(404).json({ success: false, msg: "Register as a captain before inviting members" });
     }
 
-    const maxTeamSize = event.maxTeamSize || event.maxParticipants || 1;
+    const maxTeamSize = event.maxTeamSize || 1;
     if (captainRegisteration.membersAccepted.length + 1 >= maxTeamSize) {
       return res.status(400).json({ success: false, msg: "Team is already full" });
     }
@@ -1061,9 +1095,13 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
       return res.status(409).json({ success: false, msg: "You already belong to a team for this event" });
     }
 
-    const maxTeamSize = event.maxTeamSize || event.maxParticipants || 1;
+    const maxTeamSize = event.maxTeamSize || 1;
     if (captainRegisteration.membersAccepted.length + 1 >= maxTeamSize) {
       return res.status(400).json({ success: false, msg: "This team is full" });
+    }
+
+    if (event.maxParticipants && await activeParticipantCount(eventId) >= event.maxParticipants) {
+      return res.status(409).json({ success: false, msg: "This event has reached its participant limit" });
     }
 
     try {
@@ -1347,6 +1385,17 @@ module.exports.transferCaptain = async (req, res) => {
     studentId: newCaptainId,
     _id: { $ne: registration._id },
   });
+  const staleApplications = await removeDetachedRegistrationRecords({
+    eventId: event._id,
+    studentId: newCaptainId,
+    _id: { $ne: registration._id },
+  });
+  if (staleApplications.blocked) {
+    return res.status(409).json({
+      success: false,
+      msg: "This member still has another active team record for the event. Ask them to leave that team first",
+    });
+  }
 
   registration.studentId = newCaptainId;
   registration.membersAccepted = registration.membersAccepted

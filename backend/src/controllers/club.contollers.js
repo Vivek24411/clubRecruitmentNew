@@ -500,8 +500,8 @@ module.exports.addEvent = async (req, res) => {
       shortDescription,
       longDescription,
       registerationDeadline,
-      maxParticipants,
-      maxTeamSize: Number(maxTeamSize || maxParticipants || 1),
+      maxParticipants: maxParticipants ? Number(maxParticipants) : null,
+      maxTeamSize: Number(maxTeamSize || 1),
       minTeamSize: Number(minTeamSize || 1),
       registrationType: registrationType || "team",
       registrationDeadlineAt: registrationDeadlineAt
@@ -773,11 +773,14 @@ module.exports.updateEvent = async (req, res) => {
   ]));
   const allowedFields = [
     "title", "shortDescription", "longDescription", "eligibility", "ContactInfo",
-    "registrationType", "minTeamSize", "maxTeamSize", "maxParticipants",
+    "registrationType", "minTeamSize", "maxTeamSize",
     "numberOfRounds", "registerationDeadline", "eventType", "deadlineNotificationsEnabled",
   ];
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) event[field] = req.body[field];
+  }
+  if (req.body.maxParticipants !== undefined) {
+    event.maxParticipants = req.body.maxParticipants ? Number(req.body.maxParticipants) : null;
   }
   if (req.body.registrationDeadlineAt !== undefined || req.body.registerationDeadline !== undefined) {
     event.registrationDeadlineAt = req.body.registrationDeadlineAt

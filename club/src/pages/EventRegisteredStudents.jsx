@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { Badge, Button, Card, DateTimeInput, EmptyState, Field, Input, Page, Select, SkeletonList, Textarea } from "../components/ui";
+import { Badge, Button, Card, DateTimeInput, EmptyState, Field, Input, Monogram, Page, Select, SkeletonList, Textarea } from "../components/ui";
 
 const STATUS_TONES = {
   advanced: "ok", rejected: "bad", waitlisted: "warn", submitted: "info",
@@ -17,10 +17,17 @@ const localDateTime = (value) => {
 };
 const isUrl = (value) => /^https?:\/\//i.test(String(value || ""));
 
+function StudentAvatar({ student, className = "h-10 w-10" }) {
+  if (student?.profilePicture) {
+    return <img src={student.profilePicture} alt="" loading="lazy" className={`${className} flex-none rounded-full border border-line bg-surface object-cover`} />;
+  }
+  return <Monogram name={student?.name || "?"} size="sm" className={`${className} rounded-full border border-surface`} />;
+}
+
 function PersonRow({ student, captain = false }) {
   return (
-    <div className="grid gap-1 border-t border-line/70 py-2 text-xs first:border-0 sm:grid-cols-[1.1fr_1.2fr_.8fr]">
-      <p className="font-semibold text-ink">{student?.name || "Student"}{captain ? " · Captain" : ""}</p>
+    <div className="grid items-center gap-2 border-t border-line/70 py-2 text-xs first:border-0 sm:grid-cols-[1.1fr_1.2fr_.8fr]">
+      <div className="flex min-w-0 items-center gap-2.5"><StudentAvatar student={student} /><p className="min-w-0 truncate font-semibold text-ink">{student?.name || "Student"}{captain ? " · Captain" : ""}</p></div>
       <p className="break-all text-ink-3">{student?.email || "—"}</p>
       <p className="text-ink-3">{student?.branch || student?.enrollmentNumber || "—"}</p>
     </div>
@@ -31,14 +38,17 @@ function CandidateIdentity({ candidate, registration, finalRound }) {
   if (candidate.scope === "participant") {
     const student = candidate.studentId || candidate.participantIds?.[0];
     return (
-      <div className="min-w-0">
-        <p className="font-semibold">{student?.name || "Student"}</p>
-        <p className="mt-0.5 break-all text-xs text-ink-3">{student?.email}</p>
-        <p className="mt-1 text-xs text-ink-3">{student?.branch || "Branch not provided"}{student?.enrollmentNumber ? ` · ${student.enrollmentNumber}` : ""}</p>
-        <p className="mt-1 text-xs text-ink-4">Individual evaluation</p>
-        <Badge className="mt-2 capitalize" tone={STATUS_TONES[candidate.status]}>
-          {finalRound && candidate.status === "advanced" ? "selected" : candidate.status.replaceAll("_", " ")}
-        </Badge>
+      <div className="flex min-w-0 items-start gap-3">
+        <StudentAvatar student={student} />
+        <div className="min-w-0">
+          <p className="font-semibold">{student?.name || "Student"}</p>
+          <p className="mt-0.5 break-all text-xs text-ink-3">{student?.email}</p>
+          <p className="mt-1 text-xs text-ink-3">{student?.branch || "Branch not provided"}{student?.enrollmentNumber ? ` · ${student.enrollmentNumber}` : ""}</p>
+          <p className="mt-1 text-xs text-ink-4">Individual evaluation</p>
+          <Badge className="mt-2 capitalize" tone={STATUS_TONES[candidate.status]}>
+            {finalRound && candidate.status === "advanced" ? "selected" : candidate.status.replaceAll("_", " ")}
+          </Badge>
+        </div>
       </div>
     );
   }
@@ -47,6 +57,10 @@ function CandidateIdentity({ candidate, registration, finalRound }) {
     <div className="min-w-0">
       <p className="font-semibold">{registration?.teamName || registration?.studentId?.name || "Application"}</p>
       <p className="mt-0.5 text-xs text-ink-3">{participants.length} participant{participants.length === 1 ? "" : "s"}</p>
+      <div className="mt-2 flex -space-x-2" aria-label="Team members">
+        {participants.slice(0, 5).map((student) => <StudentAvatar key={student._id} student={student} className="h-8 w-8" />)}
+        {participants.length > 5 && <span className="grid h-8 w-8 place-items-center rounded-full border border-surface bg-ink text-[0.65rem] font-semibold text-white">+{participants.length - 5}</span>}
+      </div>
       <Badge className="mt-2 capitalize" tone={STATUS_TONES[candidate.status]}>
         {finalRound && candidate.status === "advanced" ? "selected" : candidate.status.replaceAll("_", " ")}
       </Badge>
@@ -127,12 +141,18 @@ export default function EventRegisteredStudents() {
     return !query || [candidate, registrations.get(candidate.registrationId)].some((item) => JSON.stringify(item || {}).toLowerCase().includes(query));
   }), [data, registrations, roundId, search, statusFilter]);
   const chosen = candidates.filter((candidate) => selected.includes(candidate._id));
+  const allVisibleSelected = candidates.length > 0 && candidates.every((candidate) => selected.includes(candidate._id));
   const finalSelected = useMemo(() => {
     const finalId = data?.event?.rounds?.at(-1)?._id;
     return (data?.candidates || []).filter((candidate) => candidate.roundId === finalId && candidate.status === "advanced");
   }, [data]);
 
   const toggle = (candidateId) => setSelected((previous) => previous.includes(candidateId) ? previous.filter((id) => id !== candidateId) : [...previous, candidateId]);
+  const toggleAllVisible = () => setSelected((previous) => {
+    const visibleIds = new Set(candidates.map((candidate) => candidate._id));
+    if (allVisibleSelected) return previous.filter((candidateId) => !visibleIds.has(candidateId));
+    return [...new Set([...previous, ...visibleIds])];
+  });
   const patchDraft = (candidateId, changes) => setDrafts((previous) => ({ ...previous, [candidateId]: { ...(previous[candidateId] || {}), ...changes } }));
 
   const publish = async (status) => {
@@ -221,7 +241,7 @@ export default function EventRegisteredStudents() {
 
       {round && <Card className="mt-6 p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex flex-wrap gap-2"><Badge tone="info">{round.type.replaceAll("_", " ")}</Badge><Badge>{round.evaluationScope === "participant" ? "Per student" : "Whole team/application"}</Badge></div><h2 className="display mt-3 text-xl">{round.title}</h2><p className="mt-2 max-w-2xl text-sm text-ink-3">{round.description || "No round description added."}</p></div><div className="text-right text-sm text-ink-3"><p>{candidates.length} visible candidate record(s)</p>{round.submissionDeadlineAt && <p className="mt-1">Deadline {displayDate(round.submissionDeadlineAt)}</p>}</div></div></Card>}
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem_auto] sm:items-end"><Field label="Search applications" id="candidate-search"><Input id="candidate-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, email, team, branch…" /></Field><Field label="Status" id="candidate-status"><Select id="candidate-status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option><option value="eligible">Eligible</option><option value="scheduled">Scheduled</option><option value="submitted">Submitted</option><option value="under_review">Under review</option><option value="advanced">{finalRound ? "Selected" : "Advanced"}</option><option value="waitlisted">Waitlisted</option><option value="rejected">Rejected</option></Select></Field><p className="pb-3 text-sm text-ink-3">{selected.length} selected</p></div>
+      <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem_auto] sm:items-end"><Field label="Search applications" id="candidate-search"><Input id="candidate-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, email, team, branch…" /></Field><Field label="Status" id="candidate-status"><Select id="candidate-status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option><option value="eligible">Eligible</option><option value="scheduled">Scheduled</option><option value="submitted">Submitted</option><option value="under_review">Under review</option><option value="advanced">{finalRound ? "Selected" : "Advanced"}</option><option value="waitlisted">Waitlisted</option><option value="rejected">Rejected</option></Select></Field><div className="flex items-center gap-3 pb-1"><Button type="button" variant="secondary" size="sm" disabled={!candidates.length} onClick={toggleAllVisible}>{allVisibleSelected ? "Clear visible" : "Select all"}</Button><p className="whitespace-nowrap text-sm text-ink-3">{chosen.length} selected</p></div></div>
 
       {!candidates.length ? <EmptyState className="mt-6" title="No matching candidates" description="Try another round, status, or search term." /> : <div className="mt-4 space-y-4">{candidates.map((candidate) => {
         const registration = registrations.get(candidate.registrationId);
@@ -230,11 +250,11 @@ export default function EventRegisteredStudents() {
         return <Card key={candidate._id} className="overflow-hidden"><div className="grid gap-5 p-5 xl:grid-cols-[minmax(15rem,1fr)_minmax(15rem,1.2fr)_minmax(15rem,1fr)_12rem]"><label className="flex min-w-0 items-start gap-3"><input className="mt-1" type="checkbox" checked={selected.includes(candidate._id)} onChange={() => toggle(candidate._id)} /><span className="min-w-0 flex-1"><CandidateIdentity candidate={candidate} registration={registration} finalRound={finalRound} /><p className="mt-3 text-xs text-ink-4">Applied {displayDate(registration?.registeredAt)}</p></span></label><div className="min-w-0"><p className="eyebrow">Submission</p><SubmissionSummary submission={submission} /></div><div className="grid content-start gap-3"><Field label="Score (optional)" id={`score-${candidate._id}`}><Input id={`score-${candidate._id}`} type="number" min="0" value={drafts[candidate._id]?.score ?? candidate.score ?? ""} onChange={(event) => patchDraft(candidate._id, { score: event.target.value })} /></Field><Field label="Private reviewer notes" id={`notes-${candidate._id}`}><Textarea id={`notes-${candidate._id}`} rows="3" className="min-h-0" value={drafts[candidate._id]?.notes ?? candidate.notes ?? ""} onChange={(event) => patchDraft(candidate._id, { notes: event.target.value })} /></Field><Button type="button" variant="secondary" size="sm" loading={operation === `review-${candidate._id}`} onClick={() => saveReview(candidate)}>Save score and notes</Button></div><div className="min-w-0 text-sm"><p className="eyebrow">Schedule</p><p className="mt-2 font-medium text-ink-2">{slot ? displayDate(slot.startAt) : "No slot"}</p>{slot?.venue && <p className="mt-1 text-xs text-ink-3">{slot.venue}</p>}{slot?.meetingUrl && <a href={slot.meetingUrl} target="_blank" rel="noreferrer" className="link mt-1 block break-all text-xs">Meeting link ↗</a>}{round.scheduleMode === "slots" && ["eligible", "scheduled", "active", "submitted", "under_review"].includes(candidate.status) && <Button type="button" variant="secondary" size="sm" className="mt-3" onClick={() => setManual({ candidateId: candidate._id, startAt: localDateTime(slot?.startAt), endAt: localDateTime(slot?.endAt), venue: slot?.venue || round.venue || "", meetingUrl: slot?.meetingUrl || round.meetingUrl || "" })}>{slot ? "Reschedule" : "Set slot"}</Button>}</div></div></Card>;
       })}</div>}
 
-      {candidates.length > 0 && <Card className="sticky bottom-4 z-20 mt-6 p-4 shadow-lg sm:p-5"><div className="flex flex-wrap items-center gap-3"><p className="mr-auto text-sm font-semibold">{selected.length ? `${selected.length} selected` : "Select candidates to publish a decision"}</p><Button type="button" loading={operation === "decision-advanced"} disabled={!selected.length || Boolean(operation)} onClick={() => publish("advanced")}>{finalRound ? "Select candidates" : "Advance selected"}</Button><Button type="button" variant="secondary" loading={operation === "decision-waitlisted"} disabled={!selected.length || Boolean(operation)} onClick={() => publish("waitlisted")}>Waitlist selected</Button><Button type="button" variant="danger" loading={operation === "decision-rejected"} disabled={!selected.length || Boolean(operation)} onClick={() => publish("rejected")}>Reject selected</Button></div></Card>}
+      {candidates.length > 0 && <Card className="sticky bottom-4 z-20 mt-6 p-4 shadow-lg sm:p-5"><div className="flex flex-wrap items-center gap-3"><p className="mr-auto text-sm font-semibold">{chosen.length ? `${chosen.length} selected` : "Select candidates to publish a decision"}</p><Button type="button" loading={operation === "decision-advanced"} disabled={!chosen.length || Boolean(operation)} onClick={() => publish("advanced")}>{finalRound ? "Select candidates" : "Advance selected"}</Button><Button type="button" variant="secondary" loading={operation === "decision-waitlisted"} disabled={!chosen.length || Boolean(operation)} onClick={() => publish("waitlisted")}>Waitlist selected</Button><Button type="button" variant="danger" loading={operation === "decision-rejected"} disabled={!chosen.length || Boolean(operation)} onClick={() => publish("rejected")}>Reject selected</Button></div></Card>}
 
-      {round?.scheduleMode === "slots" && <Card className="mt-6 p-5 sm:p-6"><h2 className="display text-xl">Auto-schedule selected</h2><p className="mt-2 text-sm text-ink-3">Set an easy-to-read window. Existing slots across all clubs are checked before assignment.</p><form onSubmit={autoSchedule} className="mt-5 grid gap-4 lg:grid-cols-2"><Field label="Window starts" id="windowStart"><DateTimeInput id="windowStart" required value={autoForm.startAt} onChange={(value) => setAutoForm({ ...autoForm, startAt: value })} /></Field><Field label="Window ends" id="windowEnd"><DateTimeInput id="windowEnd" required value={autoForm.endAt} onChange={(value) => setAutoForm({ ...autoForm, endAt: value })} /></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="Slot minutes" id="duration"><Input id="duration" type="number" min="5" value={autoForm.durationMinutes} onChange={(event) => setAutoForm({ ...autoForm, durationMinutes: Number(event.target.value) })} /></Field><Field label="Buffer minutes" id="buffer"><Input id="buffer" type="number" min="0" value={autoForm.bufferMinutes} onChange={(event) => setAutoForm({ ...autoForm, bufferMinutes: Number(event.target.value) })} /></Field></div><div className="grid gap-4 sm:grid-cols-2"><Field label="Venue" id="venue"><Input id="venue" value={autoForm.venue} onChange={(event) => setAutoForm({ ...autoForm, venue: event.target.value })} /></Field><Field label="Meeting link" id="meeting"><Input id="meeting" type="url" value={autoForm.meetingUrl} onChange={(event) => setAutoForm({ ...autoForm, meetingUrl: event.target.value })} /></Field></div><div className="lg:col-span-2"><Button type="submit" loading={operation === "auto-schedule"} disabled={!selected.length || Boolean(operation)}>Schedule {selected.length || "selected"}</Button></div></form></Card>}
+      {round?.scheduleMode === "slots" && <Card className="mt-6 p-5 sm:p-6"><h2 className="display text-xl">Auto-schedule selected</h2><p className="mt-2 text-sm text-ink-3">Set an easy-to-read window. Existing slots across all clubs are checked before assignment.</p><form onSubmit={autoSchedule} className="mt-5 grid gap-4 lg:grid-cols-2"><Field label="Window starts" id="windowStart"><DateTimeInput id="windowStart" required value={autoForm.startAt} onChange={(value) => setAutoForm({ ...autoForm, startAt: value })} /></Field><Field label="Window ends" id="windowEnd"><DateTimeInput id="windowEnd" required value={autoForm.endAt} onChange={(value) => setAutoForm({ ...autoForm, endAt: value })} /></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="Slot minutes" id="duration"><Input id="duration" type="number" min="5" value={autoForm.durationMinutes} onChange={(event) => setAutoForm({ ...autoForm, durationMinutes: Number(event.target.value) })} /></Field><Field label="Buffer minutes" id="buffer"><Input id="buffer" type="number" min="0" value={autoForm.bufferMinutes} onChange={(event) => setAutoForm({ ...autoForm, bufferMinutes: Number(event.target.value) })} /></Field></div><div className="grid gap-4 sm:grid-cols-2"><Field label="Venue" id="venue"><Input id="venue" value={autoForm.venue} onChange={(event) => setAutoForm({ ...autoForm, venue: event.target.value })} /></Field><Field label="Meeting link" id="meeting"><Input id="meeting" type="url" value={autoForm.meetingUrl} onChange={(event) => setAutoForm({ ...autoForm, meetingUrl: event.target.value })} /></Field></div><div className="lg:col-span-2"><Button type="submit" loading={operation === "auto-schedule"} disabled={!chosen.length || Boolean(operation)}>Schedule {chosen.length || "selected"}</Button></div></form></Card>}
 
-      {data.targetEvents?.length > 0 && <Card className="mt-6 p-5 sm:p-6"><h2 className="display text-xl">Add selected to another event</h2><p className="mt-2 text-sm text-ink-3">Only advanced candidates are imported. Individual candidate entries remain individual.</p><form onSubmit={extractCandidates} className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto]"><Field label="Target event" id="targetEvent"><Select id="targetEvent" required value={extract.targetEventId} onChange={(event) => setExtract({ targetEventId: event.target.value, targetRoundId: "" })}><option value="">Choose event</option>{data.targetEvents.map((event) => <option key={event._id} value={event._id}>{event.title}</option>)}</Select></Field><Field label="Start in round" id="targetRound"><Select id="targetRound" required disabled={!targetEvent} value={extract.targetRoundId} onChange={(event) => setExtract({ ...extract, targetRoundId: event.target.value })}><option value="">Choose round</option>{targetEvent?.rounds?.map((item) => <option key={item._id} value={item._id}>{item.order}. {item.title}</option>)}</Select></Field><div className="flex items-end"><Button type="submit" loading={operation === "extract"} disabled={!selected.length || Boolean(operation)}>Add candidates</Button></div></form></Card>}
+      {data.targetEvents?.length > 0 && <Card className="mt-6 p-5 sm:p-6"><h2 className="display text-xl">Add selected to another event</h2><p className="mt-2 text-sm text-ink-3">Only advanced candidates are imported. Individual candidate entries remain individual.</p><form onSubmit={extractCandidates} className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto]"><Field label="Target event" id="targetEvent"><Select id="targetEvent" required value={extract.targetEventId} onChange={(event) => setExtract({ targetEventId: event.target.value, targetRoundId: "" })}><option value="">Choose event</option>{data.targetEvents.map((event) => <option key={event._id} value={event._id}>{event.title}</option>)}</Select></Field><Field label="Start in round" id="targetRound"><Select id="targetRound" required disabled={!targetEvent} value={extract.targetRoundId} onChange={(event) => setExtract({ ...extract, targetRoundId: event.target.value })}><option value="">Choose round</option>{targetEvent?.rounds?.map((item) => <option key={item._id} value={item._id}>{item.order}. {item.title}</option>)}</Select></Field><div className="flex items-end"><Button type="submit" loading={operation === "extract"} disabled={!chosen.length || Boolean(operation)}>Add candidates</Button></div></form></Card>}
 
       {manual && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-ink/55 p-4 backdrop-blur-sm"><Card className="w-full max-w-2xl animate-scale-in p-5 sm:p-6"><h2 className="display text-xl">Set participant slot</h2><p className="mt-1.5 text-sm text-ink-3">The slot is checked against every participant’s existing interviews.</p><form onSubmit={saveManual} className="mt-5 grid gap-4 sm:grid-cols-2"><Field label="Starts" id="manualStart"><DateTimeInput id="manualStart" required value={manual.startAt} onChange={(value) => setManual({ ...manual, startAt: value })} /></Field><Field label="Ends" id="manualEnd"><DateTimeInput id="manualEnd" required value={manual.endAt} onChange={(value) => setManual({ ...manual, endAt: value })} /></Field><Field label="Venue" id="manualVenue"><Input id="manualVenue" value={manual.venue} onChange={(event) => setManual({ ...manual, venue: event.target.value })} /></Field><Field label="Meeting link" id="manualMeeting"><Input id="manualMeeting" type="url" value={manual.meetingUrl} onChange={(event) => setManual({ ...manual, meetingUrl: event.target.value })} /></Field><div className="flex flex-wrap gap-3 sm:col-span-2"><Button type="submit" loading={operation === "manual-schedule"} disabled={Boolean(operation)}>Check and save</Button><Button type="button" variant="secondary" disabled={Boolean(operation)} onClick={() => setManual(null)}>Cancel</Button></div></form></Card></div>}
     </Page>

@@ -67,6 +67,20 @@ function contactHref(value) {
   return null;
 }
 
+function StudentAvatar({ student }) {
+  if (student?.profilePicture) {
+    return (
+      <img
+        src={student.profilePicture}
+        alt=""
+        loading="lazy"
+        className="h-9 w-9 flex-none rounded-full border border-line bg-surface object-cover"
+      />
+    );
+  }
+  return <Monogram name={student?.name || "?"} size="sm" />;
+}
+
 export default function Event() {
   const { eventId } = useParams();
   const [event, setEvent] = useState(null);
@@ -149,7 +163,7 @@ export default function Event() {
   const isTeamEvent = event.registrationType !== "individual";
   const registration = view === 1 || view === 2 ? detail : null;
   const studentStatus = registration?.studentOverallStatus || registration?.overallStatus;
-  const maxTeam = event.maxTeamSize || event.maxParticipants || 1;
+  const maxTeam = event.maxTeamSize || 1;
   const daysLeft = daysUntil(deadline);
 
   const statusBadge = open ? (
@@ -246,6 +260,27 @@ export default function Event() {
                 label="Rounds"
                 value={event.numberOfRounds || event.roundDetails?.length || "Not specified"}
               />
+              {event.maxParticipants && (
+                <Meta label="Participant limit" value={`${event.maxParticipants} people`} />
+              )}
+              {event.ContactInfo?.length > 0 && (
+                <Meta
+                  label="Event contacts"
+                  className="sm:col-span-2"
+                  value={(
+                    <span className="flex flex-wrap gap-x-4 gap-y-2">
+                      {event.ContactInfo.map((contact, index) => {
+                        const href = contactHref(contact);
+                        return href ? (
+                          <a key={`${contact}-${index}`} href={href} target={href.startsWith("http") ? "_blank" : undefined} rel={href.startsWith("http") ? "noreferrer" : undefined} className="link link-accent break-all">
+                            {contact}
+                          </a>
+                        ) : <span key={`${contact}-${index}`} className="break-all">{contact}</span>;
+                      })}
+                    </span>
+                  )}
+                />
+              )}
             </MetaGrid>
 
             {event.eligibility && (
@@ -361,9 +396,10 @@ export default function Event() {
                       <p className="eyebrow">
                         Members · {1 + (registration.membersAccepted?.length || 0)}/{maxTeam}
                       </p>
+                      <p className="mt-1.5 text-xs leading-relaxed text-ink-4">The captain and accepted members are counted. Pending invitations are not.</p>
                       <ul className="mt-3 space-y-2">
                         <li className="flex items-center gap-3 rounded-sm bg-paper-2 px-3 py-2.5">
-                          <Monogram name={registration.studentId?.name || "?"} size="sm" />
+                          <StudentAvatar student={registration.studentId} />
                           <div className="min-w-0">
                             <p className="truncate text-sm font-medium">
                               {registration.studentId?.name}
@@ -376,7 +412,7 @@ export default function Event() {
                             key={member._id}
                             className="flex items-center gap-3 rounded-sm bg-paper-2 px-3 py-2.5"
                           >
-                            <Monogram name={member.name || "?"} size="sm" />
+                            <StudentAvatar student={member} />
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-medium">{member.name}</p>
                               <p className="truncate text-xs text-ink-3">{member.email}</p>
@@ -480,17 +516,24 @@ export default function Event() {
                 <p className="mt-3 text-base font-semibold">
                   {registration.teamName || "Unnamed team"}
                 </p>
-                <p className="mt-1 text-sm text-ink-3">
-                  Captain: {registration.studentId?.name}
-                </p>
                 <ul className="mt-5 space-y-2">
+                  <li className="flex items-center gap-3 rounded-sm bg-paper-2 px-3 py-2.5">
+                    <StudentAvatar student={registration.studentId} />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{registration.studentId?.name}</p>
+                      <p className="text-xs text-ink-3">Captain</p>
+                    </div>
+                  </li>
                   {registration.membersAccepted?.map((member) => (
                     <li
                       key={member._id}
                       className="flex items-center gap-3 rounded-sm bg-paper-2 px-3 py-2.5"
                     >
-                      <Monogram name={member.name || "?"} size="sm" />
-                      <span className="truncate text-sm font-medium">{member.name}</span>
+                      <StudentAvatar student={member} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{member.name}</p>
+                        <p className="truncate text-xs text-ink-3">{member.email}</p>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -567,7 +610,6 @@ export default function Event() {
               </>
             )}
           </Card>
-          {event.ContactInfo?.length > 0 && <Card className="p-5"><h2 className="eyebrow">Event contacts</h2><ul className="mt-3 space-y-2">{event.ContactInfo.map((contact, index) => { const href = contactHref(contact); return <li key={`${contact}-${index}`} className="rounded-sm bg-paper-2 px-3.5 py-3 text-sm break-words">{href ? <a href={href} target={href.startsWith("http") ? "_blank" : undefined} rel={href.startsWith("http") ? "noreferrer" : undefined} className="link link-accent">{contact}</a> : contact}</li>; })}</ul></Card>}
         </aside>
       </div>
     </Page>

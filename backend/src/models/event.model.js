@@ -73,7 +73,7 @@ const eventSchema = new mongoose.Schema({
   },
   minTeamSize: { type: Number, default: 1, min: 1 },
   maxTeamSize: { type: Number, default: 1, min: 1, max: 10000 },
-  maxParticipants: { type: Number, min: 1, max: 10000 },
+  maxParticipants: { type: Number, default: null, min: 1, max: 10000 },
   ContactInfo: { type: [String], default: [] },
   // Retained during the migration window so old records and old clients remain readable.
   roundDetails: { type: Array, default: [] },
@@ -125,7 +125,7 @@ eventSchema.pre("save", function(next) {
   if (!this.registrationDeadlineAt && this.registerationDeadline) {
     this.registrationDeadlineAt = new Date(`${this.registerationDeadline}T23:59:59.999+05:30`);
   }
-  if (!this.maxTeamSize && this.maxParticipants) this.maxTeamSize = this.maxParticipants;
+  if (!this.maxTeamSize) this.maxTeamSize = 1;
   if (this.status === "published" && !this.publishedAt) this.publishedAt = new Date();
   next();
 });

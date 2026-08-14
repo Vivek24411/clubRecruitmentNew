@@ -137,7 +137,7 @@ export default function Event() {
                 label="Deadline"
                 value={deadline ? formatDateTime(deadline) : "Not set"}
               />
-              <Meta label="Max participants" value={event.maxParticipants} />
+              <Meta label="Participant limit" value={event.maxParticipants ? `${event.maxParticipants} people` : "Unlimited"} />
               <Meta label="Rounds" value={event.numberOfRounds} />
               <Meta
                 label="Created"
