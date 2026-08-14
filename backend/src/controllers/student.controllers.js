@@ -15,8 +15,13 @@ const sessionRsvpModel = require("../models/sessionRsvp.model");
 const { clearSessionCookie, setSessionCookie } = require("../utils/auth");
 const { notifyStudent } = require("../services/notification.services");
 const { writeAudit } = require("../services/audit.services");
+const { destroyCloudinaryAsset, destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
 const platformSettingsModel = require("../models/platformSettings.model");
 const applicationHistoryModel = require("../models/applicationHistory.model");
+const roundCandidateModel = require("../models/roundCandidate.model");
+const roundSubmissionModel = require("../models/roundSubmission.model");
+const scheduleSlotModel = require("../models/scheduleSlot.model");
+const scheduleReservationModel = require("../models/scheduleReservation.model");
 const {
   eventEligibility,
   inferProgramStartYear,
@@ -26,9 +31,14 @@ const {
   YEAR_LABELS,
 } = require("../services/academic.services");
 const {
+  candidateIncludesStudent,
   ensureEventRounds,
   initializeRegistrationWorkflow,
+  registrationParticipantIds,
+  removeParticipantFromRegistrationWorkflow,
+  studentApplicationStatus,
   syncRegistrationParticipants,
+  withdrawRegistrationWorkflow,
 } = require("../services/eventWorkflow.services");
 
 const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
@@ -105,6 +115,73 @@ async function recordApplicationHistory({ studentId, registration, role, reason 
   } catch (error) {
     console.error("Application history write failed:", error?.message || "unknown error");
   }
+}
+
+async function registrationForStudent(registration, event, studentId) {
+  if (!registration) return null;
+  const workflowEvent = await ensureEventRounds(event?._id ? event : await eventModel.findById(event));
+  const candidates = await roundCandidateModel.find({
+    registrationId: registration._id,
+    status: { $ne: "revoked" },
+  });
+  return {
+    ...registration.toObject(),
+    studentOverallStatus: studentApplicationStatus(
+      workflowEvent,
+      candidates,
+      studentId,
+      registration.overallStatus,
+    ),
+  };
+}
+
+async function activeEventMembership(eventId, studentId) {
+  const membership = await eventMembershipModel.findOne({ eventId, studentId });
+  if (!membership) return null;
+  const registration = await registerationEventModel.findById(membership.registrationId)
+    .select("overallStatus");
+  if (registration && registration.overallStatus !== "withdrawn") return membership;
+  await membership.deleteOne();
+  return null;
+}
+
+async function clearRegistrationWorkflow(registrationId) {
+  const [submissions, slots] = await Promise.all([
+    roundSubmissionModel.find({ registrationId }).select("files"),
+    scheduleSlotModel.find({ registrationId }).select("_id"),
+  ]);
+  const slotIds = slots.map((slot) => slot._id);
+
+  await Promise.all([
+    ...submissions.flatMap((submission) => (submission.files || []).map((file) =>
+      destroyCloudinaryAsset(file.publicId, file.resourceType))),
+    slotIds.length
+      ? scheduleReservationModel.deleteMany({ slotId: { $in: slotIds } })
+      : Promise.resolve(),
+  ]);
+  await Promise.all([
+    roundSubmissionModel.deleteMany({ registrationId }),
+    scheduleSlotModel.deleteMany({ registrationId }),
+    roundCandidateModel.deleteMany({ registrationId }),
+  ]);
+}
+
+async function removeWithdrawnRegistrationRecords(filter) {
+  const registrations = await registerationEventModel.find({
+    ...filter,
+    overallStatus: "withdrawn",
+  }).select("_id");
+  if (!registrations.length) return 0;
+  const registrationIds = registrations.map((registration) => registration._id);
+  for (const registrationId of registrationIds) {
+    await clearRegistrationWorkflow(registrationId);
+  }
+  await eventMembershipModel.deleteMany({ registrationId: { $in: registrationIds } });
+  const result = await registerationEventModel.deleteMany({
+    _id: { $in: registrationIds },
+    overallStatus: "withdrawn",
+  });
+  return result.deletedCount;
 }
 
 module.exports.sendOtp = async (req, res) => {
@@ -351,15 +428,39 @@ module.exports.updateProfile = async (req, res) => {
   const update = Object.fromEntries(
     Object.entries(req.body).filter(([key]) => allowed.includes(key))
   );
+  if (req.body.notificationPreferencesJSON) {
+    try {
+      const preferences = JSON.parse(req.body.notificationPreferencesJSON);
+      update.notificationPreferences = {
+        email: preferences.email !== false,
+        inApp: preferences.inApp !== false,
+      };
+    } catch {
+      await destroyUploadedFile(req.file);
+      return res.status(400).json({ success: false, msg: "Notification preferences are invalid" });
+    }
+  }
 
   try {
-    const student = await studentModel.findByIdAndUpdate(req.student._id, update, {
-      new: true,
-      runValidators: true,
-    });
+    const student = await studentModel.findById(req.student._id);
+    if (!student) {
+      await destroyUploadedFile(req.file);
+      return res.status(404).json({ success: false, msg: "Student not found" });
+    }
+    const oldPicturePublicId = student.profilePicturePublicId;
+    Object.assign(student, update);
+    if (req.file) {
+      student.profilePicture = req.file.path;
+      student.profilePicturePublicId = req.file.filename;
+    }
+    await student.save();
+    if (req.file && oldPicturePublicId && oldPicturePublicId !== req.file.filename) {
+      await destroyCloudinaryImage(oldPicturePublicId);
+    }
     await writeAudit({ actorRole: "student", actorId: req.student._id, action: "profile.update", targetType: "student", targetId: req.student._id, metadata: { fields: Object.keys(update) } });
     return res.json({ success: true, msg: "Profile updated successfully", student: publicStudent(student) });
   } catch (error) {
+    await destroyUploadedFile(req.file);
     const duplicate = error?.code === 11000;
     return res.status(duplicate ? 409 : 400).json({
       success: false,
@@ -455,8 +556,22 @@ module.exports.getClub = async (req, res) => {
 
 module.exports.getAllEvents = async (req, res) => {
   try {
-    const events = await eventModel.find({ status: "published" }).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS });
-    return res.json({ success: true, events: events.filter((event) => event.clubId) });
+    const events = await eventModel.find({ status: { $in: ["published", "closed"] } }).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS });
+    const eventIds = events.map((event) => event._id);
+    const memberships = await eventMembershipModel.find({ studentId: req.student._id, eventId: { $in: eventIds } })
+      .populate("registrationId", "overallStatus");
+    const applications = new Map(memberships.map((membership) => [String(membership.eventId), {
+      registrationId: membership.registrationId?._id || membership.registrationId,
+      role: membership.role,
+      overallStatus: membership.registrationId?.overallStatus,
+    }]));
+    return res.json({
+      success: true,
+      events: events.filter((event) => event.clubId).map((event) => ({
+        ...event.toObject(),
+        application: applications.get(String(event._id)) || null,
+      })),
+    });
   } catch (error) {
 
     return res.status(500).json({ success: false, msg: "Server error" });
@@ -534,7 +649,18 @@ module.exports.getDashBoard = async (req, res, next) => {
     sessionModel.find({ status: "published" }).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS }),
     platformSettingsModel.findOne({ key: "global" }).select("registrationEnabled maintenanceMessage recruitmentCycle"),
   ]);
-  return res.json({ success: true, events: events.filter((event) => event.clubId), sessions: sessions.filter((session) => session.clubId), settings });
+  const openEvents = events.filter((event) => event.clubId && registrationIsOpen(event));
+  const memberships = await eventMembershipModel.find({
+    studentId: req.student._id,
+    eventId: { $in: openEvents.map((event) => event._id) },
+  });
+  const applicationEventIds = new Set(memberships.map((membership) => String(membership.eventId)));
+  return res.json({
+    success: true,
+    events: openEvents.map((event) => ({ ...event.toObject(), hasApplied: applicationEventIds.has(String(event._id)) })),
+    sessions: sessions.filter((session) => session.clubId),
+    settings,
+  });
 };
 
 module.exports.registerEvent = async (req, res, next) => {
@@ -571,8 +697,12 @@ module.exports.registerEvent = async (req, res, next) => {
       return res.status(403).json({ success: false, msg: eligibility.reason });
     }
 
-    const existingMembership = await eventMembershipModel.findOne({ eventId, studentId });
-    const acceptedElsewhere = await registerationEventModel.exists({ eventId, membersAccepted: studentId });
+    const existingMembership = await activeEventMembership(eventId, studentId);
+    const acceptedElsewhere = await registerationEventModel.exists({
+      eventId,
+      membersAccepted: studentId,
+      overallStatus: { $ne: "withdrawn" },
+    });
     if (existingMembership || acceptedElsewhere) {
       return res.status(409).json({ success: false, msg: "You already belong to a team for this event" });
     }
@@ -580,8 +710,9 @@ module.exports.registerEvent = async (req, res, next) => {
     const alreadyRegistered = await registerationEventModel.findOne({
       eventId,
       studentId,
+      overallStatus: { $ne: "withdrawn" },
     });
-    if (alreadyRegistered && alreadyRegistered.overallStatus !== "withdrawn") {
+    if (alreadyRegistered) {
       return res.json({
         success: false,
         msg: "Already registered for this event",
@@ -597,12 +728,54 @@ module.exports.registerEvent = async (req, res, next) => {
     }));
 
 
-    const registeration = alreadyRegistered || await registerationEventModel.create({
-        eventId,
-        studentId,
-        roundDetails: roundDetailsStudent,
-        numberOfRounds: event.numberOfRounds,
-      });
+    const resetAt = new Date();
+    let reusedWithdrawnAttempt = true;
+    let registeration = await registerationEventModel.findOneAndUpdate(
+      { eventId, studentId, overallStatus: "withdrawn" },
+      {
+        $set: {
+          roundDetails: roundDetailsStudent,
+          numberOfRounds: event.numberOfRounds,
+          membersAccepted: [],
+          membersOffered: [],
+          teamName: null,
+          overallStatus: "submitted",
+          currentRound: 0,
+          currentRoundId: null,
+          reviewerNotes: "",
+          score: null,
+          source: { type: "direct", eventId: null, roundId: null, registrationId: null },
+          registeredAt: resetAt,
+          updatedAt: resetAt,
+        },
+      },
+      { new: true, sort: { updatedAt: -1 }, runValidators: true },
+    );
+
+    if (registeration) {
+      try {
+        await clearRegistrationWorkflow(registeration._id);
+      } catch (error) {
+        registeration.overallStatus = "withdrawn";
+        await registeration.save();
+        throw error;
+      }
+    } else {
+      reusedWithdrawnAttempt = false;
+      try {
+        registeration = await registerationEventModel.create({
+          eventId,
+          studentId,
+          roundDetails: roundDetailsStudent,
+          numberOfRounds: event.numberOfRounds,
+        });
+      } catch (error) {
+        if (error?.code === 11000) {
+          return res.status(409).json({ success: false, msg: "You already have an application for this event. Refresh and try again" });
+        }
+        throw error;
+      }
+    }
 
     try {
       await eventMembershipModel.create({
@@ -612,32 +785,16 @@ module.exports.registerEvent = async (req, res, next) => {
         role: "captain",
       });
     } catch (error) {
-      if (!alreadyRegistered) await registerationEventModel.deleteOne({ _id: registeration._id });
+      if (reusedWithdrawnAttempt) {
+        registeration.overallStatus = "withdrawn";
+        await registeration.save();
+      } else {
+        await registerationEventModel.deleteOne({ _id: registeration._id });
+      }
       if (error?.code === 11000) {
         return res.status(409).json({ success: false, msg: "You already belong to a team for this event" });
       }
       throw error;
-    }
-
-    if (alreadyRegistered) {
-      try {
-        Object.assign(registeration, {
-          roundDetails: roundDetailsStudent,
-          numberOfRounds: event.numberOfRounds,
-          membersAccepted: [],
-          membersOffered: [],
-          teamName: null,
-          overallStatus: "submitted",
-          currentRound: 0,
-          reviewerNotes: "",
-          score: null,
-          registeredAt: new Date(),
-        });
-        await registeration.save();
-      } catch (error) {
-        await eventMembershipModel.deleteOne({ eventId, studentId });
-        throw error;
-      }
     }
 
     await registerationEventModel.updateMany(
@@ -681,26 +838,36 @@ module.exports.getEventDetails = async (req, res, next) => {
     .populate("membersOffered", "name email");
 
   if (captainExists) {
-    return res.json({ success: true, detail: captainExists, Show: 1 });
+    return res.json({
+      success: true,
+      detail: await registrationForStudent(captainExists, captainExists.eventId, studentId),
+      Show: 1,
+    });
   }
 
   const memberAccepted = await registerationEventModel
     .findOne({
       eventId,
       membersAccepted: studentId, //{ $in: [studentId] }, thsi could be sued id we want to pass mutliple sutdentids and documents conatisn atlease one stidentdi
+      overallStatus: { $ne: "withdrawn" },
     })
     .populate("eventId")
     .populate("studentId", "name email")
     .populate("membersAccepted", "name email");
 
   if (memberAccepted) {
-    return res.json({ success: true, detail: memberAccepted, Show: 2 });
+    return res.json({
+      success: true,
+      detail: await registrationForStudent(memberAccepted, memberAccepted.eventId, studentId),
+      Show: 2,
+    });
   }
 
   const memberOffered = await registerationEventModel
     .find({
       eventId,
       membersOffered: studentId, //{ $in: [studentId] }, thsi could be sued id we want to pass mutliple sutdentids and documents conatisn atlease one stidentdi
+      overallStatus: { $ne: "withdrawn" },
     })
     .populate("eventId")
     .populate("studentId", "name email")
@@ -731,7 +898,6 @@ module.exports.addMemberOffer = async (req, res, next) => {
     if (!event) {
       return res.json({ success: false, msg: "Event not found" });
     }
-
     if (!registrationIsOpen(event)) {
       return res.status(400).json({ success: false, msg: "Registration is closed" });
     }
@@ -754,6 +920,7 @@ module.exports.addMemberOffer = async (req, res, next) => {
     const alreadyRegistered = await registerationEventModel.findOne({
       eventId,
       studentId: member._id,
+      overallStatus: { $ne: "withdrawn" },
     });
     if (alreadyRegistered) {
       return res.json({
@@ -762,7 +929,7 @@ module.exports.addMemberOffer = async (req, res, next) => {
       });
     }
 
-    const memberMembership = await eventMembershipModel.findOne({ eventId, studentId: member._id });
+    const memberMembership = await activeEventMembership(eventId, member._id);
     if (memberMembership) {
       return res.status(409).json({ success: false, msg: "Member already belongs to a team for this event" });
     }
@@ -775,6 +942,7 @@ module.exports.addMemberOffer = async (req, res, next) => {
       eventId,
       studentId: captainId,
       membersAccepted: { $in: [member._id] },
+      overallStatus: { $ne: "withdrawn" },
     });
     if (alreadyAccepted) {
       return res.json({
@@ -786,6 +954,7 @@ module.exports.addMemberOffer = async (req, res, next) => {
     const alreadyAcceptedSomeoneElse = await registerationEventModel.findOne({
       eventId,
       membersAccepted: { $in: [member._id] },
+      overallStatus: { $ne: "withdrawn" },
     });
     if (alreadyAcceptedSomeoneElse) {
       return res.json({
@@ -798,6 +967,7 @@ module.exports.addMemberOffer = async (req, res, next) => {
       eventId,
       studentId: captainId,
       membersOffered: { $in: [member._id] },
+      overallStatus: { $ne: "withdrawn" },
     });
     if (alreadyOffered) {
       return res.json({
@@ -809,6 +979,7 @@ module.exports.addMemberOffer = async (req, res, next) => {
     const captainRegisteration = await registerationEventModel.findOne({
       eventId,
       studentId: captainId,
+      overallStatus: { $ne: "withdrawn" },
     });
 
     if (!captainRegisteration) {
@@ -870,6 +1041,7 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
       eventId,
       studentId: studentId,
       membersOffered: memberId,
+      overallStatus: { $ne: "withdrawn" },
     });
 
     if (!captainRegisteration) {
@@ -879,8 +1051,12 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
       });
     }
 
-    const existingMembership = await eventMembershipModel.findOne({ eventId, studentId: memberId });
-    const acceptedElsewhere = await registerationEventModel.exists({ eventId, membersAccepted: memberId });
+    const existingMembership = await activeEventMembership(eventId, memberId);
+    const acceptedElsewhere = await registerationEventModel.exists({
+      eventId,
+      membersAccepted: memberId,
+      overallStatus: { $ne: "withdrawn" },
+    });
     if (existingMembership || acceptedElsewhere) {
       return res.status(409).json({ success: false, msg: "You already belong to a team for this event" });
     }
@@ -928,12 +1104,14 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
       { $pull: { membersOffered: memberId } }
     );
     await syncRegistrationParticipants(event, joinedRegistration);
-    await notifyStudent(joinedRegistration.studentId, {
+    await Promise.all(registrationParticipantIds(joinedRegistration).map((studentId) => notifyStudent(studentId, {
       type: "team_joined",
-      title: "Team invitation accepted",
-      message: `${req.student.name} joined your team for ${event.title}.`,
+      title: "Team member joined",
+      message: String(studentId) === String(memberId)
+        ? `You joined the team for ${event.title}.`
+        : `${req.student.name} joined your team for ${event.title}.`,
       link: `/event/${eventId}`,
-    });
+    })));
     await writeAudit({ actorRole: "student", actorId: memberId, action: "team.accept_invitation", targetType: "registration", targetId: joinedRegistration._id });
 
     return res.json({ success: true, msg: "Member accepted successfully" });
@@ -958,17 +1136,17 @@ module.exports.unregisteredAsCaptain = async (req, res, next) => {
     if (!event) {
       return res.json({ success: false, msg: "Event not found" });
     }
+    if (!registrationIsOpen(event)) {
+      return res.status(400).json({ success: false, msg: "Withdrawals are closed after the registration deadline" });
+    }
 
     const registration = await registerationEventModel.findOne({
       eventId,
       studentId: captainId,
+      overallStatus: { $ne: "withdrawn" },
     });
 
     if (!registration) return res.status(404).json({ success: false, msg: "Registration not found" });
-    if (registration.overallStatus === "withdrawn") return res.status(409).json({ success: false, msg: "Application is already withdrawn" });
-    if (["selected", "rejected"].includes(registration.overallStatus)) {
-      return res.status(400).json({ success: false, msg: "A final decision has already been recorded" });
-    }
     const formerMembers = [...registration.membersAccepted];
     await Promise.all([
       recordApplicationHistory({ studentId: captainId, registration, role: "captain", reason: "withdrawn" }),
@@ -978,6 +1156,7 @@ module.exports.unregisteredAsCaptain = async (req, res, next) => {
     registration.membersAccepted = [];
     registration.membersOffered = [];
     await registration.save();
+    await withdrawRegistrationWorkflow(registration._id);
     await eventMembershipModel.deleteMany({ registrationId: registration._id });
     await Promise.all(formerMembers.map((studentId) => notifyStudent(studentId, {
       type: "team_disbanded",
@@ -1018,6 +1197,7 @@ module.exports.addTeamName = async (req, res, next) => {
     const captainRegisteration = await registerationEventModel.findOne({
       eventId,
       studentId: captainId,
+      overallStatus: { $ne: "withdrawn" },
     });
 
     if (!captainRegisteration) {
@@ -1042,7 +1222,7 @@ module.exports.addTeamName = async (req, res, next) => {
 module.exports.declineMemberOffer = async (req, res) => {
   const memberId = req.student._id;
   const registration = await registerationEventModel.findOneAndUpdate(
-    { eventId: req.body.eventId, studentId: req.body.captainId, membersOffered: memberId },
+    { eventId: req.body.eventId, studentId: req.body.captainId, membersOffered: memberId, overallStatus: { $ne: "withdrawn" } },
     { $pull: { membersOffered: memberId } },
     { new: true }
   );
@@ -1060,7 +1240,7 @@ module.exports.cancelMemberOffer = async (req, res) => {
   const member = await studentModel.findOne({ email: normalizeEmail(req.body.memberEmail) });
   if (!member) return res.status(404).json({ success: false, msg: "Student not found" });
   const registration = await registerationEventModel.findOneAndUpdate(
-    { eventId: req.body.eventId, studentId: req.student._id, membersOffered: member._id },
+    { eventId: req.body.eventId, studentId: req.student._id, membersOffered: member._id, overallStatus: { $ne: "withdrawn" } },
     { $pull: { membersOffered: member._id } },
     { new: true }
   );
@@ -1075,12 +1255,13 @@ module.exports.removeTeamMember = async (req, res) => {
   if (!await requireActiveEventClub(event, res)) return;
   if (!await requireOpenRecruitment(res)) return;
   const registration = await registerationEventModel.findOneAndUpdate(
-    { eventId: req.body.eventId, studentId: req.student._id, membersAccepted: req.body.memberId },
+    { eventId: req.body.eventId, studentId: req.student._id, membersAccepted: req.body.memberId, overallStatus: { $ne: "withdrawn" } },
     { $pull: { membersAccepted: req.body.memberId } },
     { new: true }
   );
   if (!registration) return res.status(404).json({ success: false, msg: "Team member not found" });
   await recordApplicationHistory({ studentId: req.body.memberId, registration, role: "member", reason: "removed" });
+  await removeParticipantFromRegistrationWorkflow(registration._id, req.body.memberId, "withdrawn");
   await eventMembershipModel.deleteOne({ eventId: req.body.eventId, studentId: req.body.memberId, role: "member" });
   await writeAudit({ actorRole: "student", actorId: req.student._id, action: "team.remove_member", targetType: "registration", targetId: registration._id, metadata: { memberId: req.body.memberId } });
   await notifyStudent(req.body.memberId, {
@@ -1110,6 +1291,7 @@ module.exports.leaveTeam = async (req, res) => {
     { new: true }
   );
   if (registration) await recordApplicationHistory({ studentId: req.student._id, registration, role: "member", reason: "left" });
+  if (registration) await removeParticipantFromRegistrationWorkflow(registration._id, req.student._id, "withdrawn");
   await membership.deleteOne();
   await writeAudit({ actorRole: "student", actorId: req.student._id, action: "team.leave", targetType: "registration", targetId: membership.registrationId });
   if (registration) {
@@ -1123,6 +1305,102 @@ module.exports.leaveTeam = async (req, res) => {
   return res.json({ success: true, msg: "You left the team" });
 };
 
+module.exports.transferCaptain = async (req, res) => {
+  const event = await eventModel.findById(req.body.eventId);
+  if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
+  if (!registrationIsOpen(event)) {
+    return res.status(400).json({ success: false, msg: "Captain changes are closed after the registration deadline" });
+  }
+  if (!await requireActiveEventClub(event, res)) return;
+  if (!await requireOpenRecruitment(res)) return;
+
+  const oldCaptainId = req.student._id;
+  const newCaptainId = req.body.memberId;
+  const registration = await registerationEventModel.findOne({
+    eventId: event._id,
+    studentId: oldCaptainId,
+    membersAccepted: newCaptainId,
+    overallStatus: { $ne: "withdrawn" },
+  });
+  if (!registration) {
+    return res.status(404).json({ success: false, msg: "Choose an active member of your team" });
+  }
+
+  const oldCaptainMembership = await eventMembershipModel.findOne({
+    eventId: event._id,
+    registrationId: registration._id,
+    studentId: oldCaptainId,
+    role: "captain",
+  });
+  const newCaptainMembership = await eventMembershipModel.findOne({
+    eventId: event._id,
+    registrationId: registration._id,
+    studentId: newCaptainId,
+    role: "member",
+  });
+  if (!oldCaptainMembership || !newCaptainMembership) {
+    return res.status(409).json({ success: false, msg: "Team membership is out of date. Refresh and try again" });
+  }
+
+  await removeWithdrawnRegistrationRecords({
+    eventId: event._id,
+    studentId: newCaptainId,
+    _id: { $ne: registration._id },
+  });
+
+  registration.studentId = newCaptainId;
+  registration.membersAccepted = registration.membersAccepted
+    .filter((studentId) => String(studentId) !== String(newCaptainId));
+  if (!registration.membersAccepted.some((studentId) => String(studentId) === String(oldCaptainId))) {
+    registration.membersAccepted.push(oldCaptainId);
+  }
+  try {
+    await registration.save();
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        msg: "A previous application is still blocking this captain change. Refresh and try once more",
+      });
+    }
+    throw error;
+  }
+  try {
+    oldCaptainMembership.role = "member";
+    newCaptainMembership.role = "captain";
+    await Promise.all([oldCaptainMembership.save(), newCaptainMembership.save()]);
+  } catch (error) {
+    registration.studentId = oldCaptainId;
+    registration.membersAccepted = registration.membersAccepted
+      .filter((studentId) => String(studentId) !== String(oldCaptainId));
+    if (!registration.membersAccepted.some((studentId) => String(studentId) === String(newCaptainId))) {
+      registration.membersAccepted.push(newCaptainId);
+    }
+    await registration.save();
+    throw error;
+  }
+
+  await Promise.all([
+    ...registrationParticipantIds(registration).map((studentId) => notifyStudent(studentId, {
+      type: "team_captain_transfer",
+      title: `Captain updated for ${event.title}`,
+      message: String(studentId) === String(newCaptainId)
+        ? `${req.student.name} transferred team captaincy to you.`
+        : `Team captaincy was transferred to a different member. Open the event to view the updated team.`,
+      link: `/event/${event._id}`,
+    })),
+    writeAudit({
+      actorRole: "student",
+      actorId: oldCaptainId,
+      action: "team.transfer_captain",
+      targetType: "registration",
+      targetId: registration._id,
+      metadata: { newCaptainId },
+    }),
+  ]);
+  return res.json({ success: true, msg: "Captaincy transferred successfully" });
+};
+
 module.exports.getMyApplications = async (req, res) => {
   const populateRegistration = { path: "registrationId", populate: [
       { path: "eventId", populate: { path: "clubId", select: "name clubLogo" } },
@@ -1133,6 +1411,50 @@ module.exports.getMyApplications = async (req, res) => {
     .find({ studentId: req.student._id })
     .populate(populateRegistration)
     .sort({ joinedAt: -1 });
+
+  const registrationIds = memberships
+    .map((membership) => membership.registrationId?._id)
+    .filter(Boolean);
+  const [workflowCandidates, workflowSlots] = await Promise.all([
+    roundCandidateModel.find({ registrationId: { $in: registrationIds }, status: { $ne: "revoked" } })
+      .populate("studentId", "name email profilePicture")
+      .populate("participantIds", "name email profilePicture")
+      .sort({ createdAt: 1 }),
+    scheduleSlotModel.find({ registrationId: { $in: registrationIds }, status: "scheduled" })
+      .sort({ startAt: 1 }),
+  ]);
+  const candidatesByRegistration = new Map();
+  const slotsByRegistration = new Map();
+  for (const candidate of workflowCandidates) {
+    const key = String(candidate.registrationId);
+    if (!candidatesByRegistration.has(key)) candidatesByRegistration.set(key, []);
+    candidatesByRegistration.get(key).push(candidate);
+  }
+  for (const slot of workflowSlots) {
+    const key = String(slot.registrationId);
+    if (!slotsByRegistration.has(key)) slotsByRegistration.set(key, []);
+    slotsByRegistration.get(key).push(slot);
+  }
+  const activeApplications = memberships.map((membership) => {
+    const value = membership.toObject();
+    if (!value.registrationId) return value;
+    const registrationId = String(value.registrationId?._id || "");
+    const registrationCandidates = candidatesByRegistration.get(registrationId) || [];
+    value.registrationId.workflow = {
+      candidates: registrationCandidates.map((candidate) => ({
+        ...candidate.toObject(),
+        isMine: candidateIncludesStudent(candidate, req.student._id),
+      })),
+      slots: slotsByRegistration.get(registrationId) || [],
+      studentOverallStatus: studentApplicationStatus(
+        value.registrationId.eventId,
+        registrationCandidates,
+        req.student._id,
+        value.registrationId.overallStatus,
+      ),
+    };
+    return value;
+  });
 
   const histories = await applicationHistoryModel
     .find({ studentId: req.student._id })
@@ -1181,7 +1503,7 @@ module.exports.getMyApplications = async (req, res) => {
     },
   }));
 
-  return res.json({ success: true, applications: [...memberships, ...applicationHistory, ...legacyHistory] });
+  return res.json({ success: true, applications: [...activeApplications, ...applicationHistory, ...legacyHistory] });
 };
 
 module.exports.getNotifications = async (req, res) => {

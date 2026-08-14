@@ -36,9 +36,19 @@ function ClubMark({ club }) {
       alt=""
       loading="lazy"
       onError={() => setFailed(true)}
-      className="h-16 w-16 flex-none rounded-md border border-line bg-surface object-contain p-1"
+      className="h-24 w-24 flex-none rounded-lg border border-line bg-surface object-contain p-2 shadow-sm"
     />
   );
+}
+
+function ContactIcon({ type }) {
+  const paths = {
+    website: <><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.3 3 14.7 0 18M12 3c-3 3.3-3 14.7 0 18"/></>,
+    instagram: <><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01"/></>,
+    linkedin: <><path d="M6 9v9M6 6.5v.01M10 18v-5c0-2.2 1.3-3.5 3.2-3.5 2 0 3.3 1.3 3.3 3.5v5M10 10v8"/></>,
+    email: <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></>,
+  };
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">{paths[type]}</svg>;
 }
 
 export default function Clubs() {
@@ -136,25 +146,22 @@ export default function Clubs() {
             </p>
             <div className="stagger grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {filteredClubs.map((club) => (
-                <Link
-                  key={club._id}
-                  to={`/club/${club._id}`}
-                  className="card card-interactive group flex flex-col p-6"
-                >
-                  <ClubMark club={club} />
-                  <h2 className="display mt-5 text-lg leading-snug">{club.name}</h2>
+                <article key={club._id} className="card card-interactive group flex min-h-[25rem] flex-col p-6">
+                  <div className="flex items-start justify-between gap-4"><ClubMark club={club} /><span className="badge badge-neutral capitalize">{club.category}</span></div>
+                  <Link to={`/club/${club._id}`} className="mt-5"><h2 className="display text-xl leading-snug transition-colors group-hover:text-accent">{club.name}</h2></Link>
                   {club.shortDescription && (
-                    <p className="mt-2.5 line-clamp-3 flex-1 text-sm leading-relaxed text-ink-3">
+                    <p className="mt-2.5 line-clamp-4 flex-1 text-sm leading-relaxed text-ink-3">
                       {club.shortDescription}
                     </p>
                   )}
-                  <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-accent">
-                    View club
-                    <span className="transition-transform duration-300 group-hover:translate-x-1">
-                      →
-                    </span>
-                  </span>
-                </Link>
+                  <div className="mt-5 flex flex-wrap gap-2 border-t border-line pt-4">
+                    {club.website && <a href={club.website} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm !px-2.5" aria-label={`${club.name} website`}><ContactIcon type="website" /></a>}
+                    {club.instagram && <a href={club.instagram} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm !px-2.5" aria-label={`${club.name} Instagram`}><ContactIcon type="instagram" /></a>}
+                    {club.linkedin && <a href={club.linkedin} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm !px-2.5" aria-label={`${club.name} LinkedIn`}><ContactIcon type="linkedin" /></a>}
+                    {club.contactEmail && <a href={`mailto:${club.contactEmail}`} className="btn btn-secondary btn-sm !px-2.5" aria-label={`Email ${club.name}`}><ContactIcon type="email" /></a>}
+                    <Link to={`/club/${club._id}`} className="btn btn-primary btn-sm ml-auto">View club →</Link>
+                  </div>
+                </article>
               ))}
             </div>
           </>

@@ -14,7 +14,7 @@ function ClubMark({ club }) {
       src={club.clubLogo}
       alt=""
       onError={() => setFailed(true)}
-      className="h-16 w-16 flex-none rounded-md border border-line bg-surface object-contain p-1"
+      className="h-24 w-24 flex-none rounded-lg border border-line bg-surface object-contain p-2 shadow-sm"
     />
   );
 }

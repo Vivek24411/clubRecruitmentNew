@@ -34,6 +34,8 @@ export default function Session() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [walkInEmail, setWalkInEmail] = useState("");
+  const [thumbnail, setThumbnail] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -59,17 +61,22 @@ export default function Session() {
 
   const save = async (event) => {
     event.preventDefault();
+    setSaving(true);
     try {
+      const payload = new FormData();
+      ["title", "shortDescription", "longDescription", "date", "time", "duration", "venue", "capacity", "status"].forEach((key) => payload.append(key, session[key] ?? ""));
+      if (thumbnail) payload.append("sessionThumbnail", thumbnail);
       const { data } = await axios.patch(
         `${import.meta.env.VITE_BASE_URI}/club/sessions/${sessionId}`,
-        session,
+        payload,
       );
       if (!data.success) throw new Error(data.msg);
       setSession(data.session);
+      setThumbnail(null);
       toast.success(data.msg);
     } catch (error) {
       toast.error(error.response?.data?.msg || error.message);
-    }
+    } finally { setSaving(false); }
   };
 
   const attendance = async (studentId, status) => {
@@ -161,6 +168,8 @@ export default function Session() {
         <hr className="rule animate-draw mt-8" style={{ animationDelay: "200ms" }} />
       </header>
 
+      {session.sessionThumbnail && <img src={session.sessionThumbnail} alt="" className="mt-8 aspect-video w-full rounded-md border border-line bg-paper-2 object-contain" />}
+
       <div className="mt-10 grid gap-8 lg:grid-cols-5">
         {/* --------------------------------------------------------------- */}
         {/* Editor                                                           */}
@@ -208,6 +217,7 @@ export default function Session() {
                   value={session.time || ""}
                   onChange={(event) => set("time", event.target.value)}
                 />
+                <div className="mt-2 flex flex-wrap gap-1.5">{["09:00", "12:00", "17:00", "20:00"].map((value) => <button key={value} type="button" className={`rounded-full border px-2 py-1 text-xs font-semibold ${session.time === value ? "border-accent bg-accent text-white" : "border-line bg-surface text-ink-3"}`} onClick={() => set("time", value)}>{new Date(`2000-01-01T${value}:00`).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}</button>)}</div>
               </Field>
             </div>
 
@@ -248,9 +258,10 @@ export default function Session() {
                 </Select>
               </Field>
             </div>
+            <Field label="Replace thumbnail" id="sessionThumbnail" hint="1600 × 900 px (16:9) works best."><input id="sessionThumbnail" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setThumbnail(event.target.files[0] || null)} /></Field>
           </div>
 
-          <Button className="mt-7">Save session</Button>
+          <Button className="mt-7" loading={saving}>Save session</Button>
         </Card>
 
         {/* --------------------------------------------------------------- */}

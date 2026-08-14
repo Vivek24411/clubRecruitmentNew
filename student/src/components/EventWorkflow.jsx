@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { Badge, Button, Card, Field, Input, SkeletonList, Textarea } from "./ui";
 
-const tone = { advanced: "ok", rejected: "bad", submitted: "info", under_review: "warn", scheduled: "info", eligible: "neutral", active: "accent" };
+const tone = { advanced: "ok", rejected: "bad", waitlisted: "warn", submitted: "info", under_review: "warn", scheduled: "info", eligible: "neutral", active: "accent", withdrawn: "neutral", revoked: "neutral", missed: "bad" };
 const format = (value) => value ? new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : null;
 
 function SubmissionForm({ eventId, round, candidate, existing, onSaved }) {
@@ -72,6 +72,28 @@ function SubmissionForm({ eventId, round, candidate, existing, onSaved }) {
   );
 }
 
+function SubmissionReadOnly({ submission }) {
+  if (!submission) return null;
+  return (
+    <div className="mt-4 rounded-sm border border-line bg-paper-2/55 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold">Your submitted work</p>
+        <span className="text-xs text-ink-3">Revision {submission.revision} · {format(submission.submittedAt)}</span>
+      </div>
+      <div className="mt-3 space-y-2">
+        {(submission.answers || []).map((answer) => (
+          <div key={answer.key} className="rounded-sm bg-surface px-3 py-2.5">
+            <p className="eyebrow">{answer.key.replaceAll("_", " ")}</p>
+            {/^https?:\/\//i.test(answer.value) ? <a href={answer.value} target="_blank" rel="noreferrer" className="link link-accent mt-1 block break-all text-sm">{answer.value} ↗</a> : <p className="mt-1 whitespace-pre-wrap break-words text-sm text-ink-2">{answer.value}</p>}
+          </div>
+        ))}
+        {(submission.files || []).map((file) => <a key={file.publicId} href={file.url} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-sm bg-surface px-3 py-2.5 text-sm font-semibold text-accent"><span className="truncate">{file.originalName || file.fieldKey}</span><span>Open ↗</span></a>)}
+      </div>
+      <p className="mt-3 text-xs text-ink-3">This submission is read-only because the round was decided or its deadline passed.</p>
+    </div>
+  );
+}
+
 export default function EventWorkflow({ eventId }) {
   const [data, setData] = useState(null);
   const load = useCallback(async () => {
@@ -92,19 +114,65 @@ export default function EventWorkflow({ eventId }) {
     });
     return map;
   }, [data]);
-  const submissionByCandidate = useMemo(() => new Map((data?.submissions || []).map((submission) => [submission.candidateId, submission])), [data]);
+  const submissionByCandidate = useMemo(() => {
+    const latest = new Map();
+    (data?.submissions || []).forEach((submission) => {
+      if (!latest.has(submission.candidateId)) latest.set(submission.candidateId, submission);
+    });
+    return latest;
+  }, [data]);
   const slotByCandidate = useMemo(() => new Map((data?.slots || []).map((slot) => [slot.candidateId, slot])), [data]);
 
   if (!data) return <SkeletonList rows={3} className="mt-6" />;
   if (!data.registration) return null;
+  const finalRoundId = data.event.rounds.at(-1)?._id;
+  const finalStatus = data.studentOverallStatus || data.registration.overallStatus;
   return (
     <section className="ruled-top pt-8">
-      <h2 className="display text-xl">Your event progress</h2>
-      <p className="mt-2 text-sm text-ink-3">Round access, submissions, decisions, and schedules appear here.</p>
+      <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="display text-xl">Your event progress</h2><p className="mt-2 text-sm text-ink-3">Every team member’s exact round result, submission, and schedule appears here.</p></div>{["selected", "rejected", "waitlisted", "withdrawn"].includes(finalStatus) && <Badge tone={finalStatus === "selected" ? "ok" : finalStatus === "rejected" ? "bad" : finalStatus === "waitlisted" ? "warn" : "neutral"} className="px-4 py-2 text-base capitalize">{finalStatus}</Badge>}</div>
       <div className="mt-6 space-y-4">
         {data.event.rounds.map((round) => {
           const candidates = candidatesByRound.get(round._id) || [];
-          return <Card key={round._id} className={`p-4 sm:p-5 ${!candidates.length ? "opacity-65" : ""}`}><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="eyebrow">Round {round.order}</p><h3 className="display mt-1 text-lg">{round.title}</h3><p className="mt-2 text-sm text-ink-3">{round.description || round.instructions || "Details will be shared by the club."}</p></div>{candidates.length ? <div className="flex flex-wrap gap-2">{candidates.map((candidate) => <Badge key={candidate._id} tone={tone[candidate.status]} className="capitalize">{candidate.status.replaceAll("_", " ")}</Badge>)}</div> : <Badge>Locked</Badge>}</div>{round.scheduleMode === "common" && round.startsAt && <div className="mt-4 rounded-sm bg-paper-2 px-4 py-3 text-sm"><strong>{format(round.startsAt)}</strong>{round.venue && <span className="text-ink-3"> at {round.venue}</span>}</div>}{candidates.map((candidate) => { const slot = slotByCandidate.get(candidate._id); const submission = submissionByCandidate.get(candidate._id); return <div key={candidate._id}>{slot && <div className="mt-4 rounded-sm border-l-2 border-accent bg-accent-tint/40 px-4 py-3 text-sm"><p className="font-semibold">Your slot: {format(slot.startAt)}</p>{slot.venue && <p className="mt-1 text-ink-3">{slot.venue}</p>}{slot.meetingUrl && <a className="link mt-1 block" href={slot.meetingUrl} target="_blank" rel="noreferrer">Open meeting link</a>}</div>}{round.submissionEnabled && !["advanced", "rejected", "missed", "withdrawn"].includes(candidate.status) && <SubmissionForm eventId={eventId} round={round} candidate={candidate} existing={submission} onSaved={load} />}</div>;})}</Card>;
+          const hasPublishedDetails = Boolean(round.description || round.instructions || round.startsAt || round.venue || round.meetingUrl || round.submissionDeadlineAt);
+          return (
+            <Card key={round._id} className={`overflow-hidden ${!candidates.length ? "opacity-65" : ""}`}>
+              <div className="p-4 sm:p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="eyebrow">Round {round.order}</p>
+                    <h3 className="display mt-1 text-lg">{round.title}</h3>
+                    {hasPublishedDetails ? <p className="mt-2 text-sm text-ink-3">{round.description || round.instructions || (round.submissionDeadlineAt ? `Submission deadline: ${format(round.submissionDeadlineAt)}` : "Schedule details are available below.")}</p> : candidates.length > 0 ? <p className="mt-2 text-sm text-ink-3">Details will be shared by the club.</p> : null}
+                  </div>
+                  {!candidates.length && <Badge>Locked</Badge>}
+                </div>
+                {round.scheduleMode === "common" && round.startsAt && <div className="mt-4 rounded-sm bg-paper-2 px-4 py-3 text-sm"><strong>{format(round.startsAt)}</strong>{round.venue && <span className="text-ink-3"> at {round.venue}</span>}{round.meetingUrl && <a className="link mt-1 block" href={round.meetingUrl} target="_blank" rel="noreferrer">Open meeting link ↗</a>}</div>}
+              </div>
+              {candidates.map((candidate) => {
+                const slot = slotByCandidate.get(candidate._id);
+                const submission = submissionByCandidate.get(candidate._id);
+                const person = candidate.scope === "participant" ? candidate.studentId?.name || "Team member" : data.registration.teamName || "Team / application";
+                const statusLabel = round._id === finalRoundId && candidate.status === "advanced" ? "selected" : candidate.status.replaceAll("_", " ");
+                const terminal = ["advanced", "rejected", "waitlisted", "missed", "withdrawn", "revoked"].includes(candidate.status);
+                const deadlinePassed = round.submissionDeadlineAt && new Date(round.submissionDeadlineAt) < new Date();
+                const editableSubmission = round.submissionEnabled && candidate.canAct && !terminal && !deadlinePassed;
+                return (
+                  <div key={candidate._id} className="border-t border-line p-4 sm:p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold">{person}</p>
+                        <p className="mt-0.5 text-xs text-ink-3">{candidate.scope === "participant" ? "Individual result" : `${candidate.participantIds?.length || 1} participant(s) · Team result`}</p>
+                        {candidate.scope === "application" && candidate.participantIds?.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{candidate.participantIds.map((student) => <span key={student._id || student} className="rounded-full border border-line bg-paper-2 px-2.5 py-1 text-xs font-medium text-ink-2">{student.name || "Team member"}</span>)}</div>}
+                      </div>
+                      <Badge tone={tone[candidate.status]} className="px-3 py-1.5 text-sm capitalize">{statusLabel}</Badge>
+                    </div>
+                    {slot && <div className="mt-4 rounded-sm border-l-2 border-accent bg-accent-tint/40 px-4 py-3 text-sm"><p className="font-semibold">{candidate.scope === "participant" ? `${person}'s slot` : "Team slot"}: {format(slot.startAt)}</p>{slot.venue && <p className="mt-1 text-ink-3">{slot.venue}</p>}{slot.meetingUrl && <a className="link mt-1 block" href={slot.meetingUrl} target="_blank" rel="noreferrer">Open meeting link ↗</a>}</div>}
+                    {submission && !editableSubmission && <SubmissionReadOnly submission={submission} />}
+                    {editableSubmission && <SubmissionForm eventId={eventId} round={round} candidate={candidate} existing={submission} onSaved={load} />}
+                  </div>
+                );
+              })}
+            </Card>
+          );
         })}
       </div>
     </section>

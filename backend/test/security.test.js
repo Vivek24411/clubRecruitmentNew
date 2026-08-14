@@ -19,6 +19,17 @@ test("session tokens are role-bound and carry the revocation version", () => {
   assert.throws(() => verifySession(token, "club"));
 });
 
+test("student and club sessions last two days while admin sessions stay shorter", () => {
+  const now = Math.floor(Date.now() / 1000);
+  const student = verifySession(signSession({ subject: "student-id", role: "student" }), "student");
+  const club = verifySession(signSession({ subject: "club-id", role: "club" }), "club");
+  const admin = verifySession(signSession({ subject: "admin-id", role: "admin" }), "admin");
+
+  assert.ok(student.exp - now >= (2 * 24 * 60 * 60) - 5);
+  assert.ok(club.exp - now >= (2 * 24 * 60 * 60) - 5);
+  assert.ok(admin.exp - now <= (8 * 60 * 60) + 5);
+});
+
 test("cookie auth is used when a legacy client sends Bearer undefined", () => {
   const req = { headers: { authorization: "Bearer undefined", cookie: "student_session=real-token" } };
   assert.equal(getSessionToken(req, "student"), "real-token");

@@ -268,6 +268,7 @@ module.exports.addSession = async (req, res) => {
   const error = validationResult(req);
 
   if (!error.isEmpty()) {
+    await destroyUploadedFile(req.file);
     return res.json({ errors: error.array(), success: false });
   }
 
@@ -293,6 +294,8 @@ module.exports.addSession = async (req, res) => {
       venue,
       status: req.body.status || "published",
       capacity: req.body.capacity || null,
+      sessionThumbnail: req.file?.path || "",
+      sessionThumbnailPublicId: req.file?.filename || "",
     });
 
     await writeAudit({ actorRole: "club", actorId: req.club._id, action: "session.create", targetType: "session", targetId: session._id });
@@ -303,6 +306,7 @@ module.exports.addSession = async (req, res) => {
       session,
     });
   } catch (err) {
+    await destroyUploadedFile(req.file);
     console.error("Error creating session:", err);
     return res
       .status(500)
@@ -439,6 +443,7 @@ module.exports.addEvent = async (req, res) => {
     shortDescription,
     longDescription,
     registerationDeadline,
+    registrationDeadlineAt,
     maxParticipants,
     eligibility,
     numberOfRounds,
@@ -463,7 +468,12 @@ module.exports.addEvent = async (req, res) => {
   }
   
   const rawRounds = parsedArray(req.body.roundsJSON || req.body.roundDetailsJSON);
-  const rounds = normalizeRounds(rawRounds);
+  const rounds = normalizeRounds(rawRounds).map((round) => ({
+    ...round,
+    evaluationScope: (registrationType === "individual" || round.type === "test")
+      ? "participant"
+      : round.evaluationScope,
+  }));
   const roundDetails = req.body.roundsJSON ? [] : normalizedRoundDetails(rawRounds);
   const eligibilityYears = parsedArray(req.body.eligibilityYearsJSON)
     .map(Number).filter((year) => year >= 1 && year <= 5);
@@ -494,9 +504,11 @@ module.exports.addEvent = async (req, res) => {
       maxTeamSize: Number(maxTeamSize || maxParticipants || 1),
       minTeamSize: Number(minTeamSize || 1),
       registrationType: registrationType || "team",
-      registrationDeadlineAt: registerationDeadline
-        ? new Date(`${registerationDeadline}T23:59:59.999+05:30`)
-        : null,
+      registrationDeadlineAt: registrationDeadlineAt
+        ? new Date(registrationDeadlineAt)
+        : registerationDeadline
+          ? new Date(`${registerationDeadline}T23:59:59.999+05:30`)
+          : null,
       ContactInfo,
       roundDetails,
       eligibility,
@@ -767,10 +779,15 @@ module.exports.updateEvent = async (req, res) => {
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) event[field] = req.body[field];
   }
-  if (req.body.registerationDeadline !== undefined) {
-    event.registrationDeadlineAt = req.body.registerationDeadline
-      ? new Date(`${req.body.registerationDeadline}T23:59:59.999+05:30`)
-      : null;
+  if (req.body.registrationDeadlineAt !== undefined || req.body.registerationDeadline !== undefined) {
+    event.registrationDeadlineAt = req.body.registrationDeadlineAt
+      ? new Date(req.body.registrationDeadlineAt)
+      : req.body.registerationDeadline
+        ? new Date(`${req.body.registerationDeadline}T23:59:59.999+05:30`)
+        : null;
+    if (event.registrationDeadlineAt) {
+      event.registerationDeadline = event.registrationDeadlineAt.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    }
   }
   if (req.body.contactInfoJSON !== undefined) {
     event.ContactInfo = parsedArray(req.body.contactInfoJSON).map((item) => String(item).trim().slice(0, 200)).filter(Boolean).slice(0, 10);
@@ -783,7 +800,12 @@ module.exports.updateEvent = async (req, res) => {
   }
   if (req.body.allowPassedOut !== undefined) event.allowPassedOut = req.body.allowPassedOut === true || req.body.allowPassedOut === "true";
   if (req.body.roundsJSON !== undefined) {
-    const rounds = normalizeRounds(parsedArray(req.body.roundsJSON));
+    const rounds = normalizeRounds(parsedArray(req.body.roundsJSON)).map((round) => ({
+      ...round,
+      evaluationScope: (event.registrationType === "individual" || round.type === "test")
+        ? "participant"
+        : round.evaluationScope,
+    }));
     const retainedRoundIds = new Set(rounds.filter((round) => round._id).map((round) => String(round._id)));
     const removedRoundIds = (event.rounds || []).filter((round) => !retainedRoundIds.has(String(round._id))).map((round) => round._id);
     if (removedRoundIds.length && await roundCandidateModel.exists({ eventId: event._id, roundId: { $in: removedRoundIds } })) {
@@ -852,9 +874,13 @@ module.exports.updateEventStatus = async (req, res) => {
 
 module.exports.updateSession = async (req, res) => {
   const session = await sessionModel.findOne({ _id: req.params.sessionId, clubId: req.club._id });
-  if (!session) return res.status(404).json({ success: false, msg: "Session not found" });
+  if (!session) {
+    await destroyUploadedFile(req.file);
+    return res.status(404).json({ success: false, msg: "Session not found" });
+  }
   const previousStatus = session.status;
   const previousSchedule = { date: session.date, time: session.time, venue: session.venue };
+  const previousThumbnailPublicId = session.sessionThumbnailPublicId;
   const confirmedCount = await sessionRsvpModel.countDocuments({
     sessionId: session._id,
     status: { $in: ["confirmed", "attended"] },
@@ -864,10 +890,23 @@ module.exports.updateSession = async (req, res) => {
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) session[field] = req.body[field];
   }
+  if (req.file) {
+    session.sessionThumbnail = req.file.path;
+    session.sessionThumbnailPublicId = req.file.filename;
+  }
   if (session.capacity && session.capacity < session.confirmedRsvpCount) {
+    await destroyUploadedFile(req.file);
     return res.status(400).json({ success: false, msg: "Capacity cannot be lower than the confirmed RSVP count" });
   }
-  await session.save();
+  try {
+    await session.save();
+  } catch (error) {
+    await destroyUploadedFile(req.file);
+    throw error;
+  }
+  if (req.file && previousThumbnailPublicId && previousThumbnailPublicId !== req.file.filename) {
+    await destroyCloudinaryImage(previousThumbnailPublicId);
+  }
 
   const sessionAt = new Date(`${session.date}T${session.time}:00+05:30`);
   const canPromoteWaitlist = session.status === "published" && !Number.isNaN(sessionAt.getTime()) && sessionAt > new Date();

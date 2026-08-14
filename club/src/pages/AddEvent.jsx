@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 import RoundBuilder from "../components/RoundBuilder";
-import { Button, Card, Field, Input, Page, PageHeader, Select, Textarea } from "../components/ui";
+import { Button, Card, DateTimeInput, Field, Input, Page, PageHeader, Select, Textarea } from "../components/ui";
 
 const YEARS = [
   [1, "First year"], [2, "Second year"], [3, "Third year"], [4, "Fourth year"], [5, "Fifth year"],
@@ -13,7 +14,7 @@ const initialForm = {
   eventType: "recruitment",
   shortDescription: "",
   longDescription: "",
-  registerationDeadline: "",
+  registrationDeadlineAt: "",
   maxParticipants: 100,
   registrationType: "individual",
   minTeamSize: 1,
@@ -29,6 +30,7 @@ const initialForm = {
 };
 
 export default function AddEvent() {
+  const navigate = useNavigate();
   const [form, setForm] = useState(initialForm);
   const [banner, setBanner] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -62,9 +64,16 @@ export default function AddEvent() {
         minTeamSize: form.registrationType === "individual" ? 1 : form.minTeamSize,
         maxTeamSize: form.registrationType === "individual" ? 1 : form.maxTeamSize,
       };
-      ["title", "eventType", "shortDescription", "longDescription", "registerationDeadline", "maxParticipants", "registrationType", "minTeamSize", "maxTeamSize", "eligibility", "status", "allowPassedOut", "deadlineNotificationsEnabled"].forEach((key) => payload.append(key, normalized[key]));
+      ["title", "eventType", "shortDescription", "longDescription", "maxParticipants", "registrationType", "minTeamSize", "maxTeamSize", "eligibility", "status", "allowPassedOut", "deadlineNotificationsEnabled"].forEach((key) => payload.append(key, normalized[key]));
+      payload.append("registrationDeadlineAt", new Date(normalized.registrationDeadlineAt).toISOString());
       payload.append("numberOfRounds", normalized.rounds.length);
-      payload.append("roundsJSON", JSON.stringify(normalized.rounds));
+      payload.append("roundsJSON", JSON.stringify(normalized.rounds.map((round) => ({
+        ...round,
+        startsAt: round.startsAt ? new Date(round.startsAt).toISOString() : null,
+        endsAt: round.endsAt ? new Date(round.endsAt).toISOString() : null,
+        submissionOpensAt: round.submissionOpensAt ? new Date(round.submissionOpensAt).toISOString() : null,
+        submissionDeadlineAt: round.submissionDeadlineAt ? new Date(round.submissionDeadlineAt).toISOString() : null,
+      }))));
       payload.append("eligibilityYearsJSON", JSON.stringify(normalized.eligibilityYears));
       payload.append("eligibilityBranchesJSON", JSON.stringify(normalized.eligibilityBranches));
       normalized.ContactInfo.filter(Boolean).forEach((item, index) => payload.append(`ContactInfo[${index}]`, item));
@@ -72,9 +81,7 @@ export default function AddEvent() {
       const { data } = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/addEvent`, payload);
       if (!data.success) throw new Error(data.msg);
       toast.success(data.msg);
-      setForm(initialForm);
-      setBanner(null);
-      setPreview(null);
+      navigate(`/event/${data.event._id}`, { replace: true });
     } catch (error) {
       toast.error(error.response?.data?.msg || error.message || "Could not create event");
     } finally {
@@ -100,7 +107,7 @@ export default function AddEvent() {
         <Card className="p-5 sm:p-6">
           <h2 className="display text-xl">Registration and eligibility</h2>
           <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Deadline" id="deadline" required><Input id="deadline" type="date" value={form.registerationDeadline} onChange={(event) => set("registerationDeadline", event.target.value)} required /></Field>
+            <Field label="Registration deadline" id="deadline" required className="lg:col-span-2"><DateTimeInput id="deadline" value={form.registrationDeadlineAt} onChange={(value) => set("registrationDeadlineAt", value)} required quickTimes={["17:00", "20:00", "23:00", "23:59"]} /></Field>
             <Field label="Participant capacity" id="capacity" required><Input id="capacity" type="number" min="1" max="10000" value={form.maxParticipants} onChange={(event) => set("maxParticipants", Number(event.target.value))} required /></Field>
             <Field label="Registration type" id="registrationType"><Select id="registrationType" value={form.registrationType} onChange={(event) => set("registrationType", event.target.value)}><option value="individual">Individual</option><option value="team">Team only</option><option value="optional_team">Individual or team</option></Select></Field>
             {form.registrationType !== "individual" && <Field label="Team size" id="minTeam"><div className="grid grid-cols-2 gap-2"><Input aria-label="Minimum team size" id="minTeam" type="number" min="1" value={form.minTeamSize} onChange={(event) => set("minTeamSize", Number(event.target.value))} /><Input aria-label="Maximum team size" type="number" min={form.minTeamSize} value={form.maxTeamSize} onChange={(event) => set("maxTeamSize", Number(event.target.value))} /></div></Field>}
@@ -117,15 +124,16 @@ export default function AddEvent() {
             <Field label="Additional eligibility" id="eligibility"><Textarea id="eligibility" rows="3" className="min-h-0" value={form.eligibility} onChange={(event) => set("eligibility", event.target.value)} /></Field>
             <Field label="Contact emails or phone numbers" id="contact"><Textarea id="contact" rows="3" className="min-h-0" value={form.ContactInfo.join("\n")} onChange={(event) => set("ContactInfo", event.target.value.split("\n").map((item) => item.trim()))} /></Field>
           </div>
-          <Field label="Eligible branches" id="eligibleBranch" className="mt-5" hint="Leave empty to allow every branch."><Select id="eligibleBranch" value="" onChange={(event) => event.target.value && !form.eligibilityBranches.includes(event.target.value) && set("eligibilityBranches", [...form.eligibilityBranches, event.target.value])}><option value="">Add a branch</option>{branches.filter((branch) => !form.eligibilityBranches.includes(branch.name)).map((branch) => <option key={branch.name} value={branch.name}>{branch.name}</option>)}</Select><div className="mt-2 flex flex-wrap gap-2">{form.eligibilityBranches.map((branch) => <button key={branch} type="button" className="badge badge-neutral" onClick={() => set("eligibilityBranches", form.eligibilityBranches.filter((item) => item !== branch))}>{branch} x</button>)}</div></Field>
+          <Field label="Eligible branches" id="eligibleBranch" className="mt-5" hint="Leave empty to allow every branch."><div className="flex flex-col gap-2 sm:flex-row"><Select id="eligibleBranch" value="" onChange={(event) => event.target.value && !form.eligibilityBranches.includes(event.target.value) && set("eligibilityBranches", [...form.eligibilityBranches, event.target.value])}><option value="">Add a branch</option>{branches.filter((branch) => !form.eligibilityBranches.includes(branch.name)).map((branch) => <option key={branch.name} value={branch.name}>{branch.name}</option>)}</Select><Button type="button" variant="secondary" size="sm" onClick={() => set("eligibilityBranches", branches.map((branch) => branch.name))}>Add all branches</Button>{form.eligibilityBranches.length > 0 && <Button type="button" variant="ghost" size="sm" onClick={() => set("eligibilityBranches", [])}>Clear</Button>}</div><div className="mt-2 flex flex-wrap gap-2">{form.eligibilityBranches.map((branch) => <button key={branch} type="button" className="badge badge-neutral" onClick={() => set("eligibilityBranches", form.eligibilityBranches.filter((item) => item !== branch))}>{branch} x</button>)}</div></Field>
         </Card>
 
         <Card className="p-5 sm:p-6"><RoundBuilder rounds={form.rounds} onChange={(rounds) => set("rounds", rounds)} registrationType={form.registrationType} /></Card>
 
         <Card className="p-5 sm:p-6">
           <h2 className="display text-xl">Event banner</h2>
+          <p className="mt-1.5 text-sm text-ink-3">Use a 16:9 image, ideally 1600 × 900 px. Keep important text away from the edges.</p>
           <Field label="JPG, PNG, or WebP under 5 MB" id="banner" className="mt-5"><input id="banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={selectBanner} className="block w-full text-sm file:mr-3 file:rounded-sm file:border file:border-line file:bg-surface file:px-4 file:py-2" /></Field>
-          {preview && <img src={preview} alt="Event banner preview" className="mt-5 aspect-[21/7] w-full rounded-sm border border-line bg-paper-2 object-contain" />}
+          {preview && <img src={preview} alt="Event banner preview" className="mt-5 aspect-video w-full rounded-sm border border-line bg-paper-2 object-contain" />}
           <label className="mt-5 flex items-center gap-3 text-sm"><input type="checkbox" checked={form.deadlineNotificationsEnabled} onChange={(event) => set("deadlineNotificationsEnabled", event.target.checked)} />Allow deadline-change email notifications for this event</label>
         </Card>
 

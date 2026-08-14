@@ -59,6 +59,14 @@ function EventSkeleton() {
   );
 }
 
+function contactHref(value) {
+  const contact = String(value || "").trim();
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact)) return `mailto:${contact}`;
+  if (/^\+?[\d\s()-]{7,}$/.test(contact)) return `tel:${contact.replace(/[^+\d]/g, "")}`;
+  if (/^https?:\/\//i.test(contact)) return contact;
+  return null;
+}
+
 export default function Event() {
   const { eventId } = useParams();
   const [event, setEvent] = useState(null);
@@ -140,6 +148,7 @@ export default function Event() {
   const open = platformOpen && eligibility.eligible !== false && event.status === "published" && (!deadline || deadline > new Date());
   const isTeamEvent = event.registrationType !== "individual";
   const registration = view === 1 || view === 2 ? detail : null;
+  const studentStatus = registration?.studentOverallStatus || registration?.overallStatus;
   const maxTeam = event.maxTeamSize || event.maxParticipants || 1;
   const daysLeft = daysUntil(deadline);
 
@@ -198,7 +207,7 @@ export default function Event() {
         <img
           src={event.eventBanner}
           alt=""
-          className="reveal mt-8 aspect-[21/7] w-full rounded-md border border-line bg-paper-2 object-contain"
+          className="reveal mt-8 aspect-video w-full rounded-md border border-line bg-paper-2 object-contain shadow-sm"
           style={{ "--d": "80ms" }}
           onError={(error) => {
             error.currentTarget.style.display = "none";
@@ -250,6 +259,12 @@ export default function Event() {
                 {event.eligibilityYears.map((year) => <Badge key={year}>{["", "First", "Second", "Third", "Fourth", "Fifth"][year]} year</Badge>)}
               </div>
             )}
+            {event.eligibilityBranches?.length > 0 && (
+              <div className="mt-5">
+                <p className="eyebrow">Eligible branches</p>
+                <div className="mt-2 flex flex-wrap gap-2">{event.eligibilityBranches.map((branch) => <Badge key={branch} tone="info">{branch}</Badge>)}</div>
+              </div>
+            )}
           </section>
 
           {(event.rounds?.length > 0 || event.roundDetails?.length > 0) && (
@@ -267,7 +282,7 @@ export default function Event() {
         {/* --------------------------------------------------------------- */}
         {/* Application panel                                                */}
         {/* --------------------------------------------------------------- */}
-        <aside className="lg:sticky lg:top-24 lg:h-fit">
+        <aside className="space-y-4 lg:sticky lg:top-24 lg:h-fit">
           <Card className="reveal p-6" style={{ "--d": "160ms" }}>
             {/* Not yet applied */}
             {view === 0 && (
@@ -307,8 +322,8 @@ export default function Event() {
                   <h2 className="display text-lg">
                     {isTeamEvent ? "Your team" : "Your application"}
                   </h2>
-                  <Badge tone="info" className="capitalize">
-                    {registration.overallStatus?.replace("_", " ")}
+                  <Badge tone={studentStatus === "selected" ? "ok" : studentStatus === "rejected" ? "bad" : studentStatus === "waitlisted" ? "warn" : "info"} className="px-3 py-1.5 text-sm capitalize">
+                    {studentStatus?.replace("_", " ")}
                   </Badge>
                 </div>
 
@@ -366,19 +381,7 @@ export default function Event() {
                               <p className="truncate text-sm font-medium">{member.name}</p>
                               <p className="truncate text-xs text-ink-3">{member.email}</p>
                             </div>
-                            <button
-                              disabled={!open || working}
-                              onClick={() =>
-                                action(
-                                  "removeTeamMember",
-                                  { memberId: member._id },
-                                  `Remove ${member.name} from the team?`,
-                                )
-                              }
-                              className="link text-xs font-semibold text-bad disabled:opacity-40"
-                            >
-                              Remove
-                            </button>
+                            <div className="flex flex-col items-end gap-1.5"><button disabled={!open || working} onClick={() => action("transferCaptain", { memberId: member._id }, `Transfer captaincy to ${member.name}? You will become a regular team member.`)} className="link text-xs font-semibold text-accent disabled:opacity-40">Make captain</button><button disabled={!open || working} onClick={() => action("removeTeamMember", { memberId: member._id }, `Remove ${member.name} from the team?`)} className="link text-xs font-semibold text-bad disabled:opacity-40">Remove</button></div>
                           </li>
                         ))}
                       </ul>
@@ -454,7 +457,7 @@ export default function Event() {
                     Track application →
                   </Link>
                   <button
-                    disabled={working || ["selected", "rejected"].includes(registration.overallStatus)}
+                    disabled={!open || working}
                     onClick={() =>
                       action(
                         "unregisterAsCaptain",
@@ -473,7 +476,7 @@ export default function Event() {
             {/* Member view */}
             {view === 2 && registration && (
               <>
-                <h2 className="display text-lg">You joined this team</h2>
+                <div className="flex items-start justify-between gap-3"><h2 className="display text-lg">You joined this team</h2><Badge tone={studentStatus === "selected" ? "ok" : studentStatus === "rejected" ? "bad" : studentStatus === "waitlisted" ? "warn" : "info"} className="capitalize">{studentStatus?.replace("_", " ")}</Badge></div>
                 <p className="mt-3 text-base font-semibold">
                   {registration.teamName || "Unnamed team"}
                 </p>
@@ -564,6 +567,7 @@ export default function Event() {
               </>
             )}
           </Card>
+          {event.ContactInfo?.length > 0 && <Card className="p-5"><h2 className="eyebrow">Event contacts</h2><ul className="mt-3 space-y-2">{event.ContactInfo.map((contact, index) => { const href = contactHref(contact); return <li key={`${contact}-${index}`} className="rounded-sm bg-paper-2 px-3.5 py-3 text-sm break-words">{href ? <a href={href} target={href.startsWith("http") ? "_blank" : undefined} rel={href.startsWith("http") ? "noreferrer" : undefined} className="link link-accent">{contact}</a> : contact}</li>; })}</ul></Card>}
         </aside>
       </div>
     </Page>

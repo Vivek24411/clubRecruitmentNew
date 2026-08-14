@@ -62,7 +62,9 @@ function normalizeRounds(input) {
     const interviewMode = type === "interview"
       ? (round?.interviewMode === "group" ? "group" : "individual")
       : null;
-    const evaluationScope = type === "interview"
+    const evaluationScope = type === "test"
+      ? "participant"
+      : type === "interview"
       ? (interviewMode === "group" ? "application" : "participant")
       : round?.evaluationScope === "participant" ? "participant" : "application";
     const submissionEnabled = Boolean(round?.submissionEnabled || ["submission", "hackathon"].includes(type));
@@ -128,27 +130,65 @@ function registrationParticipantIds(registration) {
     .filter(Boolean);
 }
 
+function candidateIncludesStudent(candidate, studentId) {
+  const target = String(studentId?._id || studentId || "");
+  if (!target) return false;
+  if (candidate.scope === "participant") {
+    return String(candidate.studentId?._id || candidate.studentId || "") === target;
+  }
+  return (candidate.participantIds || []).some((student) => String(student?._id || student) === target);
+}
+
+function studentApplicationStatus(event, candidates, studentId, fallback = "in_progress") {
+  if (fallback === "withdrawn") return "withdrawn";
+  const relevant = (candidates || []).filter((candidate) =>
+    candidate.status !== "revoked" && candidateIncludesStudent(candidate, studentId));
+  if (!relevant.length) return fallback || "in_progress";
+
+  const orderByRound = new Map((event?.rounds || []).map((round) => [String(round._id), round.order]));
+  const highestOrder = Math.max(...relevant.map((candidate) => orderByRound.get(String(candidate.roundId)) || 0));
+  const current = relevant.filter((candidate) => (orderByRound.get(String(candidate.roundId)) || 0) === highestOrder);
+  const finalRound = highestOrder === (event?.rounds || []).length;
+  const statuses = current.map((candidate) => candidate.status);
+
+  if (finalRound && statuses.includes("advanced")) return "selected";
+  if (statuses.some((status) => status === "waitlisted")) return "waitlisted";
+  if (statuses.length && statuses.every((status) => ["rejected", "missed", "withdrawn"].includes(status))) {
+    return statuses.includes("withdrawn") ? "withdrawn" : "rejected";
+  }
+  return "in_progress";
+}
+
 async function createCandidatesForRound({ event, round, registration, participantIds, sourceCandidateId = null }) {
   const participants = (participantIds?.length ? participantIds : registrationParticipantIds(registration))
     .map((id) => id?._id || id);
   if (!participants.length) return [];
   if (round.evaluationScope === "participant") {
-    return Promise.all(participants.map((studentId) => roundCandidateModel.findOneAndUpdate(
-      { eventId: event._id, roundId: round._id, registrationId: registration._id, studentId },
-      {
-        $setOnInsert: {
-          eventId: event._id,
-          roundId: round._id,
-          registrationId: registration._id,
-          studentId,
-          participantIds: [studentId],
-          scope: "participant",
-          status: "eligible",
-          sourceCandidateId,
+    return Promise.all(participants.map(async (studentId) => {
+      const candidate = await roundCandidateModel.findOneAndUpdate(
+        { eventId: event._id, roundId: round._id, registrationId: registration._id, studentId },
+        {
+          $setOnInsert: {
+            eventId: event._id,
+            roundId: round._id,
+            registrationId: registration._id,
+            studentId,
+            participantIds: [studentId],
+            scope: "participant",
+            status: "eligible",
+            sourceCandidateId,
+          },
+          ...(sourceCandidateId ? { $addToSet: { sourceCandidateIds: sourceCandidateId } } : {}),
         },
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    )));
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      if (candidate.status === "revoked") {
+        candidate.status = "eligible";
+        candidate.decisionPublishedAt = null;
+        await candidate.save();
+      }
+      return candidate;
+    }));
   }
   const candidate = await roundCandidateModel.findOneAndUpdate(
     { eventId: event._id, roundId: round._id, registrationId: registration._id, studentId: null },
@@ -162,10 +202,18 @@ async function createCandidatesForRound({ event, round, registration, participan
         status: "eligible",
         sourceCandidateId,
       },
-      $addToSet: { participantIds: { $each: participants } },
+      $addToSet: {
+        participantIds: { $each: participants },
+        ...(sourceCandidateId ? { sourceCandidateIds: sourceCandidateId } : {}),
+      },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
+  if (candidate.status === "revoked") {
+    candidate.status = "eligible";
+    candidate.decisionPublishedAt = null;
+    await candidate.save();
+  }
   return [candidate];
 }
 
@@ -338,10 +386,11 @@ async function autoScheduleCandidates({ candidates, startAt, endAt, durationMinu
   const unscheduled = [];
   let cursor = new Date(windowStart);
   for (const candidate of candidates) {
+    const existingSlot = await scheduleSlotModel.findOne({ candidateId: candidate._id });
     let placed = false;
     while (cursor.getTime() + duration * 60000 <= windowEnd.getTime()) {
       const slotEnd = new Date(cursor.getTime() + duration * 60000);
-      const conflict = await findScheduleConflict(candidate.participantIds, cursor, slotEnd);
+      const conflict = await findScheduleConflict(candidate.participantIds, cursor, slotEnd, existingSlot?._id);
       if (!conflict) {
         const slot = await upsertScheduleSlot({
           candidate,
@@ -361,6 +410,91 @@ async function autoScheduleCandidates({ candidates, startAt, endAt, durationMinu
     if (!placed) unscheduled.push(candidate);
   }
   return { batchId, scheduled, unscheduled };
+}
+
+async function updateCandidateSlotParticipants(candidate, removedParticipantIds, cancel = false) {
+  const removed = new Set(removedParticipantIds.map(String));
+  const slots = await scheduleSlotModel.find({ candidateId: candidate._id, status: "scheduled" });
+  for (const slot of slots) {
+    const remaining = (slot.participantIds || []).filter((studentId) => !removed.has(String(studentId)));
+    if (cancel || !remaining.length) {
+      slot.status = "cancelled";
+      await slot.save();
+      await scheduleReservationModel.deleteMany({ slotId: slot._id });
+      continue;
+    }
+    slot.participantIds = remaining;
+    if (slot.studentId && removed.has(String(slot.studentId))) slot.studentId = null;
+    await slot.save();
+    await scheduleReservationModel.deleteMany({ slotId: slot._id, studentId: { $in: removedParticipantIds } });
+  }
+}
+
+async function revokeDownstreamCandidates(sourceCandidate, removedParticipantIds = null) {
+  if (!sourceCandidate) return [];
+  const removedIds = (removedParticipantIds?.length
+    ? removedParticipantIds
+    : sourceCandidate.participantIds || []).map((studentId) => studentId?._id || studentId);
+  const removed = new Set(removedIds.map(String));
+  const children = await roundCandidateModel.find({
+    $or: [
+      { sourceCandidateId: sourceCandidate._id },
+      { sourceCandidateIds: sourceCandidate._id },
+    ],
+  });
+  const changed = [];
+  for (const child of children) {
+    const participantRemoved = child.scope === "participant"
+      ? removed.has(String(child.studentId))
+      : (child.participantIds || []).some((studentId) => removed.has(String(studentId)));
+    if (!participantRemoved) continue;
+
+    const originalParticipants = [...(child.participantIds || [])];
+    const remainingParticipants = originalParticipants.filter((studentId) => !removed.has(String(studentId)));
+    const sourceIds = (child.sourceCandidateIds || []).filter((candidateId) => String(candidateId) !== String(sourceCandidate._id));
+    child.sourceCandidateIds = sourceIds;
+    child.participantIds = remainingParticipants;
+    const shouldRevoke = child.scope === "participant" || remainingParticipants.length === 0;
+    if (shouldRevoke) {
+      child.status = "revoked";
+      child.decisionPublishedAt = new Date();
+    }
+    await child.save();
+    await updateCandidateSlotParticipants(child, removedIds, shouldRevoke);
+    changed.push(child);
+
+    if (shouldRevoke || child.status === "advanced") {
+      await revokeDownstreamCandidates(child, removedIds);
+    }
+  }
+  return changed;
+}
+
+async function removeParticipantFromRegistrationWorkflow(registrationId, studentId, status = "withdrawn") {
+  const candidates = await roundCandidateModel.find({ registrationId, participantIds: studentId });
+  for (const candidate of candidates) {
+    if (candidate.status === "advanced") await revokeDownstreamCandidates(candidate, [studentId]);
+    if (candidate.scope === "participant" && String(candidate.studentId) === String(studentId)) {
+      candidate.status = status;
+    }
+    candidate.participantIds = (candidate.participantIds || []).filter((id) => String(id) !== String(studentId));
+    if (!candidate.participantIds.length) candidate.status = status;
+    await candidate.save();
+    await updateCandidateSlotParticipants(candidate, [studentId], !candidate.participantIds.length);
+    await revokeDownstreamCandidates(candidate, [studentId]);
+  }
+}
+
+async function withdrawRegistrationWorkflow(registrationId) {
+  const candidates = await roundCandidateModel.find({
+    registrationId,
+    status: { $nin: ["advanced", "rejected", "waitlisted", "missed", "revoked"] },
+  });
+  for (const candidate of candidates) {
+    candidate.status = "withdrawn";
+    await candidate.save();
+    await updateCandidateSlotParticipants(candidate, candidate.participantIds || [], true);
+  }
 }
 
 async function ensureMembership({ eventId, registrationId, studentId, role }) {
@@ -383,7 +517,12 @@ module.exports = {
   findScheduleConflict,
   initializeRegistrationWorkflow,
   normalizeRounds,
+  removeParticipantFromRegistrationWorkflow,
   registrationParticipantIds,
+  candidateIncludesStudent,
+  studentApplicationStatus,
+  revokeDownstreamCandidates,
   syncRegistrationParticipants,
   upsertScheduleSlot,
+  withdrawRegistrationWorkflow,
 };

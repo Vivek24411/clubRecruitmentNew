@@ -29,6 +29,7 @@ const {
   cancelMemberOffer,
   removeTeamMember,
   leaveTeam,
+  transferCaptain,
   getMyApplications,
   getNotifications,
   markNotificationRead,
@@ -93,10 +94,11 @@ router.post('/logout', logout)
 
 router.get('/getProfile',studentAuth,getProfile)
 
-router.patch('/profile', studentAuth, [
+router.patch('/profile', studentAuth, upload.single('profilePicture'), [
   body('name').optional().isString().trim().isLength({ min: 2, max: 100 }),
   body('phoneNumber').optional().isMobilePhone('any'),
   body('notificationPreferences').optional().isObject(),
+  body('notificationPreferencesJSON').optional().isString().isLength({ max: 200 }),
   body('notificationPreferences.email').optional().isBoolean(),
   body('notificationPreferences.inApp').optional().isBoolean(),
 ], validateRequest, updateProfile)
@@ -170,6 +172,11 @@ router.post('/removeTeamMember', studentAuth, [
 router.post('/leaveTeam', studentAuth, [
   body('eventId').isMongoId(),
 ], validateRequest, leaveTeam)
+
+router.post('/transferCaptain', studentAuth, [
+  body('eventId').isMongoId(),
+  body('memberId').isMongoId(),
+], validateRequest, transferCaptain)
 
 router.post('/unregisterAsCaptain',studentAuth, [
   body('eventId').isMongoId().withMessage("Invalid event ID")

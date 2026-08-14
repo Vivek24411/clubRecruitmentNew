@@ -2,8 +2,26 @@ const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 
 const ISSUER = "club-recruitment";
-const SESSION_TTL = process.env.SESSION_TTL || "2h";
-const COOKIE_MAX_AGE_MS = Number(process.env.SESSION_MAX_AGE_MS || 2 * 60 * 60 * 1000);
+const DEFAULT_SESSION_TTLS = { student: "2d", club: "2d", admin: "8h" };
+const DEFAULT_COOKIE_AGES = {
+  student: 2 * 24 * 60 * 60 * 1000,
+  club: 2 * 24 * 60 * 60 * 1000,
+  admin: 8 * 60 * 60 * 1000,
+};
+
+function sessionTtl(role) {
+  return process.env[`${role.toUpperCase()}_SESSION_TTL`]
+    || process.env.SESSION_TTL
+    || DEFAULT_SESSION_TTLS[role];
+}
+
+function cookieMaxAge(role) {
+  return Number(
+    process.env[`${role.toUpperCase()}_SESSION_MAX_AGE_MS`]
+    || process.env.SESSION_MAX_AGE_MS
+    || DEFAULT_COOKIE_AGES[role]
+  );
+}
 
 const cookieNames = {
   student: "student_session",
@@ -20,7 +38,7 @@ function signSession({ subject, role, version = 0 }) {
       subject: String(subject),
       issuer: ISSUER,
       audience: role,
-      expiresIn: SESSION_TTL,
+      expiresIn: sessionTtl(role),
       jwtid: crypto.randomUUID(),
     }
   );
@@ -69,7 +87,7 @@ function setSessionCookie(res, role, token) {
     httpOnly: true,
     secure: production,
     sameSite: production ? "none" : "lax",
-    maxAge: COOKIE_MAX_AGE_MS,
+    maxAge: cookieMaxAge(role),
     path: "/",
   });
 }

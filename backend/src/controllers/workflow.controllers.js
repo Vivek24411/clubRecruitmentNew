@@ -18,6 +18,8 @@ const {
   ensureRegistrationWorkflow,
   eventRound,
   registrationParticipantIds,
+  revokeDownstreamCandidates,
+  studentApplicationStatus,
   upsertScheduleSlot,
 } = require("../services/eventWorkflow.services");
 
@@ -36,20 +38,32 @@ async function ownedEvent(eventId, clubId) {
 }
 
 async function workflowData(event) {
-  const registrations = await registerationEventModel.find({ eventId: event._id })
-      .populate("studentId", "name email branch year academicYear academicStatus enrollmentNumber phoneNumber")
-      .populate("membersAccepted", "name email branch year academicYear academicStatus enrollmentNumber phoneNumber")
+  const registrations = await registerationEventModel.find({
+    eventId: event._id,
+    overallStatus: { $ne: "withdrawn" },
+  })
+      .populate("studentId", "name email branch year academicYear academicStatus enrollmentNumber phoneNumber profilePicture")
+      .populate("membersAccepted", "name email branch year academicYear academicStatus enrollmentNumber phoneNumber profilePicture")
       .sort({ registeredAt: 1 });
   await Promise.all(registrations.map((registration) => ensureRegistrationWorkflow(event, registration)));
+  const registrationIds = registrations.map((registration) => registration._id);
   const [candidates, submissions, slots] = await Promise.all([
-    roundCandidateModel.find({ eventId: event._id })
-      .populate("studentId", "name email branch year enrollmentNumber")
-      .populate("participantIds", "name email branch year enrollmentNumber")
+    roundCandidateModel.find({
+      eventId: event._id,
+      registrationId: { $in: registrationIds },
+      status: { $nin: ["revoked", "withdrawn"] },
+    })
+      .populate("studentId", "name email branch year enrollmentNumber phoneNumber profilePicture")
+      .populate("participantIds", "name email branch year enrollmentNumber phoneNumber profilePicture")
       .sort({ createdAt: 1 }),
-    roundSubmissionModel.find({ eventId: event._id })
+    roundSubmissionModel.find({ eventId: event._id, registrationId: { $in: registrationIds } })
       .populate("submittedBy", "name email")
       .sort({ submittedAt: -1 }),
-    scheduleSlotModel.find({ eventId: event._id })
+    scheduleSlotModel.find({
+      eventId: event._id,
+      registrationId: { $in: registrationIds },
+      status: { $ne: "cancelled" },
+    })
       .populate("studentId", "name email")
       .populate("participantIds", "name email")
       .sort({ startAt: 1 }),
@@ -71,15 +85,32 @@ module.exports.getEventWorkflow = async (req, res) => {
   return res.json({ success: true, event, ...data, targetEvents });
 };
 
-async function recomputeRegistrationForRound(registrationId, roundId, finalRound) {
-  const candidates = await roundCandidateModel.find({ registrationId, roundId });
+async function recomputeRegistrationProgress(event, registrationId) {
+  const candidates = await roundCandidateModel.find({ registrationId, status: { $ne: "revoked" } });
   if (!candidates.length) return;
   const registration = await registerationEventModel.findById(registrationId);
   if (!registration || registration.overallStatus === "withdrawn") return;
-  if (candidates.some((candidate) => candidate.status === "advanced")) {
-    registration.overallStatus = finalRound ? "selected" : "in_progress";
-  } else if (candidates.every((candidate) => ["rejected", "missed", "withdrawn"].includes(candidate.status))) {
+
+  const roundOrder = new Map((event.rounds || []).map((round) => [String(round._id), round.order]));
+  const highestOrder = Math.max(...candidates.map((candidate) => roundOrder.get(String(candidate.roundId)) || 0));
+  const highestRound = event.rounds.find((round) => round.order === highestOrder);
+  const currentCandidates = candidates.filter((candidate) => String(candidate.roundId) === String(highestRound?._id));
+  const finalRound = highestOrder === event.rounds.length;
+  const terminalRejections = new Set(["rejected", "missed", "withdrawn"]);
+
+  registration.currentRound = highestOrder || registration.currentRound;
+  registration.currentRoundId = highestRound?._id || registration.currentRoundId;
+  if (finalRound && currentCandidates.some((candidate) => candidate.status === "advanced")) {
+    registration.overallStatus = "selected";
+  } else if (currentCandidates.length && currentCandidates.every((candidate) => terminalRejections.has(candidate.status))) {
     registration.overallStatus = "rejected";
+  } else if (
+    currentCandidates.some((candidate) => candidate.status === "waitlisted")
+    && currentCandidates.every((candidate) => candidate.status === "waitlisted" || terminalRejections.has(candidate.status))
+  ) {
+    registration.overallStatus = "waitlisted";
+  } else {
+    registration.overallStatus = "in_progress";
   }
   await registration.save();
 }
@@ -93,15 +124,20 @@ module.exports.publishRoundDecisions = async (req, res) => {
   const requested = req.body.decisions.slice(0, 250);
   const candidateIds = requested.map((decision) => decision.candidateId);
   const candidates = await roundCandidateModel.find({
-    _id: { $in: candidateIds }, eventId: event._id, roundId: round._id,
+    _id: { $in: candidateIds },
+    eventId: event._id,
+    roundId: round._id,
+    status: { $nin: ["withdrawn", "revoked"] },
   });
   const byId = new Map(candidates.map((candidate) => [String(candidate._id), candidate]));
   const affectedRegistrations = new Set();
+  const teamDecisionUpdates = new Map();
   const results = [];
 
   for (const decision of requested) {
     const candidate = byId.get(String(decision.candidateId));
     if (!candidate) continue;
+    const previousStatus = candidate.status;
     candidate.status = decision.status;
     candidate.score = decision.score === "" || decision.score == null ? null : Number(decision.score);
     candidate.notes = decision.notes == null || decision.notes === "" ? null : String(decision.notes).slice(0, 4000);
@@ -110,28 +146,53 @@ module.exports.publishRoundDecisions = async (req, res) => {
     affectedRegistrations.add(String(candidate.registrationId));
 
     const registration = await registerationEventModel.findById(candidate.registrationId);
+    if (previousStatus === "advanced" && decision.status !== "advanced") {
+      await revokeDownstreamCandidates(candidate);
+    }
     if (decision.status === "advanced" && registration) {
       await advanceCandidate(event, registration, candidate);
     }
-    const recipientIds = candidate.participantIds || [];
-    const finalRound = round.order === event.rounds.length;
-    await Promise.all(recipientIds.map((studentId) => notifyStudent(studentId, {
-      type: decision.status === "advanced" ? "round_advanced" : "round_rejected",
-      title: decision.status === "advanced"
-        ? (finalRound ? `Selected for ${event.title}` : `Advanced in ${event.title}`)
-        : `Update for ${event.title}`,
-      message: decision.status === "advanced"
-        ? (finalRound
-          ? `Congratulations. You cleared ${round.title} and completed the selection process.`
-          : `You cleared ${round.title} and can now access round ${round.order + 1}.`)
-        : `Your application will not move forward after ${round.title}.`,
-      link: `/event/${event._id}`,
-    })));
+    if (registration) {
+      const key = String(registration._id);
+      if (!teamDecisionUpdates.has(key)) teamDecisionUpdates.set(key, { registration, decisions: [] });
+      teamDecisionUpdates.get(key).decisions.push({
+        status: decision.status,
+        participantIds: (candidate.participantIds || []).map((studentId) => String(studentId?._id || studentId)),
+      });
+    }
     results.push(candidate);
   }
 
   await Promise.all([...affectedRegistrations].map((registrationId) =>
-    recomputeRegistrationForRound(registrationId, round._id, round.order === event.rounds.length)));
+    recomputeRegistrationProgress(event, registrationId)));
+  const finalRound = round.order === event.rounds.length;
+  await Promise.all([...teamDecisionUpdates.values()].flatMap(({ registration, decisions }) =>
+    registrationParticipantIds(registration).map((studentId) => {
+      const own = decisions.filter((decision) => decision.participantIds.includes(String(studentId)));
+      const primary = own[0];
+      const status = primary?.status;
+      const ownMessage = status === "advanced"
+        ? (finalRound
+          ? `Congratulations. You cleared ${round.title} and completed the selection process.`
+          : `You cleared ${round.title} and can now access round ${round.order + 1}.`)
+        : status === "waitlisted"
+          ? `You are waitlisted after ${round.title}. The club will notify you when a final decision is made.`
+          : status === "rejected"
+            ? `Your application will not move forward after ${round.title}.`
+            : null;
+      return notifyStudent(studentId, {
+        type: status === "advanced" ? "round_advanced" : status === "waitlisted" ? "round_waitlisted" : status === "rejected" ? "round_rejected" : "team_round_update",
+        title: status === "advanced"
+          ? (finalRound ? `Selected for ${event.title}` : `Advanced in ${event.title}`)
+          : status === "waitlisted"
+            ? `Waitlisted in ${event.title}`
+            : status === "rejected"
+              ? `Update for ${event.title}`
+              : `Team results published for ${event.title}`,
+        message: ownMessage || `${round.title} results were published for one or more members of your team. Open the event to view every member's exact status.`,
+        link: `/event/${event._id}`,
+      });
+    })));
   await writeAudit({
     actorRole: "club",
     actorId: req.club._id,
@@ -143,6 +204,31 @@ module.exports.publishRoundDecisions = async (req, res) => {
   return res.json({ success: true, msg: `${results.length} decision(s) published`, candidates: results });
 };
 
+module.exports.updateCandidateReview = async (req, res) => {
+  if (invalidRequest(req, res)) return;
+  const event = await ownedEvent(req.params.eventId, req.club._id);
+  const round = eventRound(event, req.params.roundId);
+  if (!event || !round) return res.status(404).json({ success: false, msg: "Event or round not found" });
+  const candidate = await roundCandidateModel.findOne({
+    _id: req.params.candidateId,
+    eventId: event._id,
+    roundId: round._id,
+  });
+  if (!candidate) return res.status(404).json({ success: false, msg: "Candidate not found" });
+  candidate.score = req.body.score === "" || req.body.score == null ? null : Number(req.body.score);
+  candidate.notes = req.body.notes == null || req.body.notes === "" ? null : String(req.body.notes).slice(0, 4000);
+  await candidate.save();
+  await writeAudit({
+    actorRole: "club",
+    actorId: req.club._id,
+    action: "round.review_save",
+    targetType: "candidate",
+    targetId: candidate._id,
+    metadata: { eventId: event._id, roundId: round._id },
+  });
+  return res.json({ success: true, msg: "Score and notes saved", candidate });
+};
+
 module.exports.scheduleCandidate = async (req, res) => {
   if (invalidRequest(req, res)) return;
   const event = await ownedEvent(req.params.eventId, req.club._id);
@@ -151,7 +237,10 @@ module.exports.scheduleCandidate = async (req, res) => {
     return res.status(404).json({ success: false, msg: "A slot-based round was not found" });
   }
   const candidate = await roundCandidateModel.findOne({
-    _id: req.body.candidateId, eventId: event._id, roundId: round._id,
+    _id: req.body.candidateId,
+    eventId: event._id,
+    roundId: round._id,
+    status: { $in: ["eligible", "scheduled", "active", "submitted", "under_review"] },
   });
   if (!candidate) return res.status(404).json({ success: false, msg: "Candidate not found" });
   try {
@@ -159,8 +248,9 @@ module.exports.scheduleCandidate = async (req, res) => {
     await Promise.all(candidate.participantIds.map((studentId) => notifyStudent(studentId, {
       type: "round_scheduled",
       title: `${round.title} scheduled`,
-      message: `Your ${round.title} slot for ${event.title} is ${new Date(slot.startAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}.`,
+      message: `Your ${round.title} slot for ${event.title} is ${new Date(slot.startAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}${slot.venue ? ` at ${slot.venue}` : ""}.`,
       link: `/event/${event._id}`,
+      emailDetails: { startsAt: slot.startAt, venue: slot.venue, meetingUrl: slot.meetingUrl },
     })));
     await writeAudit({ actorRole: "club", actorId: req.club._id, action: "round.slot_schedule", targetType: "slot", targetId: slot._id });
     return res.json({ success: true, msg: "Slot saved and participants notified", slot });
@@ -184,7 +274,7 @@ module.exports.autoScheduleRound = async (req, res) => {
     _id: { $in: req.body.candidateIds.slice(0, 250) },
     eventId: event._id,
     roundId: round._id,
-    status: { $nin: ["rejected", "withdrawn"] },
+    status: { $in: ["eligible", "scheduled", "active", "submitted", "under_review"] },
   }).sort({ createdAt: 1 });
   try {
     const result = await autoScheduleCandidates({
@@ -199,8 +289,9 @@ module.exports.autoScheduleRound = async (req, res) => {
     await Promise.all(result.scheduled.flatMap((slot) => slot.participantIds.map((studentId) => notifyStudent(studentId, {
       type: "round_scheduled",
       title: `${round.title} scheduled`,
-      message: `Your ${round.title} slot for ${event.title} is ${new Date(slot.startAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}.`,
+      message: `Your ${round.title} slot for ${event.title} is ${new Date(slot.startAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}${slot.venue ? ` at ${slot.venue}` : ""}.`,
       link: `/event/${event._id}`,
+      emailDetails: { startsAt: slot.startAt, venue: slot.venue, meetingUrl: slot.meetingUrl },
     }))));
     await writeAudit({
       actorRole: "club", actorId: req.club._id, action: "round.auto_schedule",
@@ -254,7 +345,11 @@ async function createImportedRegistration({ targetEvent, targetRound, participan
 
   if (free.length && targetEvent.registrationType !== "individual" && sourceCandidate.scope === "application") {
     const [captainId, ...members] = free;
-    let registration = await registerationEventModel.findOne({ eventId: targetEvent._id, studentId: captainId });
+    let registration = await registerationEventModel.findOne({
+      eventId: targetEvent._id,
+      studentId: captainId,
+      overallStatus: { $ne: "withdrawn" },
+    });
     if (!registration) {
       registration = await registerationEventModel.create({
         eventId: targetEvent._id,
@@ -280,7 +375,11 @@ async function createImportedRegistration({ targetEvent, targetRound, participan
     groups.set(String(registration._id), free);
   } else {
     for (const studentId of free) {
-      let registration = await registerationEventModel.findOne({ eventId: targetEvent._id, studentId });
+      let registration = await registerationEventModel.findOne({
+        eventId: targetEvent._id,
+        studentId,
+        overallStatus: { $ne: "withdrawn" },
+      });
       if (!registration) {
         registration = await registerationEventModel.create({
           eventId: targetEvent._id,
@@ -382,14 +481,27 @@ module.exports.getMyEventWorkflow = async (req, res) => {
   const candidates = await roundCandidateModel.find({
     eventId: event._id,
     registrationId: membership.registrationId,
-    participantIds: req.student._id,
-  }).sort({ createdAt: 1 });
+    status: { $ne: "revoked" },
+  }).populate("studentId", "name email profilePicture").populate("participantIds", "name email profilePicture").sort({ createdAt: 1 });
   const candidateIds = candidates.map((candidate) => candidate._id);
   const [submissions, slots] = await Promise.all([
     roundSubmissionModel.find({ candidateId: { $in: candidateIds } }).sort({ submittedAt: -1 }),
     scheduleSlotModel.find({ candidateId: { $in: candidateIds }, status: { $ne: "cancelled" } }).sort({ startAt: 1 }),
   ]);
-  return res.json({ success: true, event, registration, membership, candidates, submissions, slots });
+  const candidatesWithAccess = candidates.map((candidate) => ({
+    ...candidate.toObject(),
+    canAct: (candidate.participantIds || []).some((student) => String(student?._id || student) === String(req.student._id)),
+  }));
+  return res.json({
+    success: true,
+    event,
+    registration,
+    membership,
+    studentOverallStatus: studentApplicationStatus(event, candidates, req.student._id, registration.overallStatus),
+    candidates: candidatesWithAccess,
+    submissions,
+    slots,
+  });
 };
 
 module.exports.submitRoundWork = async (req, res) => {
@@ -411,7 +523,7 @@ module.exports.submitRoundWork = async (req, res) => {
     eventId: event._id,
     roundId: round._id,
     participantIds: req.student._id,
-    status: { $nin: ["advanced", "rejected", "missed", "withdrawn"] },
+    status: { $nin: ["advanced", "rejected", "missed", "withdrawn", "waitlisted", "revoked"] },
   });
   if (!candidate) {
     await Promise.all((req.files || []).map(destroyUploadedFile));

@@ -9,7 +9,7 @@ const roundCandidateSchema = new mongoose.Schema({
   scope: { type: String, enum: ["application", "participant"], required: true },
   status: {
     type: String,
-    enum: ["eligible", "scheduled", "active", "submitted", "under_review", "advanced", "rejected", "missed", "withdrawn"],
+    enum: ["eligible", "scheduled", "active", "submitted", "under_review", "waitlisted", "advanced", "rejected", "missed", "withdrawn", "revoked"],
     default: "eligible",
     index: true,
   },
@@ -17,6 +17,10 @@ const roundCandidateSchema = new mongoose.Schema({
   notes: { type: String, default: null, maxlength: 4000 },
   decisionPublishedAt: { type: Date, default: null },
   sourceCandidateId: { type: mongoose.Schema.Types.ObjectId, ref: "RoundCandidate", default: null },
+  sourceCandidateIds: {
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: "RoundCandidate" }],
+    default: [],
+  },
 }, { timestamps: true });
 
 roundCandidateSchema.index(
@@ -24,5 +28,6 @@ roundCandidateSchema.index(
   { unique: true }
 );
 roundCandidateSchema.index({ participantIds: 1, status: 1 });
+roundCandidateSchema.index({ sourceCandidateIds: 1 });
 
 module.exports = mongoose.model("RoundCandidate", roundCandidateSchema);

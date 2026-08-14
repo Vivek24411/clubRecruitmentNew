@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Recruit IITR — a warm, architectural product system. */
+/* Discovr — a warm, architectural product system. */
 
 @theme {
   /* --- surfaces -------------------------------------------------------- */
@@ -627,7 +627,7 @@
   }
   .home-hero::after,
   .workspace-hero::after {
-    content: "R/26";
+    content: "D/26";
     position: absolute;
     z-index: -1;
     right: -0.03em;
@@ -698,7 +698,7 @@
     background: var(--color-ink);
   }
   .auth-panel::before {
-    content: "R";
+    content: "D";
     position: absolute;
     right: -0.08em;
     bottom: -0.2em;

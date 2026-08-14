@@ -64,9 +64,9 @@ export default function StudentLayout({ children }) {
       <header className={`app-header ${lifted ? "is-lifted" : ""}`}>
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5 sm:px-6">
           <NavLink to="/" className="group mr-auto flex items-center gap-3">
-            <span className="brand-mark">R</span>
+            <span className="brand-mark">D</span>
             <span>
-              <span className="brand-name block text-sm font-semibold leading-tight">Recruit IITR</span>
+              <span className="brand-name block text-sm font-semibold leading-tight">Discovr</span>
               <span className="eyebrow brand-meta mt-0.5 block">Student network</span>
             </span>
           </NavLink>
@@ -93,9 +93,10 @@ export default function StudentLayout({ children }) {
 
             <NavLink
               to="/profile"
+              aria-label="Open your profile"
               className="profile-link group flex items-center gap-2 rounded-sm py-1 pl-1 pr-2.5 transition-colors duration-300"
             >
-              <Monogram name={profile?.name || "Student"} size="sm" />
+              {profile?.profilePicture ? <img src={profile.profilePicture} alt={`${profile?.name || "Student"} profile`} className="h-9 w-9 rounded-full border border-white/25 bg-surface object-cover shadow-sm" /> : <Monogram name={profile?.name || "Student"} size="sm" />}
               <span className="hidden text-sm font-medium sm:inline">
                 {profile?.name?.split(" ")[0] || "Profile"}
               </span>
@@ -113,8 +114,7 @@ export default function StudentLayout({ children }) {
 
       <footer className="app-footer mt-24 border-t">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-8 text-xs text-ink-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <p>Recruit IITR · Indian Institute of Technology Roorkee</p>
-          <p>All times shown in IST.</p>
+          <p>Discovr · Indian Institute of Technology Roorkee</p>
         </div>
       </footer>
     </div>

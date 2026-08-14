@@ -11,6 +11,7 @@ const {
   autoScheduleRound,
   cancelScheduleSlot,
   extractCandidates,
+  updateCandidateReview,
 } = require("../controllers/workflow.controllers");
 const rateLimit = require("../middlewares/rateLimit");
 const validateRequest = require("../middlewares/validateRequest");
@@ -60,6 +61,7 @@ router.post('/password-reset/complete', resetVerifyRateLimit, [
 router.post(
   "/addSession",
   clubAuth,
+  upload.single('sessionThumbnail'),
   [
     body("title").isString().trim().isLength({ min: 2, max: 150 }),
     body("shortDescription").isString().trim().isLength({ min: 2, max: 500 }),
@@ -105,7 +107,9 @@ router.post('/addEvent',clubAuth,
   body("title").isString().trim().isLength({ min: 2, max: 150 }),
   body("shortDescription").isString().trim().isLength({ min: 2, max: 500 }),
   body("longDescription").isString().isLength({ min: 2, max: 10000 }),
-  body("registerationDeadline").isISO8601({ strict: true }),
+  body("registerationDeadline").optional({ checkFalsy: true }).isISO8601({ strict: true }),
+  body("registrationDeadlineAt").optional({ checkFalsy: true }).isISO8601(),
+  body().custom((value) => value.registrationDeadlineAt || value.registerationDeadline).withMessage("Registration deadline is required"),
   body("maxParticipants").isInt({ min: 1, max: 10000 }),
   // Remove array validation as we're now handling them differently
   body('numberOfRounds').optional().isInt({ min: 0, max: 20 }),
@@ -153,6 +157,7 @@ router.patch('/events/:eventId', clubAuth, upload.single('eventBanner'), [
   body('longDescription').optional().isString().isLength({ max: 10000 }),
   body('eligibility').optional().isString().isLength({ max: 2000 }),
   body('registerationDeadline').optional({ checkFalsy: true }).isISO8601({ strict: true }),
+  body('registrationDeadlineAt').optional({ checkFalsy: true }).isISO8601(),
   body('maxParticipants').optional().isInt({ min: 1, max: 10000 }),
   body('numberOfRounds').optional().isInt({ min: 0, max: 20 }),
   body('registrationType').optional().isIn(['individual', 'team', 'optional_team']),
@@ -173,7 +178,7 @@ router.patch('/events/:eventId/status', clubAuth, [
   body('status').isIn(['draft', 'published', 'closed', 'archived', 'cancelled']),
 ], validateRequest, updateEventStatus)
 
-router.patch('/sessions/:sessionId', clubAuth, [
+router.patch('/sessions/:sessionId', clubAuth, upload.single('sessionThumbnail'), [
   param('sessionId').isMongoId(),
   body('title').optional().isString().trim().isLength({ min: 2, max: 150 }),
   body('shortDescription').optional().isString().isLength({ max: 500 }),
@@ -244,10 +249,18 @@ router.post('/events/:eventId/rounds/:roundId/decisions', clubAuth, [
   param('roundId').isMongoId(),
   body('decisions').isArray({ min: 1, max: 250 }),
   body('decisions.*.candidateId').isMongoId(),
-  body('decisions.*.status').isIn(['advanced', 'rejected']),
+  body('decisions.*.status').isIn(['advanced', 'waitlisted', 'rejected']),
   body('decisions.*.score').optional({ nullable: true }).isFloat({ min: 0 }),
   body('decisions.*.notes').optional({ nullable: true }).isString().isLength({ max: 4000 }),
 ], validateRequest, publishRoundDecisions)
+
+router.patch('/events/:eventId/rounds/:roundId/candidates/:candidateId', clubAuth, [
+  param('eventId').isMongoId(),
+  param('roundId').isMongoId(),
+  param('candidateId').isMongoId(),
+  body('score').optional({ nullable: true }).isFloat({ min: 0 }),
+  body('notes').optional({ nullable: true }).isString().isLength({ max: 4000 }),
+], validateRequest, updateCandidateReview)
 
 router.post('/events/:eventId/rounds/:roundId/slots', clubAuth, [
   param('eventId').isMongoId(),

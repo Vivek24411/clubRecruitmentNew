@@ -39,9 +39,12 @@ function cloudinaryStorage({ folder, resourceType = "image", transformImages = f
 const imageMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const upload = multer({
   storage: cloudinaryStorage({
-    folder: (file) => file.fieldname === "clubLogo"
-      ? "clubRecruitment/clubLogo"
-      : "clubRecruitment/eventBanner",
+    folder: (file) => ({
+      clubLogo: "discovr/club-logos",
+      eventBanner: "discovr/event-banners",
+      sessionThumbnail: "discovr/session-thumbnails",
+      profilePicture: "discovr/profile-pictures",
+    }[file.fieldname] || "discovr/images"),
     resourceType: "image",
     transformImages: true,
   }),
@@ -62,7 +65,7 @@ const submissionMimeTypes = new Set([
 
 const submissionUpload = multer({
   storage: cloudinaryStorage({
-    folder: "clubRecruitment/submissions",
+    folder: "discovr/submissions",
     resourceType: "auto",
     transformImages: true,
   }),

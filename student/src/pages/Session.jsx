@@ -129,6 +129,8 @@ export default function Session() {
         <hr className="rule animate-draw mt-8" style={{ animationDelay: "200ms" }} />
       </header>
 
+      {session.sessionThumbnail && <img src={session.sessionThumbnail} alt="" className="reveal mt-8 aspect-video w-full rounded-md border border-line bg-paper-2 object-contain" />}
+
       <div className="mt-10 grid gap-8 lg:grid-cols-3 lg:gap-10">
         <section className="reveal lg:col-span-2" style={{ "--d": "100ms" }}>
           <h2 className="display text-xl">About this session</h2>

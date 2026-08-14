@@ -9,7 +9,7 @@ function SessionCheck() {
     <div className="grid min-h-screen place-items-center bg-paper px-6" role="status">
       <div className="reveal text-center">
         <div className="flex items-baseline justify-center gap-2">
-          <span className="display text-2xl">Recruit</span>
+          <span className="display text-2xl">Discovr</span>
           <span className="eyebrow eyebrow-accent">Admin</span>
         </div>
         <hr className="rule-accent animate-draw mx-auto mt-5" style={{ animationDelay: "120ms" }} />

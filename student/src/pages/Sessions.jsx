@@ -7,9 +7,11 @@ import {
   Badge,
   Button,
   EmptyState,
+  Field,
   Input,
   Page,
   PageHeader,
+  Select,
   SkeletonList,
 } from "../components/ui";
 
@@ -46,11 +48,18 @@ function groupByDay(sessions) {
   return [...groups.entries()];
 }
 
+function listedTimestamp(item) {
+  if (item.createdAt) return new Date(item.createdAt).getTime();
+  if (/^[a-f\d]{24}$/i.test(item._id || "")) return Number.parseInt(item._id.slice(0, 8), 16) * 1000;
+  return new Date(item.updatedAt || 0).getTime();
+}
+
 export default function Sessions() {
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [showPast, setShowPast] = useState(false);
+  const [sortBy, setSortBy] = useState("session_date");
 
   useEffect(() => {
     async function fetchSessions() {
@@ -83,13 +92,13 @@ export default function Sessions() {
           session.venue?.toLowerCase().includes(query)
         );
       })
-      .sort(
-        (a, b) =>
-          (sessionDate(a.date, a.time)?.getTime() || 0) -
-          (sessionDate(b.date, b.time)?.getTime() || 0),
-      );
+      .sort((a, b) => {
+        if (sortBy === "listed_newest") return listedTimestamp(b) - listedTimestamp(a);
+        if (sortBy === "listed_oldest") return listedTimestamp(a) - listedTimestamp(b);
+        return (sessionDate(a.date, a.time)?.getTime() || 0) - (sessionDate(b.date, b.time)?.getTime() || 0);
+      });
     return groupByDay(filtered);
-  }, [sessions, searchTerm, showPast]);
+  }, [sessions, searchTerm, showPast, sortBy]);
 
   const total = grouped.reduce((sum, [, items]) => sum + items.length, 0);
 
@@ -101,7 +110,7 @@ export default function Sessions() {
         description="Talks, walkthroughs, and open houses where clubs explain what they do and how they select."
       />
 
-      <div className="mt-8 flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-center">
+      <div className="mt-8 flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-end">
         <div className="relative flex-1">
           <label className="sr-only" htmlFor="search">
             Search sessions
@@ -116,11 +125,18 @@ export default function Sessions() {
             onChange={(event) => setSearchTerm(event.target.value)}
           />
         </div>
+        <Field label="Order" id="session-order" className="sm:w-48">
+          <Select id="session-order" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+            <option value="session_date">Session date</option>
+            <option value="listed_newest">Recently listed</option>
+            <option value="listed_oldest">Oldest listed</option>
+          </Select>
+        </Field>
         <Button
           variant={showPast ? "primary" : "secondary"}
           onClick={() => setShowPast((value) => !value)}
         >
-          {showPast ? "Hiding nothing" : "Include past"}
+          {showPast ? "Showing all" : "Include past"}
         </Button>
       </div>
 
@@ -161,26 +177,16 @@ export default function Sessions() {
                       <Link
                         key={session._id}
                         to={`/session/${session._id}`}
-                        className="card card-interactive group flex flex-col gap-4 p-5 sm:flex-row sm:items-center"
+                        className="card card-interactive group grid min-w-0 overflow-hidden p-0 sm:grid-cols-[12rem_minmax(0,1fr)_auto] sm:items-stretch"
                       >
-                        <div className="flex-none sm:w-24">
-                          <p className="display tabular text-lg leading-none">
-                            {startsAt
-                              ? startsAt.toLocaleTimeString("en-IN", {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                  timeZone: "Asia/Kolkata",
-                                })
-                              : "—"}
-                          </p>
-                          {session.duration && (
-                            <p className="mt-1 text-xs text-ink-3">{session.duration} min</p>
-                          )}
+                        <div className="relative aspect-video min-w-0 overflow-hidden bg-paper-2 sm:aspect-auto sm:min-h-32">
+                          {session.sessionThumbnail ? <img src={session.sessionThumbnail} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" /> : <div className="grid h-full min-h-32 place-items-center text-center"><div><p className="display text-2xl">{startsAt?.toLocaleDateString("en-IN", { day: "2-digit", timeZone: "Asia/Kolkata" }) || "—"}</p><p className="eyebrow mt-1">{startsAt?.toLocaleDateString("en-IN", { month: "short", timeZone: "Asia/Kolkata" }) || "Date TBA"}</p></div></div>}
                         </div>
 
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0 p-5 sm:py-5">
                           <p className="eyebrow eyebrow-accent">{session.clubId?.name}</p>
                           <h3 className="display mt-1 text-lg leading-snug">{session.title}</h3>
+                          <p className="mt-2 text-sm font-medium text-ink-2">{startsAt ? startsAt.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }) : "Time TBA"}{session.duration ? ` · ${session.duration} min` : ""}</p>
                           {session.shortDescription && (
                             <p className="mt-1.5 line-clamp-1 text-sm text-ink-3">
                               {session.shortDescription}
@@ -188,7 +194,7 @@ export default function Sessions() {
                           )}
                         </div>
 
-                        <div className="flex flex-none items-center gap-3 sm:flex-col sm:items-end">
+                        <div className="flex flex-none items-center gap-3 px-5 pb-5 sm:flex-col sm:items-end sm:justify-center sm:p-5">
                           {isPast ? (
                             <Badge tone="neutral">Past</Badge>
                           ) : (

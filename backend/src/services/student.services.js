@@ -1,6 +1,6 @@
 const { Resend } = require('resend');
 
-const DEFAULT_FROM_EMAIL = 'Recruit IITR <noreply@devx6.live>';
+const DEFAULT_FROM_EMAIL = 'Discovr <noreply@devx6.live>';
 let resendClient;
 
 function getResendClient() {
@@ -30,11 +30,11 @@ function buildOtpEmailHtml(otp) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
-    <title>Recruit IITR verification code</title>
+    <title>Discovr verification code</title>
 </head>
 <body style="margin:0;padding:0;background:#f2f0e9;color:#111612;font-family:Arial,'Helvetica Neue',sans-serif;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
-        Use ${otp} to verify your Recruit IITR account. This code expires in 5 minutes.
+        Use ${otp} to verify your Discovr account. This code expires in 5 minutes.
     </div>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f2f0e9;">
         <tr>
@@ -48,11 +48,11 @@ function buildOtpEmailHtml(otp) {
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                                 <tr>
                                     <td width="48" valign="middle">
-                                        <div style="width:42px;height:42px;line-height:42px;text-align:center;background:#111612;color:#fbfaf6;border-radius:12px;font-size:18px;font-weight:700;">R</div>
+                                        <div style="width:42px;height:42px;line-height:42px;text-align:center;background:#111612;color:#fbfaf6;border-radius:12px;font-size:18px;font-weight:700;">D</div>
                                     </td>
                                     <td valign="middle" style="padding-left:12px;">
-                                        <div style="font-size:16px;line-height:22px;font-weight:700;color:#111612;">Recruit IITR</div>
-                                        <div style="font-size:11px;line-height:16px;letter-spacing:1.4px;text-transform:uppercase;color:#697169;">Student recruitment portal</div>
+                                        <div style="font-size:16px;line-height:22px;font-weight:700;color:#111612;">Discovr</div>
+                                        <div style="font-size:11px;line-height:16px;letter-spacing:1.4px;text-transform:uppercase;color:#697169;">Campus opportunities</div>
                                     </td>
                                 </tr>
                             </table>
@@ -62,7 +62,7 @@ function buildOtpEmailHtml(otp) {
                         <td style="padding:34px 36px 12px;">
                             <div style="font-size:12px;line-height:18px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:#d55432;">Email verification</div>
                             <h1 style="margin:8px 0 12px;font-size:30px;line-height:38px;letter-spacing:-0.6px;color:#111612;">Your one-time code</h1>
-                            <p style="margin:0;font-size:15px;line-height:24px;color:#697169;">Enter this code in Recruit IITR to continue. It is valid for the next 5 minutes.</p>
+                            <p style="margin:0;font-size:15px;line-height:24px;color:#697169;">Enter this code in Discovr to continue. It is valid for the next 5 minutes.</p>
                         </td>
                     </tr>
                     <tr>
@@ -79,7 +79,7 @@ function buildOtpEmailHtml(otp) {
                                     <td width="28" valign="top" style="padding:16px 0 16px 16px;color:#2f6b4f;font-size:18px;line-height:22px;">&#10003;</td>
                                     <td style="padding:16px 16px 16px 8px;font-size:13px;line-height:20px;color:#384039;">
                                         <strong style="color:#2f6b4f;">Keep this code private.</strong><br>
-                                        Recruit IITR will never ask you to share it over a call or message.
+                                        Discovr will never ask you to share it over a call or message.
                                     </td>
                                 </tr>
                             </table>
@@ -88,7 +88,7 @@ function buildOtpEmailHtml(otp) {
                     <tr>
                         <td style="padding:22px 36px;background:#111612;color:#969c96;font-size:12px;line-height:19px;">
                             If you did not request this code, you can safely ignore this email.<br>
-                            <span style="color:#fbfaf6;">Recruit IITR</span> &middot; Indian Institute of Technology Roorkee
+                            <span style="color:#fbfaf6;">Discovr</span> &middot; Indian Institute of Technology Roorkee
                         </td>
                     </tr>
                 </table>
@@ -108,17 +108,25 @@ function escapeHtml(value) {
         .replace(/'/g, "&#039;");
 }
 
-function buildNotificationEmailHtml({ title, message, detailsUrl, type }) {
-    const safeTitle = escapeHtml(title || "Recruitment update");
-    const safeMessage = escapeHtml(message || "You have a new recruitment update.");
+function buildNotificationEmailHtml({ title, message, detailsUrl, type, emailDetails }) {
+    const safeTitle = escapeHtml(title || "Discovr update");
+    const safeMessage = escapeHtml(message || "You have a new application update.");
     const actionLabels = {
         team_invitation: "Review invitation",
         round_scheduled: "View schedule",
         round_advanced: "Open next round",
+        round_waitlisted: "View application",
         event_deadline_changed: "View updated event",
         event_extracted: "Open event",
     };
     const actionLabel = escapeHtml(actionLabels[type] || "View details");
+    const detailRows = [
+        emailDetails?.startsAt ? ["Date and time", new Date(emailDetails.startsAt).toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short", timeZone: "Asia/Kolkata" })] : null,
+        emailDetails?.venue ? ["Venue", emailDetails.venue] : null,
+    ].filter(Boolean);
+    const detailCard = detailRows.length || emailDetails?.meetingUrl
+        ? `<tr><td style="padding:8px 34px 8px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f2f0e9;border-radius:10px;">${detailRows.map(([label, value]) => `<tr><td style="padding:12px 16px;border-bottom:1px solid #dcd8cd;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#697169;">${escapeHtml(label)}</td><td style="padding:12px 16px;border-bottom:1px solid #dcd8cd;font-size:14px;font-weight:700;color:#111612;text-align:right;">${escapeHtml(value)}</td></tr>`).join("")}${emailDetails?.meetingUrl ? `<tr><td colspan="2" style="padding:14px 16px;"><a href="${escapeHtml(emailDetails.meetingUrl)}" style="color:#d55432;font-size:14px;font-weight:700;text-decoration:none;">Open meeting link &rarr;</a></td></tr>` : ""}</table></td></tr>`
+        : "";
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -135,16 +143,17 @@ function buildNotificationEmailHtml({ title, message, detailsUrl, type }) {
                 <tr><td style="height:5px;background:#d55432;font-size:0;line-height:0;">&nbsp;</td></tr>
                 <tr><td style="padding:30px 34px 0;">
                     <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
-                        <td style="width:42px;height:42px;text-align:center;background:#111612;color:#fbfaf6;border-radius:10px;font-size:18px;font-weight:700;">R</td>
-                        <td style="padding-left:12px;"><div style="font-size:16px;font-weight:700;">Recruit IITR</div><div style="padding-top:3px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#697169;">Application update</div></td>
+                        <td style="width:42px;height:42px;text-align:center;background:#111612;color:#fbfaf6;border-radius:10px;font-size:18px;font-weight:700;">D</td>
+                        <td style="padding-left:12px;"><div style="font-size:16px;font-weight:700;">Discovr</div><div style="padding-top:3px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#697169;">Application update</div></td>
                     </tr></table>
                 </td></tr>
                 <tr><td style="padding:32px 34px 12px;">
                     <h1 style="margin:0 0 12px;font-size:28px;line-height:36px;color:#111612;">${safeTitle}</h1>
                     <p style="margin:0;font-size:15px;line-height:24px;color:#535b54;">${safeMessage}</p>
                 </td></tr>
-                ${detailsUrl ? `<tr><td style="padding:16px 34px 34px;"><a href="${escapeHtml(detailsUrl)}" style="display:inline-block;padding:13px 20px;background:#111612;color:#ffffff;text-decoration:none;border-radius:7px;font-size:14px;font-weight:700;">${actionLabel}</a><p style="margin:14px 0 0;font-size:12px;line-height:18px;color:#858b85;">If the button does not open, sign in to Recruit IITR and return to this email.</p></td></tr>` : ""}
-                <tr><td style="padding:20px 34px;background:#111612;color:#969c96;font-size:12px;line-height:19px;">This message was sent because your Recruit IITR email notifications are enabled.<br><span style="color:#fbfaf6;">Recruit IITR</span> &middot; Indian Institute of Technology Roorkee</td></tr>
+                ${detailCard}
+                ${detailsUrl ? `<tr><td style="padding:16px 34px 34px;"><a href="${escapeHtml(detailsUrl)}" style="display:inline-block;padding:13px 20px;background:#111612;color:#ffffff;text-decoration:none;border-radius:7px;font-size:14px;font-weight:700;">${actionLabel}</a><p style="margin:14px 0 0;font-size:12px;line-height:18px;color:#858b85;">If the button does not open, copy this URL into your browser:<br><span style="word-break:break-all;color:#535b54;">${escapeHtml(detailsUrl)}</span></p></td></tr>` : ""}
+                <tr><td style="padding:20px 34px;background:#111612;color:#969c96;font-size:12px;line-height:19px;">This message was sent because your Discovr email notifications are enabled.<br><span style="color:#fbfaf6;">Discovr</span> &middot; Indian Institute of Technology Roorkee</td></tr>
             </table>
         </td></tr>
     </table>
@@ -155,13 +164,13 @@ function buildNotificationEmailHtml({ title, message, detailsUrl, type }) {
 module.exports.sendOtp = async (email, otp) => {
     return sendEmail({
         to: email,
-        subject: `${otp} is your Recruit IITR verification code`,
-        text: `Your Recruit IITR verification code is ${otp}. It expires in 5 minutes. If you did not request this code, you can ignore this email.`,
+        subject: `${otp} is your Discovr verification code`,
+        text: `Your Discovr verification code is ${otp}. It expires in 5 minutes. If you did not request this code, you can ignore this email.`,
         html: buildOtpEmailHtml(otp),
     });
 };
 
-module.exports.sendNotificationEmail = async (email, { title, message, link, type }) => {
+module.exports.sendNotificationEmail = async (email, { title, message, link, type, emailDetails }) => {
     if (!process.env.RESEND_API_KEY) return;
     let detailsUrl = null;
     if (process.env.STUDENT_APP_ORIGIN && link?.startsWith('/') && !link.startsWith('//')) {
@@ -169,9 +178,9 @@ module.exports.sendNotificationEmail = async (email, { title, message, link, typ
     }
     await sendEmail({
         to: email,
-        subject: String(title || "Recruitment update").replace(/[\r\n]/g, " "),
-        text: `${message || "You have a new recruitment update."}${detailsUrl ? `\n\nView details: ${detailsUrl}` : ""}`,
-        html: buildNotificationEmailHtml({ title, message, detailsUrl, type }),
+        subject: String(title || "Discovr update").replace(/[\r\n]/g, " "),
+        text: `${message || "You have a new application update."}${emailDetails?.venue ? `\nVenue: ${emailDetails.venue}` : ""}${emailDetails?.meetingUrl ? `\nMeeting link: ${emailDetails.meetingUrl}` : ""}${detailsUrl ? `\n\nView details: ${detailsUrl}` : ""}`,
+        html: buildNotificationEmailHtml({ title, message, detailsUrl, type, emailDetails }),
     });
 };
 

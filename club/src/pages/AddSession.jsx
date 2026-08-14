@@ -1,6 +1,7 @@
 import { useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 import {
   Button,
   Card,
@@ -13,6 +14,7 @@ import {
 } from "../components/ui";
 
 export default function AddSession() {
+  const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [shortDescription, setShortDescription] = useState("");
   const [date, setDate] = useState("");
@@ -23,34 +25,21 @@ export default function AddSession() {
   const [isLoading, setIsLoading] = useState(false);
   const [capacity, setCapacity] = useState("");
   const [status, setStatus] = useState("draft");
+  const [thumbnail, setThumbnail] = useState(null);
+  const [preview, setPreview] = useState("");
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setIsLoading(true);
     try {
-      const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/addSession`, {
-        title,
-        shortDescription,
-        date,
-        time,
-        duration,
-        longDescription,
-        venue,
-        capacity: capacity || null,
-        status,
-      });
+      const payload = new FormData();
+      Object.entries({ title, shortDescription, date, time, duration, longDescription, venue, capacity: capacity || "", status }).forEach(([key, value]) => payload.append(key, value));
+      if (thumbnail) payload.append("sessionThumbnail", thumbnail);
+      const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/addSession`, payload);
 
       if (response.data.success) {
         toast.success(response.data.msg);
-        setTitle("");
-        setShortDescription("");
-        setDate("");
-        setTime("");
-        setDuration("");
-        setLongDescription("");
-        setVenue("");
-        setCapacity("");
-        setStatus("draft");
+        navigate(`/session/${response.data.session._id}`, { replace: true });
       } else {
         toast.error(response.data.msg);
       }
@@ -142,6 +131,7 @@ export default function AddSession() {
                 onChange={(event) => setTime(event.target.value)}
                 required
               />
+              <div className="mt-2 flex flex-wrap gap-1.5">{["09:00", "12:00", "17:00", "20:00"].map((value) => <button key={value} type="button" className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${time === value ? "border-accent bg-accent text-white" : "border-line bg-surface text-ink-3"}`} onClick={() => setTime(value)}>{new Date(`2000-01-01T${value}:00`).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}</button>)}</div>
             </Field>
 
             <Field label="Duration" id="duration" required hint="In minutes.">
@@ -179,6 +169,13 @@ export default function AddSession() {
               />
             </Field>
           </div>
+        </Card>
+
+        <Card className="reveal p-6" style={{ "--d": "120ms" }}>
+          <h2 className="display text-xl">Session thumbnail</h2>
+          <p className="mt-1.5 text-sm text-ink-3">Recommended: 1600 × 900 px (16:9), JPG, PNG, or WebP under 5 MB.</p>
+          <Field label="Choose image" id="sessionThumbnail" className="mt-5"><input id="sessionThumbnail" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files[0] || null; setThumbnail(file); setPreview(file ? URL.createObjectURL(file) : ""); }} /></Field>
+          {preview && <img src={preview} alt="Session thumbnail preview" className="mt-5 aspect-video w-full rounded-sm border border-line bg-paper-2 object-contain" />}
         </Card>
 
         {/* Publish -------------------------------------------------------- */}

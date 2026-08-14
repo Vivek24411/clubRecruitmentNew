@@ -42,6 +42,7 @@ const roundSchema = new mongoose.Schema({
 
 roundSchema.pre("validate", function(next) {
   if (this.type === "submission" || this.type === "hackathon") this.submissionEnabled = true;
+  if (this.type === "test") this.evaluationScope = "participant";
   if (this.type === "interview") {
     this.interviewMode = this.interviewMode || "individual";
     this.evaluationScope = this.interviewMode === "group" ? "application" : "participant";
@@ -108,7 +109,12 @@ eventSchema.pre("validate", function(next) {
     return next(new Error("Maximum team size cannot be smaller than minimum team size"));
   }
   if (this.rounds?.length) {
-    this.rounds.forEach((round, index) => { round.order = index + 1; });
+    this.rounds.forEach((round, index) => {
+      round.order = index + 1;
+      if (this.registrationType === "individual" || round.type === "test") {
+        round.evaluationScope = "participant";
+      }
+    });
     this.numberOfRounds = this.rounds.length;
   }
   next();

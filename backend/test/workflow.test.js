@@ -8,9 +8,40 @@ const {
   eventEligibility,
   inferProgramStartYear,
 } = require("../src/services/academic.services");
-const { normalizeRounds, upsertScheduleSlot } = require("../src/services/eventWorkflow.services");
+const {
+  normalizeRounds,
+  studentApplicationStatus,
+  upsertScheduleSlot,
+} = require("../src/services/eventWorkflow.services");
+const registerationEventModel = require("../src/models/registerationEvent.model");
 const scheduleSlotModel = require("../src/models/scheduleSlot.model");
 const scheduleReservationModel = require("../src/models/scheduleReservation.model");
+const roundCandidateModel = require("../src/models/roundCandidate.model");
+const sessionModel = require("../src/models/session.model");
+const studentModel = require("../src/models/student.model");
+
+test("workflow records preserve exact waitlist and revoked audit states", () => {
+  const statuses = roundCandidateModel.schema.path("status").enumValues;
+  assert.ok(statuses.includes("waitlisted"));
+  assert.ok(statuses.includes("revoked"));
+  assert.equal(roundCandidateModel.schema.path("sourceCandidateIds").instance, "Array");
+});
+
+test("student profiles and sessions expose optional visual media", () => {
+  assert.ok(studentModel.schema.path("profilePicture"));
+  assert.ok(studentModel.schema.path("profilePicturePublicId"));
+  assert.ok(sessionModel.schema.path("sessionThumbnail"));
+  assert.ok(sessionModel.schema.path("sessionThumbnailPublicId"));
+  assert.ok(sessionModel.schema.path("createdAt"));
+});
+
+test("registration attempts are historical rather than uniquely locked per student", () => {
+  const attemptIndex = registerationEventModel.schema.indexes().find(([keys]) =>
+    keys.eventId === 1 && keys.studentId === 1);
+  assert.ok(attemptIndex);
+  assert.notEqual(attemptIndex[1]?.unique, true);
+  assert.equal(attemptIndex[0].registeredAt, -1);
+});
 
 test("academic year rolls on the configured June date", () => {
   const config = { rolloverMonth: 6, rolloverDay: 15, branches: [{ name: "Example", durationYears: 4 }] };
@@ -56,6 +87,51 @@ test("round normalization supports team and individual interview modes", () => {
   assert.equal(rounds[1].evaluationScope, "participant");
   assert.equal(rounds[2].submissionEnabled, true);
   assert.deepEqual(rounds.map((round) => round.order), [1, 2, 3]);
+});
+
+test("common tests always evaluate each participant independently", () => {
+  const [testRound] = normalizeRounds([
+    { title: "Common test", type: "test", evaluationScope: "application" },
+  ]);
+  assert.equal(testRound.evaluationScope, "participant");
+});
+
+test("application status follows the logged-in student's latest individual result", () => {
+  const firstRoundId = new mongoose.Types.ObjectId();
+  const secondRoundId = new mongoose.Types.ObjectId();
+  const firstStudentId = new mongoose.Types.ObjectId();
+  const secondStudentId = new mongoose.Types.ObjectId();
+  const event = {
+    rounds: [
+      { _id: firstRoundId, order: 1 },
+      { _id: secondRoundId, order: 2 },
+    ],
+  };
+  const candidates = [
+    {
+      roundId: firstRoundId,
+      scope: "application",
+      participantIds: [firstStudentId, secondStudentId],
+      status: "advanced",
+    },
+    {
+      roundId: secondRoundId,
+      scope: "participant",
+      studentId: firstStudentId,
+      participantIds: [firstStudentId],
+      status: "advanced",
+    },
+    {
+      roundId: secondRoundId,
+      scope: "participant",
+      studentId: secondStudentId,
+      participantIds: [secondStudentId],
+      status: "rejected",
+    },
+  ];
+
+  assert.equal(studentApplicationStatus(event, candidates, firstStudentId), "selected");
+  assert.equal(studentApplicationStatus(event, candidates, secondStudentId), "rejected");
 });
 
 test("legacy round details are normalized without losing their purpose", () => {

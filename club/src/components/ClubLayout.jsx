@@ -46,7 +46,7 @@ export default function ClubLayout({ children }) {
       <header className={`app-header ${lifted ? "is-lifted" : ""}`}>
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5 sm:px-6">
           <NavLink to="/" className="mr-auto flex min-w-0 items-center gap-3">
-            <span className="brand-mark">R</span>
+            {clubProfile?.clubLogo ? <img src={clubProfile.clubLogo} alt="" className="h-12 w-12 rounded-md border border-white/20 bg-white object-contain p-1 shadow-sm" /> : <span className="brand-mark !h-12 !w-12">D</span>}
             <span className="min-w-0">
               <span className="brand-name block truncate text-sm font-semibold leading-tight">
                 {clubProfile?.name || "Club portal"}
@@ -77,8 +77,7 @@ export default function ClubLayout({ children }) {
 
       <footer className="app-footer mt-24 border-t">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-8 text-xs text-ink-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <p>Recruit IITR · Club workspace</p>
-          <p>All times shown in IST.</p>
+          <p>Discovr · Club workspace</p>
         </div>
       </footer>
     </div>

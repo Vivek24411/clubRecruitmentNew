@@ -263,6 +263,41 @@ export function Input({ className, ...rest }) {
   return <input className={cx("input", className)} {...rest} />;
 }
 
+export function DateTimeInput({ id, value = "", onChange, required = false, quickTimes = ["09:00", "12:00", "17:00", "20:00"], className }) {
+  const normalized = value && !Number.isNaN(new Date(value).getTime())
+    ? (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)
+      ? value
+      : new Date(new Date(value).getTime() - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0, 16))
+    : "";
+  const [date = "", time = ""] = normalized.split("T");
+  const emit = (nextDate, nextTime) => onChange(nextDate ? `${nextDate}T${nextTime || "09:00"}` : "");
+  const today = new Date();
+  const localToday = new Date(today.getTime() - today.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  return (
+    <div className={cx("rounded-sm border border-line bg-paper-2/45 p-3", className)}>
+      <div className="grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] gap-2">
+        <div>
+          <span className="eyebrow mb-1.5 block">Date</span>
+          <Input id={id} type="date" value={date} required={required} onChange={(event) => emit(event.target.value, time)} />
+        </div>
+        <div>
+          <span className="eyebrow mb-1.5 block">Time</span>
+          <Input id={`${id}-time`} type="time" step="300" value={time} required={required} onChange={(event) => emit(date, event.target.value)} />
+        </div>
+      </div>
+      {quickTimes.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Quick time choices">
+          {quickTimes.map((quickTime) => (
+            <button key={quickTime} type="button" className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${time === quickTime ? "border-accent bg-accent text-white" : "border-line bg-surface text-ink-3 hover:border-accent hover:text-accent"}`} onClick={() => emit(date || localToday, quickTime)}>
+              {new Date(`2000-01-01T${quickTime}:00`).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Textarea({ className, ...rest }) {
   return <textarea className={cx("textarea", className)} {...rest} />;
 }

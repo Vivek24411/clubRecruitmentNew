@@ -55,11 +55,20 @@ function EventCardSkeleton() {
   );
 }
 
+function listedTimestamp(item) {
+  if (item.publishedAt) return new Date(item.publishedAt).getTime();
+  if (item.createdAt) return new Date(item.createdAt).getTime();
+  if (/^[a-f\d]{24}$/i.test(item._id || "")) return Number.parseInt(item._id.slice(0, 8), 16) * 1000;
+  return 0;
+}
+
 export default function Events() {
   const [events, setEvents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState("open");
+  const [category, setCategory] = useState("all");
+  const [eventType, setEventType] = useState("all");
   const [sortBy, setSortBy] = useState("deadline");
 
   useEffect(() => {
@@ -91,8 +100,10 @@ export default function Events() {
         event.clubId?.name?.toLowerCase().includes(query);
       if (!searchMatch) return false;
 
-      const isOpen = (eventDeadline(event) || 0) > now;
-      if (filter === "active") return isOpen;
+      if (category !== "all" && event.clubId?.category !== category) return false;
+      if (eventType !== "all" && event.eventType !== eventType) return false;
+      const isOpen = event.status === "published" && (eventDeadline(event) || 0) > now;
+      if (filter === "open") return isOpen;
       if (filter === "closed") return !isOpen;
       return true;
     });
@@ -100,14 +111,16 @@ export default function Events() {
     return matched.sort((a, b) => {
       if (sortBy === "title") return a.title.localeCompare(b.title);
       if (sortBy === "club") return (a.clubId?.name || "").localeCompare(b.clubId?.name || "");
+      if (sortBy === "listed_newest") return listedTimestamp(b) - listedTimestamp(a);
+      if (sortBy === "listed_oldest") return listedTimestamp(a) - listedTimestamp(b);
       return (eventDeadline(a)?.getTime() || Infinity) - (eventDeadline(b)?.getTime() || Infinity);
     });
     // `now` is intentionally read fresh on each render rather than tracked.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events, searchQuery, filter, sortBy]);
+  }, [events, searchQuery, filter, category, eventType, sortBy]);
 
   const counts = useMemo(() => {
-    const openList = events.filter((event) => (eventDeadline(event) || 0) > now);
+    const openList = events.filter((event) => event.status === "published" && (eventDeadline(event) || 0) > now);
     const soon = openList.filter((event) => daysUntil(eventDeadline(event)) <= 3);
     return {
       total: events.length,
@@ -118,14 +131,14 @@ export default function Events() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events]);
 
-  const filtersActive = searchQuery !== "" || filter !== "all";
+  const filtersActive = searchQuery !== "" || filter !== "open" || category !== "all" || eventType !== "all";
 
   return (
     <Page>
       <PageHeader
-        eyebrow="Recruitment"
-        title="Open events"
-        description="Every club currently recruiting, ordered by how soon applications close."
+        eyebrow="Discover"
+        title="Events and opportunities"
+        description="Recruitment, competitions, hackathons, workshops, and other club opportunities."
       />
 
       {/* Summary strip */}
@@ -155,19 +168,25 @@ export default function Events() {
           />
         </div>
 
-        <Field label="Status" id="filter" className="md:w-48">
+        <Field label="Status" id="filter" className="md:w-40">
           <Select id="filter" value={filter} onChange={(event) => setFilter(event.target.value)}>
+            <option value="open">Open events</option>
+            <option value="closed">Closed events</option>
             <option value="all">All events</option>
-            <option value="active">Open only</option>
-            <option value="closed">Closed only</option>
           </Select>
         </Field>
+
+        <Field label="Club" id="category" className="md:w-40"><Select id="category" value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">All clubs</option><option value="technical">Technical</option><option value="cultural">Cultural</option></Select></Field>
+
+        <Field label="Type" id="eventType" className="md:w-44"><Select id="eventType" value={eventType} onChange={(event) => setEventType(event.target.value)}><option value="all">All types</option><option value="recruitment">Recruitment</option><option value="competition">Competition</option><option value="hackathon">Hackathon</option><option value="workshop">Workshop</option><option value="other">Other</option></Select></Field>
 
         <Field label="Sort by" id="sort" className="md:w-52">
           <Select id="sort" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
             <option value="deadline">Deadline, soonest</option>
             <option value="title">Title, A–Z</option>
             <option value="club">Club, A–Z</option>
+            <option value="listed_newest">Recently listed</option>
+            <option value="listed_oldest">Oldest listed</option>
           </Select>
         </Field>
       </div>
@@ -183,7 +202,9 @@ export default function Events() {
               <button
                 onClick={() => {
                   setSearchQuery("");
-                  setFilter("all");
+                  setFilter("open");
+                  setCategory("all");
+                  setEventType("all");
                 }}
                 className="link link-accent"
               >
@@ -216,7 +237,9 @@ export default function Events() {
                   variant="secondary"
                   onClick={() => {
                     setSearchQuery("");
-                    setFilter("all");
+                    setFilter("open");
+                    setCategory("all");
+                    setEventType("all");
                   }}
                 >
                   Clear filters
@@ -232,7 +255,7 @@ export default function Events() {
           <div className="stagger grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {visibleEvents.map((event) => {
               const deadline = eventDeadline(event);
-              const closed = !deadline || deadline < now;
+              const closed = event.status !== "published" || !deadline || deadline < now;
               return (
                 <Link
                   key={event._id}
@@ -246,7 +269,7 @@ export default function Events() {
                         src={event.eventBanner}
                         alt=""
                         loading="lazy"
-                        className="h-full w-full object-contain transition-transform duration-700 ease-out group-hover:scale-[1.02]"
+                        className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
                         onError={(error) => {
                           error.currentTarget.style.display = "none";
                         }}
@@ -295,7 +318,7 @@ export default function Events() {
                     </dl>
 
                     <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-accent">
-                      {closed ? "View details" : "Apply now"}
+                      {closed || event.application ? "View details" : "Apply now"}
                       <span className="transition-transform duration-300 group-hover:translate-x-1">
                         →
                       </span>

@@ -24,7 +24,7 @@ export default function AuthShell({ eyebrow, title, description, children, foote
 
         <div className="relative">
           <Link to="/login" className="flex items-baseline gap-2">
-            <span className="display text-xl text-white">Recruit</span>
+            <span className="display text-xl text-white">Discovr</span>
             <span className="eyebrow text-white/55">Club</span>
           </Link>
         </div>

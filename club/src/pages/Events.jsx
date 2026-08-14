@@ -56,8 +56,8 @@ export default function Events() {
     <Page>
       <PageHeader
         eyebrow="Pipelines"
-        title="Recruitment events"
-        description="Draft, publish, close, and review each recruitment pipeline you run."
+        title="Events"
+        description="Draft, publish, close, and review every opportunity your club runs."
         actions={<Button to="/addEvent" variant="accent">Create event</Button>}
       />
 
@@ -66,7 +66,7 @@ export default function Events() {
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 3 }).map((_, index) => (
               <div key={index} className="card overflow-hidden">
-                <Skeleton className="aspect-[16/6] w-full rounded-none" />
+                <Skeleton className="aspect-video w-full rounded-none" />
                 <div className="p-5">
                   <Skeleton className="h-5 w-2/3" />
                   <Skeleton className="mt-3 h-3 w-full" />
@@ -87,13 +87,13 @@ export default function Events() {
               const deadline = eventDeadline(event);
               return (
                 <article key={event._id} className="card flex flex-col overflow-hidden">
-                  <div className="relative aspect-[16/6] overflow-hidden bg-paper-2">
+                  <div className="relative aspect-video overflow-hidden bg-paper-2">
                     {event.eventBanner ? (
                       <img
                         src={event.eventBanner}
                         alt=""
                         loading="lazy"
-                        className="h-full w-full object-contain"
+                        className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.02]"
                         onError={(error) => {
                           error.currentTarget.style.display = "none";
                         }}
@@ -137,6 +137,7 @@ export default function Events() {
                           </option>
                         ))}
                       </Select>
+                      <span className="hint block">Archive hides a finished event from active workspaces while preserving its applications, rounds, and audit history.</span>
                     </label>
 
                     <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line pt-4 text-sm font-semibold">

@@ -49,9 +49,9 @@ export default function AdminLayout({ children }) {
       <header className={`app-header ${lifted ? "is-lifted" : ""}`}>
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5 sm:px-6">
           <NavLink to="/" className="group mr-auto flex items-center gap-3">
-            <span className="brand-mark">R</span>
+            <span className="brand-mark">D</span>
             <span>
-              <span className="brand-name block text-sm font-semibold leading-tight">Recruit IITR</span>
+              <span className="brand-name block text-sm font-semibold leading-tight">Discovr</span>
               <span className="eyebrow brand-meta mt-0.5 block">Control room</span>
             </span>
           </NavLink>
@@ -73,8 +73,7 @@ export default function AdminLayout({ children }) {
 
       <footer className="app-footer mt-24 border-t">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-8 text-xs text-ink-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <p>Recruit IITR · Administration console</p>
-          <p>All times shown in IST.</p>
+          <p>Discovr · Administration console</p>
         </div>
       </footer>
     </div>

@@ -32,6 +32,14 @@ const sessionSchema = new mongoose.Schema({
     type: String,
     maxlength: 300,
   },
+  sessionThumbnail: {
+    type: String,
+    default: "",
+  },
+  sessionThumbnailPublicId: {
+    type: String,
+    default: "",
+  },
   duration: {
     type: String,
     maxlength: 4,
@@ -55,6 +63,11 @@ const sessionSchema = new mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now,
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+    index: true,
   },
 });
 

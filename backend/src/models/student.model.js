@@ -59,6 +59,14 @@ const studentSchema = new mongoose.Schema({
     unique: true,
     maxlength: 30,
   },
+  profilePicture: {
+    type: String,
+    default: "",
+  },
+  profilePicturePublicId: {
+    type: String,
+    default: "",
+  },
   enrollmentNumber: {
     type: String,
     required: true,

@@ -72,7 +72,9 @@ const registerationEventSchema = new mongoose.Schema({
 
 });
 
-registerationEventSchema.index({ eventId: 1, studentId: 1 }, { unique: true });
+// A student may have multiple historical attempts after withdrawing. Active
+// membership uniqueness is enforced by EventMembership instead.
+registerationEventSchema.index({ eventId: 1, studentId: 1, registeredAt: -1 });
 registerationEventSchema.pre('save', function(next) {
     this.updatedAt = new Date();
     next();

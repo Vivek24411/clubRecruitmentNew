@@ -596,7 +596,7 @@ export default function Profile() {
 
           <aside className="space-y-6 lg:sticky lg:top-24 lg:h-fit">
             <Card className="p-6">
-              {clubProfile?.clubLogo ? <img src={clubProfile.clubLogo} alt={`${clubProfile.name} logo`} className="h-16 w-16 rounded-md border border-line bg-surface object-contain p-1" /> : <Monogram name={clubProfile?.name || "Club"} size="lg" />}
+              {clubProfile?.clubLogo ? <img src={clubProfile.clubLogo} alt={`${clubProfile.name} logo`} className="h-28 w-28 rounded-lg border border-line bg-surface object-contain p-2 shadow-sm" /> : <Monogram name={clubProfile?.name || "Club"} size="lg" />}
               <h2 className="display mt-5 text-xl leading-snug">{clubProfile?.name}</h2>
               <dl className="mt-6 space-y-4 border-t border-line pt-5">
                 <Meta label="Username" value={clubProfile?.userName} />

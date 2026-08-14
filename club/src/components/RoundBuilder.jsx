@@ -1,8 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
-import { Button, Field, Input, Select, Textarea } from "./ui";
+import { Button, DateTimeInput, Field, Input, Select, Textarea } from "./ui";
 
 export const ROUND_TYPES = [
-  ["test", "Common test"],
+  ["test", "Common test · individual results"],
   ["submission", "Submission"],
   ["interview", "Interview"],
   ["group_discussion", "Group discussion"],
@@ -18,7 +18,7 @@ const emptyRound = (order) => ({
   customType: "",
   description: "",
   instructions: "",
-  evaluationScope: "application",
+  evaluationScope: "participant",
   interviewMode: null,
   scheduleMode: "common",
   startsAt: "",
@@ -64,7 +64,11 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
       type,
       submissionEnabled,
       interviewMode,
-      evaluationScope: type === "interview" && interviewMode === "individual" ? "participant" : "application",
+      evaluationScope: !teamEvent || type === "test"
+        ? "participant"
+        : type === "interview" && interviewMode === "individual"
+          ? "participant"
+          : round.evaluationScope || "application",
       scheduleMode: type === "interview" ? "slots" : round.scheduleMode,
     });
   };
@@ -134,6 +138,21 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
         </Field>
       )}
 
+      {round.type !== "interview" && teamEvent && round.type !== "test" && (
+        <Field label="Evaluate this round" id={`evaluation-scope-${index}`} className="mt-5 max-w-sm">
+          <Select id={`evaluation-scope-${index}`} value={round.evaluationScope || "application"} onChange={(event) => set("evaluationScope", event.target.value)}>
+            <option value="application">As one team/application</option>
+            <option value="participant">Each student individually</option>
+          </Select>
+        </Field>
+      )}
+
+      {(round.type === "test" || !teamEvent) && (
+        <p className="mt-5 rounded-sm border-l-2 border-info bg-info-tint/40 px-4 py-3 text-sm text-ink-2">
+          Results for this round are recorded separately for each student.
+        </p>
+      )}
+
       {round.type !== "interview" && (
         <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Schedule" id={`schedule-mode-${index}`}>
@@ -146,10 +165,10 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
           {round.scheduleMode !== "none" && (
             <>
               <Field label="Starts" id={`starts-${index}`}>
-                <Input id={`starts-${index}`} type="datetime-local" value={round.startsAt || ""} onChange={(event) => set("startsAt", event.target.value)} />
+                <DateTimeInput id={`starts-${index}`} value={round.startsAt || ""} onChange={(value) => set("startsAt", value)} />
               </Field>
               <Field label="Ends" id={`ends-${index}`}>
-                <Input id={`ends-${index}`} type="datetime-local" value={round.endsAt || ""} onChange={(event) => set("endsAt", event.target.value)} />
+                <DateTimeInput id={`ends-${index}`} value={round.endsAt || ""} onChange={(value) => set("endsAt", value)} />
               </Field>
             </>
           )}
@@ -188,14 +207,14 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
           </div>
           <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Opens" id={`submission-open-${index}`}>
-              <Input id={`submission-open-${index}`} type="datetime-local" value={round.submissionOpensAt || ""} onChange={(event) => set("submissionOpensAt", event.target.value)} />
+              <DateTimeInput id={`submission-open-${index}`} value={round.submissionOpensAt || ""} onChange={(value) => set("submissionOpensAt", value)} />
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button type="button" variant="ghost" size="sm" disabled={!round.startsAt} onClick={() => set("submissionOpensAt", round.startsAt)}>Use round start</Button>
                 <Button type="button" variant="ghost" size="sm" disabled={!round.endsAt} onClick={() => set("submissionOpensAt", round.endsAt)}>Use round end</Button>
               </div>
             </Field>
             <Field label="Deadline" id={`submission-deadline-${index}`} required>
-              <Input id={`submission-deadline-${index}`} type="datetime-local" value={round.submissionDeadlineAt || ""} onChange={(event) => set("submissionDeadlineAt", event.target.value)} required />
+              <DateTimeInput id={`submission-deadline-${index}`} value={round.submissionDeadlineAt || ""} onChange={(value) => set("submissionDeadlineAt", value)} required quickTimes={["17:00", "20:00", "23:00", "23:59"]} />
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button type="button" variant="ghost" size="sm" disabled={!round.startsAt} onClick={() => set("submissionDeadlineAt", round.startsAt)}>Use round start</Button>
                 <Button type="button" variant="ghost" size="sm" disabled={!round.endsAt} onClick={() => set("submissionDeadlineAt", round.endsAt)}>Use round end</Button>

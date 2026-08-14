@@ -62,6 +62,8 @@ export default function Profile() {
     confirmPassword: "",
   });
   const [saving, setSaving] = useState(false);
+  const [profilePicture, setProfilePicture] = useState(null);
+  const [preview, setPreview] = useState("");
 
   useEffect(() => {
     if (profile)
@@ -79,9 +81,16 @@ export default function Profile() {
     event.preventDefault();
     setSaving(true);
     try {
-      const { data } = await axios.patch(`${import.meta.env.VITE_BASE_URI}/student/profile`, form);
+      const payload = new FormData();
+      payload.append("name", form.name);
+      payload.append("phoneNumber", form.phoneNumber);
+      payload.append("notificationPreferencesJSON", JSON.stringify(form.notificationPreferences));
+      if (profilePicture) payload.append("profilePicture", profilePicture);
+      const { data } = await axios.patch(`${import.meta.env.VITE_BASE_URI}/student/profile`, payload);
       if (!data.success) throw new Error(data.msg);
       setProfile(data.student);
+      setProfilePicture(null);
+      setPreview("");
       toast.success(data.msg);
     } catch (error) {
       toast.error(error.response?.data?.msg || error.message || "Could not save profile");
@@ -129,7 +138,7 @@ export default function Profile() {
         {/* Identity card */}
         <aside className="lg:sticky lg:top-24 lg:h-fit">
           <Card className="reveal p-6">
-            <Monogram name={profile?.name || "Student"} size="lg" />
+            {preview || profile?.profilePicture ? <img src={preview || profile.profilePicture} alt={`${profile?.name || "Student"} profile`} className="h-24 w-24 rounded-full border border-line bg-surface object-cover shadow-sm" /> : <Monogram name={profile?.name || "Student"} size="lg" />}
             <h2 className="display mt-5 text-xl leading-snug">{profile?.name}</h2>
             <p className="mt-1.5 break-all text-sm text-ink-3">{profile?.email}</p>
             <dl className="mt-6 space-y-4 border-t border-line pt-5">
@@ -137,6 +146,7 @@ export default function Profile() {
               <Meta label="Branch" value={profile?.branch} />
               <Meta label="Year" value={profile?.year} />
             </dl>
+            <Field id="profilePicture" label="Profile picture" hint="Square JPG, PNG, or WebP. 512 × 512 px works best." className="mt-6"><input id="profilePicture" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files[0] || null; setProfilePicture(file); setPreview(file ? URL.createObjectURL(file) : ""); }} /></Field>
           </Card>
         </aside>
 

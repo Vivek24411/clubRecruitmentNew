@@ -84,12 +84,13 @@ export default function Home() {
   const featuredClubs = useMemo(
     () => [
       ...new Map(
-        sortedEvents
+        openEvents
+          .filter((event) => event.eventType === "recruitment")
           .filter((event) => event.clubId?.name)
           .map((event) => [event.clubId._id || event.clubId.name, event.clubId]),
       ).values(),
     ],
-    [sortedEvents],
+    [openEvents],
   );
 
   const now = new Date();
@@ -108,23 +109,14 @@ export default function Home() {
       {/* Hero                                                               */}
       {/* ----------------------------------------------------------------- */}
       <section className="reveal">
-        <div className="flex items-center gap-3">
-          <span className="eyebrow eyebrow-accent inline-flex items-center gap-2">
-            {registrationsOpen && <span className="dot-live" aria-hidden="true" />}
-            {cycleName} · {registrationsOpen ? "open" : "paused"}
-          </span>
-          <hr className="rule-accent animate-draw flex-none" style={{ animationDelay: "200ms" }} />
-        </div>
-
-        <div className="mt-6 grid gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
+        <div className="grid gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
             <h1 className="display max-w-3xl text-4xl sm:text-5xl lg:text-6xl">
               Find your place in IITR&rsquo;s student community.
             </h1>
             <p className="mt-5 max-w-xl text-base leading-relaxed text-ink-2">
-              {firstName ? `Welcome back, ${firstName}. ` : ""}
-              Discover clubs, apply with a team, track every selection round, and reserve seats at
-              information sessions.
+              {firstName && <strong className="font-bold text-ink">Welcome back, {firstName}. </strong>}
+              Discover clubs, apply with a team, track every selection round, and reserve seats at information sessions.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Button to="/events" variant="primary" size="lg">
@@ -182,25 +174,33 @@ export default function Home() {
           <div className="mt-5">
             {loading ? (
               <SkeletonList rows={3} />
-            ) : sortedEvents.length === 0 ? (
+            ) : openEvents.length === 0 ? (
               <EmptyState
                 title="No open events"
                 description="Nothing is accepting applications right now. Check back when the next cycle opens."
               />
             ) : (
               <div className="stagger space-y-3">
-                {sortedEvents.slice(0, 4).map((event) => (
-                  <CardLink key={event._id} to={`/event/${event._id}`} className="p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
+                {openEvents.slice(0, 4).map((event) => (
+                  <CardLink key={event._id} to={`/event/${event._id}`} className="group overflow-hidden p-0">
+                    <div className="grid min-w-0 sm:grid-cols-[13rem_minmax(0,1fr)]">
+                      <div className="min-w-0 bg-paper-2">
+                        <div className="relative aspect-video w-full overflow-hidden">
+                        {event.eventBanner ? <img src={event.eventBanner} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" /> : <div className="grid h-full place-items-center"><Monogram name={event.clubId?.name || event.title} size="sm" /></div>}
+                        </div>
+                      </div>
+                      <div className="min-w-0 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
                         <p className="eyebrow eyebrow-accent">{event.clubId?.name}</p>
                         <h3 className="display mt-1.5 text-lg leading-snug">{event.title}</h3>
+                          </div>
+                          <DeadlinePill deadline={eventDeadline(event)} />
+                        </div>
+                        <p className="mt-3 text-sm text-ink-3">Closes {formatDateTime(eventDeadline(event))}</p>
+                        <p className="mt-2 text-xs font-semibold text-accent">{event.hasApplied ? "View details" : "Apply now"} →</p>
                       </div>
-                      <DeadlinePill deadline={eventDeadline(event)} />
                     </div>
-                    <p className="mt-3 text-sm text-ink-3">
-                      Closes {formatDateTime(eventDeadline(event))}
-                    </p>
                   </CardLink>
                 ))}
               </div>
@@ -234,10 +234,11 @@ export default function Home() {
                     <CardLink
                       key={session._id}
                       to={`/session/${session._id}`}
-                      className="flex gap-4 p-5"
+                      className="group grid min-w-0 overflow-hidden p-0 sm:grid-cols-[13rem_minmax(0,1fr)]"
                     >
-                      {/* Date block — the calendar-tear detail. */}
-                      <div className="flex h-12 w-12 flex-none flex-col items-center justify-center rounded-sm border border-line bg-paper-2">
+                      <div className="relative aspect-video min-w-0 overflow-hidden bg-paper-2">
+                        {session.sessionThumbnail ? <img src={session.sessionThumbnail} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" /> : null}
+                        <div className={`${session.sessionThumbnail ? "absolute bottom-2 left-2 bg-surface/90 shadow-sm" : "grid h-full place-items-center"} rounded-sm border border-line px-2.5 py-2 text-center backdrop-blur`}>
                         <span className="display tabular text-base leading-none">
                           {startsAt?.toLocaleDateString("en-IN", {
                             day: "2-digit",
@@ -250,8 +251,9 @@ export default function Home() {
                             timeZone: "Asia/Kolkata",
                           })}
                         </span>
+                        </div>
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 p-4">
                         <p className="eyebrow eyebrow-accent">{session.clubId?.name}</p>
                         <h3 className="display mt-1 text-base leading-snug">{session.title}</h3>
                         <p className="mt-1.5 text-sm text-ink-3">
@@ -284,15 +286,15 @@ export default function Home() {
               All clubs
             </Button>
           </div>
-          <div className="mt-7 flex flex-wrap gap-3">
+          <div className="stagger mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {featuredClubs.slice(0, 8).map((club) => (
               <Link
                 key={club._id || club.name}
                 to={club._id ? `/club/${club._id}` : "/clubs"}
-                className="card card-interactive flex items-center gap-3 px-4 py-3"
+                className="card card-interactive group flex min-h-44 flex-col items-center justify-center p-5 text-center"
               >
-                <Monogram name={club.name} size="sm" />
-                <span className="text-sm font-medium">{club.name}</span>
+                {club.clubLogo ? <img src={club.clubLogo} alt="" className="h-20 w-20 rounded-lg border border-line bg-surface object-contain p-1.5 transition-transform duration-500 group-hover:scale-105" /> : <Monogram name={club.name} size="lg" />}
+                <span className="display mt-4 text-base">{club.name}</span>
               </Link>
             ))}
           </div>

@@ -22,6 +22,20 @@ const STATUS_TONE = {
   cancelled: "bad",
 };
 
+function eligibilitySummary(event) {
+  const parts = [];
+  if (event.eligibilityYears?.length) {
+    const labels = ["", "First", "Second", "Third", "Fourth", "Fifth"];
+    parts.push(`${event.eligibilityYears.map((year) => labels[year]).join(", ")} year`);
+  }
+  if (event.allowPassedOut) parts.push("Passed-out students");
+  if (event.eligibilityBranches?.length) {
+    parts.push(`${event.eligibilityBranches.length} selected branch${event.eligibilityBranches.length === 1 ? "" : "es"}`);
+  }
+  if (event.eligibility) parts.push(event.eligibility);
+  return parts.length ? parts.join(" · ") : "Open to all current students";
+}
+
 export default function Event() {
   const { eventId } = useParams();
   const [event, setEvent] = useState(null);
@@ -84,7 +98,7 @@ export default function Event() {
       <header className="reveal mt-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <span className="eyebrow eyebrow-accent">Recruitment event</span>
+            <span className="eyebrow eyebrow-accent capitalize">{event.eventType || "Event"} event</span>
             <h1 className="display mt-2 text-3xl sm:text-4xl">{event.title}</h1>
             {event.shortDescription && (
               <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-2">
@@ -112,6 +126,8 @@ export default function Event() {
       {/* ------------------------------------------------------------------ */}
       {/* Body                                                                */}
       {/* ------------------------------------------------------------------ */}
+      {event.eventBanner && <img src={event.eventBanner} alt="" className="mt-9 aspect-video w-full rounded-md border border-line bg-paper-2 object-contain shadow-sm" />}
+
       <div className="mt-10 grid gap-8 lg:grid-cols-3">
         <div className="space-y-8 lg:col-span-2">
           <section className="reveal" style={{ "--d": "100ms" }}>
@@ -119,7 +135,7 @@ export default function Event() {
             <MetaGrid cols={2} className="mt-6">
               <Meta
                 label="Deadline"
-                value={deadline ? formatDateTime(deadline, { dateOnly: true }) : "Not set"}
+                value={deadline ? formatDateTime(deadline) : "Not set"}
               />
               <Meta label="Max participants" value={event.maxParticipants} />
               <Meta label="Rounds" value={event.numberOfRounds} />
@@ -135,7 +151,9 @@ export default function Event() {
                   </span>
                 }
               />
-              <Meta label="Eligibility" value={event.eligibility || "Open to all"} />
+              <Meta label="Eligibility" value={eligibilitySummary(event)} />
+              <Meta label="Eligible years" value={event.eligibilityYears?.length ? event.eligibilityYears.map((year) => `${year}${year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th"}`).join(", ") : "All current years"} />
+              <Meta label="Eligible branches" value={event.eligibilityBranches?.length ? event.eligibilityBranches.join(", ") : "All branches"} />
             </MetaGrid>
           </section>
 
