@@ -72,15 +72,14 @@ export default function StudentLayout({ children }) {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5 sm:px-6">
           <NavLink
             to="/"
-            className="group mr-auto flex items-center gap-2.5"
+            className="group mr-auto"
             aria-label="Discovr home"
           >
             <img
-              src="/discovr-o.png"
-              alt=""
-              className="block h-8 w-8 flex-none object-contain transition-transform duration-300 group-hover:scale-105"
+              src="/discovrlogo.png"
+              alt="Discovr"
+              className="block h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-[1.02]"
             />
-            <span className="brand-name text-base font-semibold leading-none">Discovr</span>
           </NavLink>
 
           <SlidingNav

@@ -23,12 +23,9 @@ export default function AuthShell({ eyebrow, title, description, children, foote
         />
 
         <div className="relative">
-          <Link to="/login" className="inline-block" aria-label="Discovr login">
-            <img
-              src="/discovrlogo.png"
-              alt="Discovr"
-              className="block h-auto w-48 max-w-full"
-            />
+          <Link to="/login" className="flex items-baseline gap-2">
+            <span className="display text-xl text-white">Discovr</span>
+            <span className="eyebrow text-white/55">IITR</span>
           </Link>
           <p className="hero-kicker mt-6">Student portal</p>
         </div>
