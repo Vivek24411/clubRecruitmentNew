@@ -19,10 +19,10 @@
   --color-line: #dcd8cd;
   --color-line-2: #c9c3b5;
 
-  /* --- accent (overridden per portal) ---------------------------------- */
-  --color-accent: #1f6f6b;
-  --color-accent-deep: #14544f;
-  --color-accent-tint: #e2efee;
+  /* --- E-Cell blue: shared brand accent -------------------------------- */
+  --color-accent: #0878be;
+  --color-accent-deep: #075d94;
+  --color-accent-tint: #e5f3fb;
 
   /* --- semantic, kept earthy so it sits inside the palette -------------- */
   --color-ok: #2f6b4f;
@@ -866,17 +866,26 @@
   --toastify-color-info: var(--color-info);
 }
 .Toastify__toast {
+  background: var(--color-surface);
+  color: var(--color-ink);
   border: 1px solid var(--color-line);
+  border-left-width: 4px;
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-pop);
   font-size: 0.875rem;
   font-weight: 500;
   min-height: 3.25rem;
 }
-.Toastify__toast-theme--colored.Toastify__toast--success { background: var(--color-ok); }
-.Toastify__toast-theme--colored.Toastify__toast--error { background: var(--color-bad); }
-.Toastify__toast-theme--colored.Toastify__toast--warning { background: var(--color-warn); }
-.Toastify__toast-theme--colored.Toastify__toast--info { background: var(--color-info); }
+.Toastify__toast--success { border-left-color: var(--color-accent); }
+.Toastify__toast--error { border-left-color: var(--color-bad); }
+.Toastify__toast--warning { border-left-color: var(--color-warn); }
+.Toastify__toast--info { border-left-color: var(--color-info); }
+.Toastify__toast--success .Toastify__toast-icon { color: var(--color-accent); }
+.Toastify__toast--error .Toastify__toast-icon { color: var(--color-bad); }
+.Toastify__toast--warning .Toastify__toast-icon { color: var(--color-warn); }
+.Toastify__toast--info .Toastify__toast-icon { color: var(--color-info); }
+.Toastify__close-button { color: var(--color-ink-3); opacity: 0.7; }
+.Toastify__close-button:hover { color: var(--color-ink); opacity: 1; }
 
 /* ==========================================================================
    REDUCED MOTION — honour it completely, not partially

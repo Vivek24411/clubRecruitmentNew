@@ -21,7 +21,7 @@ createRoot(document.getElementById("root")).render(
         closeOnClick
         pauseOnHover
         draggable
-        theme="colored"
+        theme="light"
       />
       <BrowserRouter>
         <App />
