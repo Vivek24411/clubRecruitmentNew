@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import axios from "axios";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { formatDateTime, sessionDate } from "../utils/date";
+import { StudentContextData } from "../context/StudentContext";
 import {
   Badge,
   Button,
@@ -18,6 +19,8 @@ import {
 
 export default function Session() {
   const { sessionId } = useParams();
+  const navigate = useNavigate();
+  const { loggedInStudent } = useContext(StudentContextData);
   const [session, setSession] = useState(null);
   const [rsvp, setRsvp] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -25,21 +28,27 @@ export default function Session() {
 
   const load = useCallback(async () => {
     try {
-      const [sessionResponse, rsvpResponse] = await Promise.all([
-        axios.get(`${import.meta.env.VITE_BASE_URI}/student/getSession`, { params: { sessionId } }),
-        axios.get(`${import.meta.env.VITE_BASE_URI}/student/sessionRsvp`, {
-          params: { sessionId },
-        }),
-      ]);
+      const sessionResponse = await axios.get(
+        `${import.meta.env.VITE_BASE_URI}/student/getSession`,
+        { params: { sessionId } },
+      );
       if (!sessionResponse.data.success) throw new Error(sessionResponse.data.msg);
       setSession(sessionResponse.data.session);
-      setRsvp(rsvpResponse.data.rsvp);
+      if (loggedInStudent) {
+        const rsvpResponse = await axios.get(
+          `${import.meta.env.VITE_BASE_URI}/student/sessionRsvp`,
+          { params: { sessionId } },
+        );
+        setRsvp(rsvpResponse.data.rsvp);
+      } else {
+        setRsvp(null);
+      }
     } catch (error) {
       toast.error(error.response?.data?.msg || error.message || "Could not load this session");
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [loggedInStudent, sessionId]);
 
   useEffect(() => {
     load();
@@ -61,6 +70,11 @@ export default function Session() {
     } finally {
       setWorking(false);
     }
+  };
+
+  const rememberSessionAndNavigate = (destination) => {
+    sessionStorage.setItem("studentReturnTo", `/session/${sessionId}`);
+    navigate(destination);
   };
 
   if (loading) {
@@ -170,9 +184,34 @@ export default function Session() {
 
         <aside className="lg:sticky lg:top-24 lg:h-fit">
           <Card className="reveal p-6" style={{ "--d": "150ms" }}>
-            <h2 className="display text-lg">Your RSVP</h2>
+            <h2 className="display text-lg">{loggedInStudent ? "Your RSVP" : "Reserve a place"}</h2>
 
-            {rsvp && (
+            {!loggedInStudent && (
+              <>
+                <p className="mt-3.5 text-sm leading-relaxed text-ink-3">
+                  {isPast
+                    ? "This session has already started. Sign in to view any RSVP linked to your account."
+                    : "Sign in with a student account to reserve a seat and receive session updates."}
+                </p>
+                <Button
+                  block
+                  size="lg"
+                  className="mt-6"
+                  onClick={() => rememberSessionAndNavigate("/login")}
+                >
+                  {isPast ? "Sign in" : "Sign in to reserve"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => rememberSessionAndNavigate("/register")}
+                  className="link link-accent mt-4 block w-full text-center text-sm font-semibold"
+                >
+                  Create a student account
+                </button>
+              </>
+            )}
+
+            {loggedInStudent && rsvp && (
               <div className="mt-3">
                 <Badge
                   tone={
@@ -189,15 +228,15 @@ export default function Session() {
               </div>
             )}
 
-            <p className="mt-3.5 text-sm leading-relaxed text-ink-3">
+            {loggedInStudent && <p className="mt-3.5 text-sm leading-relaxed text-ink-3">
               {isPast
                 ? "This session has already started."
                 : activeRsvp
                   ? "We'll keep your place and post any updates here."
                   : "Reserve a place. If the room is full you'll join the waitlist automatically."}
-            </p>
+            </p>}
 
-            {!isPast &&
+            {loggedInStudent && !isPast &&
               (activeRsvp ? (
                 <Button
                   variant="secondary"
@@ -223,7 +262,7 @@ export default function Session() {
                 </Button>
               ))}
 
-            {startsAt && !isPast && (
+            {loggedInStudent && startsAt && !isPast && (
               <p className="mt-3 text-center text-xs text-ink-3">{formatDateTime(startsAt)}</p>
             )}
           </Card>

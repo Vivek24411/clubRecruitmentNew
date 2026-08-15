@@ -588,8 +588,10 @@ module.exports.getAllEvents = async (req, res) => {
   try {
     const events = await eventModel.find({ status: { $in: ["published", "closed"] } }).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS });
     const eventIds = events.map((event) => event._id);
-    const memberships = await eventMembershipModel.find({ studentId: req.student._id, eventId: { $in: eventIds } })
-      .populate("registrationId", "overallStatus");
+    const memberships = req.student
+      ? await eventMembershipModel.find({ studentId: req.student._id, eventId: { $in: eventIds } })
+        .populate("registrationId", "overallStatus")
+      : [];
     const applications = new Map(memberships.map((membership) => [String(membership.eventId), {
       registrationId: membership.registrationId?._id || membership.registrationId,
       role: membership.role,
@@ -627,8 +629,17 @@ module.exports.getEvent = async (req, res) => {
       return res.json({ success: false, msg: "Event not found" });
     }
     await ensureEventRounds(event);
-    const eligibility = eventEligibility(event, req.student, settings);
-    return res.json({ success: true, event, registrationOpen: platformRegistrationIsOpen(settings), eligibility });
+    const configuredBranches = normalizedAcademicConfiguration(settings).branches.map((branch) => branch.name);
+    const selectedBranches = new Set(event.eligibilityBranches || []);
+    const openToAllBranches = selectedBranches.size === 0
+      || (configuredBranches.length > 0 && configuredBranches.every((branch) => selectedBranches.has(branch)));
+    const eligibility = req.student ? eventEligibility(event, req.student, settings) : null;
+    return res.json({
+      success: true,
+      event: { ...event.toObject(), openToAllBranches },
+      registrationOpen: platformRegistrationIsOpen(settings),
+      eligibility,
+    });
   } catch (error) {
    
     return res.status(500).json({ success: false, msg: "Server error" });
@@ -680,10 +691,12 @@ module.exports.getDashBoard = async (req, res, next) => {
     platformSettingsModel.findOne({ key: "global" }).select("registrationEnabled maintenanceMessage recruitmentCycle"),
   ]);
   const openEvents = events.filter((event) => event.clubId && registrationIsOpen(event));
-  const memberships = await eventMembershipModel.find({
-    studentId: req.student._id,
-    eventId: { $in: openEvents.map((event) => event._id) },
-  });
+  const memberships = req.student
+    ? await eventMembershipModel.find({
+      studentId: req.student._id,
+      eventId: { $in: openEvents.map((event) => event._id) },
+    })
+    : [];
   const applicationEventIds = new Set(memberships.map((membership) => String(membership.eventId)));
   return res.json({
     success: true,

@@ -138,7 +138,9 @@ export default function Register() {
             toast.success("Registration successful");
             setLoggedInStudent(true);
             await refreshProfile();
-            navigate("/", { replace: true });
+            const returnTo = sessionStorage.getItem("studentReturnTo");
+            sessionStorage.removeItem("studentReturnTo");
+            navigate(returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/", { replace: true });
           } else {
             toast.error(registerResponse.data.msg || "Registration failed");
             setRegistering(false);

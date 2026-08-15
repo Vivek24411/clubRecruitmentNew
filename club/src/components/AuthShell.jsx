@@ -11,7 +11,7 @@ export default function AuthShell({ eyebrow, title, description, children, foote
       {/* ---------------------------------------------------------------- */}
       {/* Standing panel                                                    */}
       {/* ---------------------------------------------------------------- */}
-      <aside className="relative flex flex-col justify-between overflow-hidden bg-ink px-6 py-8 text-white sm:px-10 lg:py-12">
+      <aside className="auth-panel relative flex flex-col justify-between overflow-hidden bg-ink px-6 py-8 text-white sm:px-10 lg:py-12">
         {/* Two very soft radial washes so the panel is not a flat block. */}
         <div
           aria-hidden="true"
@@ -27,6 +27,7 @@ export default function AuthShell({ eyebrow, title, description, children, foote
             <span className="display text-xl text-white">Discovr</span>
             <span className="eyebrow text-white/55">Club</span>
           </Link>
+          <p className="hero-kicker mt-6">Club portal</p>
         </div>
 
         <div className="relative mt-10 hidden lg:block">
@@ -54,8 +55,8 @@ export default function AuthShell({ eyebrow, title, description, children, foote
       {/* ---------------------------------------------------------------- */}
       {/* Form                                                              */}
       {/* ---------------------------------------------------------------- */}
-      <main className="flex items-center justify-center px-5 py-12 sm:px-8">
-        <div className="w-full max-w-md">
+      <main className="auth-form flex items-center justify-center px-5 py-12 sm:px-8">
+        <div className="auth-form-card w-full max-w-md">
           <header className="reveal">
             {eyebrow && <p className="eyebrow eyebrow-accent">{eyebrow}</p>}
             <h1 className="display mt-2.5 text-3xl sm:text-4xl">{title}</h1>

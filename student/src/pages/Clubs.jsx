@@ -51,6 +51,13 @@ function ContactIcon({ type }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">{paths[type]}</svg>;
 }
 
+function clubSummary(club) {
+  const summary = String(club.shortDescription || club.longDescription || "").trim();
+  if (!summary) return "Explore this club’s work, recruitment events, sessions, and contact details.";
+  if (summary.length <= 190) return summary;
+  return `${summary.slice(0, 187).trimEnd()}…`;
+}
+
 export default function Clubs() {
   const [clubs, setClubs] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -80,7 +87,8 @@ export default function Clubs() {
       (club) =>
         (category === "all" || club.category === category) &&
         (!query || club.name?.toLowerCase().includes(query) ||
-        club.shortDescription?.toLowerCase().includes(query)),
+        club.shortDescription?.toLowerCase().includes(query) ||
+        club.longDescription?.toLowerCase().includes(query)),
     );
   }, [category, clubs, searchTerm]);
 
@@ -144,21 +152,22 @@ export default function Clubs() {
               <span className="tabular font-semibold text-ink">{filteredClubs.length}</span>{" "}
               {filteredClubs.length === 1 ? "club" : "clubs"}
             </p>
-            <div className="stagger grid items-stretch gap-5 md:grid-cols-2 xl:grid-cols-3">
+            <div className="stagger grid auto-rows-fr items-stretch gap-5 md:grid-cols-2 xl:grid-cols-3">
               {filteredClubs.map((club) => (
-                <article key={club._id} className="card card-interactive group flex h-full flex-col overflow-hidden">
-                  <div className="flex items-start justify-between gap-4 border-b border-line bg-paper-2/60 p-5">
+                <article key={club._id} className="club-card card card-interactive group flex h-full flex-col overflow-hidden">
+                  <div className="flex min-h-32 items-start justify-between gap-4 border-b border-line bg-paper-2/60 p-5">
                     <ClubMark club={club} />
                     <span className="badge badge-neutral capitalize">{club.category || "Club"}</span>
                   </div>
                   <div className="flex flex-1 flex-col p-5">
-                    <Link to={`/club/${club._id}`}>
-                      <h2 className="display text-xl leading-snug transition-colors group-hover:text-accent">{club.name}</h2>
+                    <Link to={`/club/${club._id}`} className="block min-h-[3.4rem]">
+                      <h2 className="display line-clamp-2 text-xl leading-snug transition-colors group-hover:text-accent">{club.name}</h2>
                     </Link>
-                    <p className="mt-2.5 line-clamp-3 min-h-[3.9rem] text-sm leading-relaxed text-ink-3">
-                      {club.shortDescription || "View this club’s profile, activities, events, and contact information."}
+                    <p className="mt-2.5 line-clamp-3 min-h-[4.05rem] text-sm leading-relaxed text-ink-3">
+                      {clubSummary(club)}
                     </p>
-                    <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-line pt-4">
+                    <div className="min-h-5 flex-1" aria-hidden="true" />
+                    <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
                       {club.website && <a href={club.website} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm !px-2.5" aria-label={`${club.name} website`} title="Website"><ContactIcon type="website" /></a>}
                       {club.instagram && <a href={club.instagram} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm !px-2.5" aria-label={`${club.name} Instagram`} title="Instagram"><ContactIcon type="instagram" /></a>}
                       {club.linkedin && <a href={club.linkedin} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm !px-2.5" aria-label={`${club.name} LinkedIn`} title="LinkedIn"><ContactIcon type="linkedin" /></a>}

@@ -18,23 +18,24 @@ import ClubSessions from './pages/ClubSessions'
 import ForgotPassword from './pages/ForgotPassword'
 import MyApplications from './pages/MyApplications'
 import Notifications from './pages/Notifications'
+import StudentLayout from './components/StudentLayout'
 
 const App = () => {
   return (
     <>
     <Routes>
-      <Route path='/' element={<ProtectedWrapper><Home/></ProtectedWrapper>}/>
+      <Route path='/' element={<StudentLayout><Home/></StudentLayout>}/>
       <Route path='/login' element={<Login/>}/>
       <Route path='/register' element={<Register/>}/>
       <Route path='/profile' element={<ProtectedWrapper><Profile/></ProtectedWrapper>}/>
-      <Route path='/session/:sessionId' element={<ProtectedWrapper><Session/></ProtectedWrapper>}/>
-      <Route path='/sessions' element={<ProtectedWrapper><Sessions/></ProtectedWrapper>}/>
-      <Route path='/event/:eventId' element={<ProtectedWrapper><Event/></ProtectedWrapper>}/>
-      <Route path='/events' element={<ProtectedWrapper><Events/></ProtectedWrapper>}/>
-      <Route path='/clubs' element={<ProtectedWrapper><Clubs/></ProtectedWrapper>}/>
-      <Route path='/club/:clubId' element={<ProtectedWrapper><Club/></ProtectedWrapper>}/>
-      <Route path='/events/club/:clubId' element={<ProtectedWrapper><ClubEvents/></ProtectedWrapper>}/>
-      <Route path='/sessions/club/:clubId' element={<ProtectedWrapper><ClubSessions/></ProtectedWrapper>}/>
+      <Route path='/session/:sessionId' element={<StudentLayout><Session/></StudentLayout>}/>
+      <Route path='/sessions' element={<StudentLayout><Sessions/></StudentLayout>}/>
+      <Route path='/event/:eventId' element={<StudentLayout><Event/></StudentLayout>}/>
+      <Route path='/events' element={<StudentLayout><Events/></StudentLayout>}/>
+      <Route path='/clubs' element={<StudentLayout><Clubs/></StudentLayout>}/>
+      <Route path='/club/:clubId' element={<StudentLayout><Club/></StudentLayout>}/>
+      <Route path='/events/club/:clubId' element={<StudentLayout><ClubEvents/></StudentLayout>}/>
+      <Route path='/sessions/club/:clubId' element={<StudentLayout><ClubSessions/></StudentLayout>}/>
       <Route path='/forgotPassword' element={<ForgotPassword/>}/>
       <Route path='/applications' element={<ProtectedWrapper><MyApplications/></ProtectedWrapper>}/>
       <Route path='/notifications' element={<ProtectedWrapper><Notifications/></ProtectedWrapper>}/>

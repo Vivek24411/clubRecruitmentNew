@@ -53,3 +53,24 @@ module.exports.studentAuth = async (req, res, next) => {
     return unauthorized(res, "Session expired or invalid");
   }
 };
+
+/**
+ * Adds student context to public catalogue requests when a valid session is
+ * present. Missing, expired, or revoked sessions remain anonymous so a stale
+ * browser cookie never prevents somebody from browsing public content.
+ */
+module.exports.optionalStudentAuth = async (req, _res, next) => {
+  const token = getSessionToken(req, "student");
+  if (!token) return next();
+
+  try {
+    const decoded = verifySession(token, "student");
+    const student = await studentModel.findById(decoded.sub).select("+tokenVersion");
+    if (student && student.status !== "suspended" && student.tokenVersion === decoded.ver) {
+      req.student = student;
+    }
+  } catch {
+    // Public reads intentionally continue as an anonymous visitor.
+  }
+  return next();
+};

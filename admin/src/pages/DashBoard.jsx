@@ -77,7 +77,7 @@ export default function DashBoard() {
       {/* ------------------------------------------------------------------ */}
       {/* Masthead                                                            */}
       {/* ------------------------------------------------------------------ */}
-      <header className="reveal">
+      <header className="workspace-hero">
         <div className="flex items-center gap-3">
           <span className="eyebrow eyebrow-accent">Administration</span>
           <hr className="rule-accent animate-draw flex-none" style={{ animationDelay: "200ms" }} />
@@ -107,10 +107,10 @@ export default function DashBoard() {
       {/* Counters                                                            */}
       {/* ------------------------------------------------------------------ */}
       <div className="stagger mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Clubs" value={counts.clubs} tone="accent" hint="Provisioned accounts" />
-        <Stat label="Students" value={counts.students} hint="Registered" />
-        <Stat label="Events" value={counts.events} hint="All listings" />
-        <Stat label="Sessions" value={counts.sessions} hint="All listings" />
+        <Stat index={1} label="Clubs" value={counts.clubs} tone="accent" hint="Provisioned accounts" />
+        <Stat index={2} label="Students" value={counts.students} hint="Registered" />
+        <Stat index={3} label="Events" value={counts.events} hint="All listings" />
+        <Stat index={4} label="Sessions" value={counts.sessions} hint="All listings" />
       </div>
 
       <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm">

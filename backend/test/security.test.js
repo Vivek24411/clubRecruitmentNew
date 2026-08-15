@@ -4,12 +4,14 @@ const assert = require("node:assert/strict");
 process.env.JWT_SECRET = "test-secret-that-is-longer-than-thirty-two-characters";
 
 const { getSessionToken, signSession, verifySession } = require("../src/utils/auth");
-const { checkEmailDomain } = require("../src/services/student.services");
+const { brandedFromEmail, checkEmailDomain } = require("../src/services/student.services");
 const { requireTrustedOrigin } = require("../src/middlewares/security");
 const rateLimit = require("../src/middlewares/rateLimit");
 const otpModel = require("../src/models/otp.model");
 const verificationTokenModel = require("../src/models/verificationToken.model");
 const clubRouter = require("../src/routes/club.routes");
+const studentRouter = require("../src/routes/student.routes");
+const { studentAuth } = require("../src/middlewares/auth.middlewares");
 
 test("session tokens are role-bound and carry the revocation version", () => {
   const token = signSession({ subject: "student-id", role: "student", version: 3 });
@@ -54,6 +56,12 @@ test("college email validation accepts any email on the IITR domain", () => {
   assert.equal(checkEmailDomain("not-an-email-iitr.ac.in"), false);
 });
 
+test("outgoing email always uses the Discovr sender name", () => {
+  assert.equal(brandedFromEmail(), "Discovr <noreply@devx6.live>");
+  assert.equal(brandedFromEmail("noreply@example.com"), "Discovr <noreply@example.com>");
+  assert.equal(brandedFromEmail("Recruit IITR <clubs@example.com>"), "Discovr <clubs@example.com>");
+});
+
 test("mutating requests reject untrusted browser origins", () => {
   const middleware = requireTrustedOrigin(["https://student.example"]);
   const req = { method: "POST", headers: { origin: "https://evil.example" } };
@@ -88,4 +96,29 @@ test("club router exposes the complete password recovery flow", () => {
   assert.ok(routePaths.includes("/password-reset/verify"));
   assert.ok(routePaths.includes("/password-reset/complete"));
   assert.ok(routePaths.includes("/changePassword"));
+});
+
+test("student catalogue reads are public while account data and actions stay protected", () => {
+  const routeUsesStudentAuth = (path, method) => {
+    const layer = studentRouter.stack.find((item) => item.route?.path === path && item.route?.methods?.[method]);
+    assert.ok(layer, `Expected ${method.toUpperCase()} ${path}`);
+    return layer.route.stack.some((item) => item.handle === studentAuth);
+  };
+
+  [
+    "/getDashboard",
+    "/getAllClubs",
+    "/getClub",
+    "/getEvents",
+    "/getEvent",
+    "/getSessions",
+    "/getSession",
+    "/getClubEvents",
+    "/getClubSessions",
+  ].forEach((path) => assert.equal(routeUsesStudentAuth(path, "get"), false, `${path} should be public`));
+
+  ["/getProfile", "/myApplications", "/notifications", "/getEventDetails"]
+    .forEach((path) => assert.equal(routeUsesStudentAuth(path, "get"), true, `${path} should require an account`));
+  assert.equal(routeUsesStudentAuth("/registerEvent", "post"), true);
+  assert.equal(routeUsesStudentAuth("/sessionRsvp", "post"), true);
 });

@@ -30,7 +30,7 @@ export function DeadlinePill({ deadline }) {
 function HeroCount({ value, label }) {
   const shown = useCountUp(value);
   return (
-    <div className="border-l border-line pl-4">
+    <div className="hero-count">
       <p className="display tabular text-3xl" data-numeric="">
         {String(shown).padStart(2, "0")}
       </p>
@@ -40,7 +40,7 @@ function HeroCount({ value, label }) {
 }
 
 export default function Home() {
-  const { profile } = useContext(StudentContextData);
+  const { loggedInStudent, profile } = useContext(StudentContextData);
   const [events, setEvents] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [settings, setSettings] = useState(null);
@@ -108,22 +108,25 @@ export default function Home() {
       {/* ----------------------------------------------------------------- */}
       {/* Hero                                                               */}
       {/* ----------------------------------------------------------------- */}
-      <section className="reveal">
-        <div className="grid gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
+      <section className="home-hero">
+        <div className="relative z-[1] grid gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
-            <h1 className="display max-w-3xl text-4xl sm:text-5xl lg:text-6xl">
+            <p className="hero-kicker">
+              {registrationsOpen ? `${cycleName} · applications open` : "IITR student network"}
+            </p>
+            <h1 className="display mt-6 max-w-3xl text-4xl sm:text-5xl lg:text-6xl">
               Find your place in IITR&rsquo;s student community.
             </h1>
-            <p className="mt-5 max-w-xl text-base leading-relaxed text-ink-2">
-              {firstName && <strong className="font-bold text-ink">Welcome back, {firstName}. </strong>}
+            <p className="hero-copy mt-5 max-w-xl text-base leading-relaxed">
+              {firstName && <strong className="font-bold">Welcome back, {firstName}. </strong>}
               Discover clubs, apply with a team, track every selection round, and reserve seats at information sessions.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Button to="/events" variant="primary" size="lg">
                 Explore open events
               </Button>
-              <Button to="/applications" variant="secondary" size="lg">
-                Track applications
+              <Button to={loggedInStudent ? "/applications" : "/register"} variant="secondary" size="lg">
+                {loggedInStudent ? "Track applications" : "Create account to apply"}
               </Button>
             </div>
           </div>
@@ -137,7 +140,7 @@ export default function Home() {
           )}
         </div>
 
-        <hr className="rule animate-draw mt-10" style={{ animationDelay: "300ms" }} />
+        <hr className="hero-rule rule animate-draw relative z-[1] mt-10" style={{ animationDelay: "300ms" }} />
       </section>
 
       {/* ----------------------------------------------------------------- */}

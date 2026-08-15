@@ -3,6 +3,13 @@ const { Resend } = require('resend');
 const DEFAULT_FROM_EMAIL = 'Discovr <noreply@devx6.live>';
 let resendClient;
 
+function brandedFromEmail(configuredValue) {
+    const configured = String(configuredValue || DEFAULT_FROM_EMAIL).trim();
+    const addressMatch = configured.match(/<\s*([^<>]+)\s*>\s*$/);
+    const address = (addressMatch?.[1] || configured).trim();
+    return `Discovr <${address}>`;
+}
+
 function getResendClient() {
     if (!process.env.RESEND_API_KEY) {
         throw new Error('RESEND_API_KEY is not configured');
@@ -13,7 +20,7 @@ function getResendClient() {
 
 async function sendEmail({ to, subject, text, html }) {
     const { data, error } = await getResendClient().emails.send({
-        from: process.env.RESEND_FROM_EMAIL?.trim() || DEFAULT_FROM_EMAIL,
+        from: brandedFromEmail(process.env.RESEND_FROM_EMAIL),
         to,
         subject,
         text,
@@ -192,3 +199,5 @@ module.exports.checkEmailDomain = (email) => {
     const domain = normalizedEmail.slice(atIndex + 1);
     return domain === 'iitr.ac.in' || domain.endsWith('.iitr.ac.in');
 }
+
+module.exports.brandedFromEmail = brandedFromEmail;

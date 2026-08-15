@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import axios from "axios";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { daysUntil, eventDeadline, formatDateTime } from "../utils/date";
 import EventWorkflow from "../components/EventWorkflow";
+import { StudentContextData } from "../context/StudentContext";
 import {
   Badge,
   Button,
@@ -83,6 +84,8 @@ function StudentAvatar({ student }) {
 
 export default function Event() {
   const { eventId } = useParams();
+  const navigate = useNavigate();
+  const { loggedInStudent } = useContext(StudentContextData);
   const [event, setEvent] = useState(null);
   const [view, setView] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -95,24 +98,30 @@ export default function Event() {
 
   const load = useCallback(async () => {
     try {
-      const [eventResponse, applicationResponse] = await Promise.all([
-        axios.get(`${import.meta.env.VITE_BASE_URI}/student/getEvent`, { params: { eventId } }),
-        axios.get(`${import.meta.env.VITE_BASE_URI}/student/getEventDetails`, {
-          params: { eventId },
-        }),
-      ]);
+      const eventResponse = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getEvent`, {
+        params: { eventId },
+      });
       if (!eventResponse.data.success) throw new Error(eventResponse.data.msg);
       setEvent(eventResponse.data.event);
       setPlatformOpen(eventResponse.data.registrationOpen !== false);
       setEligibility(eventResponse.data.eligibility || { eligible: true, reason: "" });
-      setView(Number(applicationResponse.data.Show));
-      setDetail(applicationResponse.data.detail);
+      if (loggedInStudent) {
+        const applicationResponse = await axios.get(
+          `${import.meta.env.VITE_BASE_URI}/student/getEventDetails`,
+          { params: { eventId } },
+        );
+        setView(Number(applicationResponse.data.Show));
+        setDetail(applicationResponse.data.detail);
+      } else {
+        setView(null);
+        setDetail(null);
+      }
     } catch (error) {
       toast.error(error.response?.data?.msg || error.message || "Could not load event");
     } finally {
       setLoading(false);
     }
-  }, [eventId]);
+  }, [eventId, loggedInStudent]);
 
   useEffect(() => {
     load();
@@ -138,6 +147,11 @@ export default function Event() {
     } finally {
       setWorking(false);
     }
+  };
+
+  const rememberEventAndNavigate = (destination) => {
+    sessionStorage.setItem("studentReturnTo", `/event/${eventId}`);
+    navigate(destination);
   };
 
   if (loading) return <EventSkeleton />;
@@ -294,12 +308,14 @@ export default function Event() {
                 {event.eligibilityYears.map((year) => <Badge key={year}>{["", "First", "Second", "Third", "Fourth", "Fifth"][year]} year</Badge>)}
               </div>
             )}
-            {event.eligibilityBranches?.length > 0 && (
-              <div className="mt-5">
-                <p className="eyebrow">Eligible branches</p>
-                <div className="mt-2 flex flex-wrap gap-2">{event.eligibilityBranches.map((branch) => <Badge key={branch} tone="info">{branch}</Badge>)}</div>
-              </div>
-            )}
+            <div className="mt-5">
+              <p className="eyebrow">Eligible branches</p>
+              {event.openToAllBranches || !event.eligibilityBranches?.length ? (
+                <p className="mt-2 text-sm font-medium text-ink-2">Open to all branches</p>
+              ) : (
+                <div className="mt-2 flex flex-wrap gap-2">{event.eligibilityBranches?.map((branch) => <Badge key={branch} tone="info">{branch}</Badge>)}</div>
+              )}
+            </div>
           </section>
 
           {(event.rounds?.length > 0 || event.roundDetails?.length > 0) && (
@@ -319,8 +335,34 @@ export default function Event() {
         {/* --------------------------------------------------------------- */}
         <aside className="space-y-4 lg:sticky lg:top-24 lg:h-fit">
           <Card className="reveal p-6" style={{ "--d": "160ms" }}>
+            {!loggedInStudent && (
+              <>
+                <h2 className="display text-lg">{open ? "Ready to apply?" : "Applications closed"}</h2>
+                <p className="mt-2.5 text-sm leading-relaxed text-ink-3">
+                  {open
+                    ? "Sign in with your student account to apply, build a team, and track every selection round."
+                    : "You can still explore this event. Sign in to view your existing application, if you have one."}
+                </p>
+                <Button
+                  block
+                  size="lg"
+                  className="mt-6"
+                  onClick={() => rememberEventAndNavigate("/login")}
+                >
+                  {open ? "Sign in to apply" : "Sign in"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => rememberEventAndNavigate("/register")}
+                  className="link link-accent mt-4 block w-full text-center text-sm font-semibold"
+                >
+                  Create a student account
+                </button>
+              </>
+            )}
+
             {/* Not yet applied */}
-            {view === 0 && (
+            {loggedInStudent && view === 0 && (
               <>
                 <h2 className="display text-lg">Apply for this event</h2>
                 <p className="mt-2.5 text-sm leading-relaxed text-ink-3">

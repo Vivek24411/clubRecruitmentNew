@@ -153,7 +153,7 @@ export default function Event() {
               />
               <Meta label="Eligibility" value={eligibilitySummary(event)} />
               <Meta label="Eligible years" value={event.eligibilityYears?.length ? event.eligibilityYears.map((year) => `${year}${year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th"}`).join(", ") : "All current years"} />
-              <Meta label="Eligible branches" value={event.eligibilityBranches?.length ? event.eligibilityBranches.join(", ") : "All branches"} />
+              <Meta label="Eligible branches" value={event.eligibilityBranches?.length ? event.eligibilityBranches.join(", ") : "Open to all branches"} />
             </MetaGrid>
           </section>
 

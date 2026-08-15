@@ -144,10 +144,10 @@ export default function Events() {
       {/* Summary strip */}
       {!isLoading && events.length > 0 && (
         <div className="stagger mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label="Listed" value={counts.total} />
-          <Stat label="Accepting applications" value={counts.open} tone="accent" />
-          <Stat label="Closing within 3 days" value={counts.soon} />
-          <Stat label="Closed" value={counts.closed} />
+          <Stat index={1} label="Listed" value={counts.total} />
+          <Stat index={2} label="Accepting applications" value={counts.open} tone="accent" />
+          <Stat index={3} label="Closing within 3 days" value={counts.soon} />
+          <Stat index={4} label="Closed" value={counts.closed} />
         </div>
       )}
 

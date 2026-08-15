@@ -39,7 +39,7 @@ const {
   getSessionRsvp,
   getAcademicOptions,
 } = require("../controllers/student.controllers");
-const { studentAuth } = require("../middlewares/auth.middlewares");
+const { optionalStudentAuth, studentAuth } = require("../middlewares/auth.middlewares");
 const rateLimit = require("../middlewares/rateLimit");
 const validateRequest = require("../middlewares/validateRequest");
 const upload = require("../middlewares/upload");
@@ -108,33 +108,33 @@ router.post('/changePassword', studentAuth, [
   body('newPassword').isLength({ min: 10, max: 128 }).custom(fitsBcrypt).withMessage("Password must be 10–72 bytes long"),
 ], validateRequest, changePassword)
 
-router.get('/getSessions',studentAuth,getAllSessions)
+router.get('/getSessions', getAllSessions)
 
-router.get('/getSession',studentAuth,[
+router.get('/getSession', [
   query('sessionId').isMongoId().withMessage("Invalid session ID")
 ], validateRequest, getSession);
 
-router.get('/getAllClubs',studentAuth, getAllClubs)
+router.get('/getAllClubs', getAllClubs)
 
-router.get('/getClub',studentAuth,[
+router.get('/getClub', [
   query('clubId').isMongoId().withMessage("Invalid club ID")
 ], validateRequest, getClub);
 
-router.get('/getEvents',studentAuth, getAllEvents)
+router.get('/getEvents', optionalStudentAuth, getAllEvents)
 
-router.get('/getEvent',studentAuth,[
+router.get('/getEvent', optionalStudentAuth, [
   query('eventId').isMongoId().withMessage("Invalid event ID")
 ], validateRequest, getEvent);
 
-router.get('/getClubEvents',studentAuth,[
+router.get('/getClubEvents', [
   query('clubId').isMongoId().withMessage("Invalid club ID")
 ], validateRequest, getClubEvents)
 
-router.get('/getClubSessions',studentAuth,[
+router.get('/getClubSessions', [
   query('clubId').isMongoId().withMessage("Invalid club ID")
 ], validateRequest, getClubSessions)
 
-router.get('/getDashboard',studentAuth, getDashBoard)
+router.get('/getDashboard', optionalStudentAuth, getDashBoard)
 
 router.post('/registerEvent',studentAuth,[
   body('eventId').isMongoId().withMessage("Invalid event ID")

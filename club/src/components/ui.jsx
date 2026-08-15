@@ -109,7 +109,7 @@ export function Page({ width = "7xl", className, children }) {
  */
 export function PageHeader({ eyebrow, title, description, actions, className }) {
   return (
-    <header className={cx("reveal", className)}>
+    <header className={cx("page-head reveal", className)}>
       {eyebrow && (
         <div className="flex items-center gap-3">
           <span className="eyebrow eyebrow-accent">{eyebrow}</span>
@@ -369,15 +369,18 @@ export function Spinner({ className }) {
    ------------------------------------------------------------------------- */
 
 /** Big number that counts up, over a small caps label. */
-export function Stat({ label, value, suffix, hint, tone, className }) {
+export function Stat({ label, value, suffix, hint, tone, index, className }) {
   const numeric = typeof value === "number";
   const shown = useCountUp(numeric ? value : 0);
   return (
-    <div className={cx("card p-5", className)}>
+    <div
+      className={cx("stat", className)}
+      data-index={index ? String(index).padStart(2, "0") : undefined}
+    >
       <p className="eyebrow">{label}</p>
       <p
         className={cx(
-          "display tabular mt-2.5 text-3xl sm:text-[2rem]",
+          "stat-number display tabular mt-2.5 text-3xl sm:text-[2rem]",
           tone === "accent" && "text-accent",
         )}
         data-numeric=""

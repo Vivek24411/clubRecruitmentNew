@@ -66,7 +66,7 @@ export default function Dashboard() {
       {/* ------------------------------------------------------------------ */}
       {/* Masthead                                                            */}
       {/* ------------------------------------------------------------------ */}
-      <header className="reveal">
+      <header className="workspace-hero">
         <div className="flex items-center gap-3">
           <span className="eyebrow eyebrow-accent">Club workspace</span>
           <hr className="rule-accent animate-draw flex-none" style={{ animationDelay: "200ms" }} />
@@ -97,10 +97,10 @@ export default function Dashboard() {
       {/* ------------------------------------------------------------------ */}
       {!loading && (
         <div className="stagger mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label="Events" value={events.length} hint="All time" />
-          <Stat label="Published" value={publishedEvents} tone="accent" hint="Visible to students" />
-          <Stat label="Open deadlines" value={upcomingEvents.length} hint="Still accepting" />
-          <Stat label="Sessions ahead" value={upcomingSessions.length} hint="Scheduled" />
+          <Stat index={1} label="Events" value={events.length} hint="All time" />
+          <Stat index={2} label="Published" value={publishedEvents} tone="accent" hint="Visible to students" />
+          <Stat index={3} label="Open deadlines" value={upcomingEvents.length} hint="Still accepting" />
+          <Stat index={4} label="Sessions ahead" value={upcomingSessions.length} hint="Scheduled" />
         </div>
       )}
 
