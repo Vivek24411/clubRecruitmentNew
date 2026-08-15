@@ -21,6 +21,23 @@ const resetRequestRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyP
 const resetVerifyRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "club-password-reset-verify", persistent: true });
 const passwordChangeRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyPrefix: "club-password-change", persistent: true });
 const fitsBcrypt = (value) => Buffer.byteLength(String(value), "utf8") <= 72;
+const validProgrammeEligibility = (value) => {
+  const maxYears = { undergraduate: 5, mtech: 2, msc: 2, mba: 2, phd: 5 };
+  try {
+    const rules = JSON.parse(value);
+    if (!Array.isArray(rules) || rules.length < 1 || rules.length > 5) throw new Error();
+    const programmes = rules.map((rule) => rule?.programme);
+    if (new Set(programmes).size !== programmes.length) throw new Error();
+    if (rules.some((rule) => !maxYears[rule?.programme]
+      || !Array.isArray(rule.years)
+      || rule.years.some((year) => !Number.isInteger(Number(year)) || Number(year) < 1 || Number(year) > maxYears[rule.programme]))) {
+      throw new Error();
+    }
+    return true;
+  } catch {
+    throw new Error("Programme eligibility is invalid");
+  }
+};
 
 router.post(
   "/login",
@@ -119,9 +136,9 @@ router.post('/addEvent',clubAuth,
   body('maxTeamSize').optional().isInt({ min: 1, max: 10000 }),
   body('status').optional().isIn(['draft', 'published']),
   body('eventType').optional().isIn(['recruitment', 'hackathon', 'competition', 'workshop', 'other']),
+  body('eligibilityMode').optional().isIn(['undergraduate', 'all_iitr']),
+  body('programmeEligibilityJSON').optional().isString().isLength({ max: 2000 }).custom(validProgrammeEligibility),
   body('eligibilityYearsJSON').optional().isString().isLength({ max: 100 }),
-  body('eligibilityBranchesJSON').optional().isString().isLength({ max: 10000 }),
-  body('allowPassedOut').optional().isBoolean(),
   body('deadlineNotificationsEnabled').optional().isBoolean(),
   body('roundsJSON').optional().isString().isLength({ max: 200000 }),
   body('roundDetailsJSON').optional().custom((value, { req }) => {
@@ -166,9 +183,9 @@ router.patch('/events/:eventId', clubAuth, upload.single('eventBanner'), [
   body('eventType').optional().isIn(['recruitment', 'hackathon', 'competition', 'workshop', 'other']),
   body('roundsJSON').optional().isString().isLength({ max: 200000 }),
   body('contactInfoJSON').optional().isString().isLength({ max: 10000 }),
+  body('eligibilityMode').optional().isIn(['undergraduate', 'all_iitr']),
+  body('programmeEligibilityJSON').optional().isString().isLength({ max: 2000 }).custom(validProgrammeEligibility),
   body('eligibilityYearsJSON').optional().isString().isLength({ max: 100 }),
-  body('eligibilityBranchesJSON').optional().isString().isLength({ max: 10000 }),
-  body('allowPassedOut').optional().isBoolean(),
   body('deadlineNotificationsEnabled').optional().isBoolean(),
   body('notifyRegistrants').optional().isBoolean(),
 ], validateRequest, updateEvent)

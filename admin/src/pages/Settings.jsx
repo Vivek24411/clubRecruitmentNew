@@ -10,6 +10,9 @@ const localDateTimeValue = (value) => {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 };
 
+const BUILT_IN_CLUB_TYPES = ["cultural", "technical", "departmental", "others"];
+const clubTypeLabel = (value) => String(value || "").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+
 /** Styled checkbox matching the paper/ink system. */
 function Check({ checked, onChange }) {
   return (
@@ -44,8 +47,10 @@ export default function Settings() {
     registrationEnabled: true,
     maintenanceMessage: "",
     recruitmentCycle: { name: "", status: "open", startAt: "", endAt: "" },
+    clubTypes: BUILT_IN_CLUB_TYPES,
     academicConfiguration: { rolloverMonth: 6, rolloverDay: 1, branches: [] },
   });
+  const [newClubType, setNewClubType] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -56,6 +61,7 @@ export default function Settings() {
         if (data.success)
           setSettings({
             ...data.settings,
+            clubTypes: data.settings.clubTypes || BUILT_IN_CLUB_TYPES,
             academicConfiguration: {
               rolloverMonth: data.settings.academicConfiguration?.rolloverMonth || 6,
               rolloverDay: data.settings.academicConfiguration?.rolloverDay || 1,
@@ -132,6 +138,13 @@ export default function Settings() {
       branches: settings.academicConfiguration.branches.map((branch, current) => current === index ? { ...branch, ...changes } : branch),
     },
   });
+  const addClubType = () => {
+    const normalized = newClubType.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    if (normalized.length < 2) return toast.error("Enter a club type name");
+    if (settings.clubTypes.includes(normalized)) return toast.error("That club type already exists");
+    setSettings({ ...settings, clubTypes: [...settings.clubTypes, normalized] });
+    setNewClubType("");
+  };
 
   return (
     <Page width="3xl">
@@ -243,13 +256,32 @@ export default function Settings() {
           </Field>
         </Card>
 
+        <Card className="reveal p-6" style={{ "--d": "170ms" }}>
+          <h2 className="display text-xl">Club types</h2>
+          <p className="mt-1.5 text-sm text-ink-3">Technical, cultural, departmental, and others are always available. Add more types for the club directory and admin forms.</p>
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+            <Input value={newClubType} onChange={(event) => setNewClubType(event.target.value)} placeholder="e.g. Sports" maxLength={50} />
+            <Button type="button" variant="secondary" onClick={addClubType}>Add type</Button>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {settings.clubTypes.map((type) => (
+              <span key={type} className="badge badge-neutral flex items-center gap-2">
+                {clubTypeLabel(type)}
+                {!BUILT_IN_CLUB_TYPES.includes(type) && (
+                  <button type="button" aria-label={`Remove ${clubTypeLabel(type)}`} onClick={() => setSettings({ ...settings, clubTypes: settings.clubTypes.filter((item) => item !== type) })}>×</button>
+                )}
+              </span>
+            ))}
+          </div>
+        </Card>
+
         <Card className="reveal p-6" style={{ "--d": "190ms" }}>
-          <div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="display text-xl">Academic progression</h2><p className="mt-1.5 text-sm text-ink-3">Year changes are derived from the student's programme start year at this annual June rollover.</p></div><Button type="button" variant="secondary" size="sm" onClick={() => setSettings({ ...settings, academicConfiguration: { ...settings.academicConfiguration, branches: [...settings.academicConfiguration.branches, { name: "", durationYears: 4 }] } })}>Add branch</Button></div>
+          <div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="display text-xl">Undergraduate programmes</h2><p className="mt-1.5 text-sm text-ink-3">Manage undergraduate branches/programmes and their duration. Every student's year advances at the annual June rollover.</p></div><Button type="button" variant="secondary" size="sm" onClick={() => setSettings({ ...settings, academicConfiguration: { ...settings.academicConfiguration, branches: [...settings.academicConfiguration.branches, { name: "", durationYears: 4 }] } })}>Add undergraduate programme</Button></div>
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
             <Field label="Rollover month" id="rolloverMonth"><Select id="rolloverMonth" value={settings.academicConfiguration.rolloverMonth} onChange={(event) => setSettings({ ...settings, academicConfiguration: { ...settings.academicConfiguration, rolloverMonth: Number(event.target.value) } })}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{new Date(2026, index, 1).toLocaleString("en", { month: "long" })}</option>)}</Select></Field>
             <Field label="Rollover day" id="rolloverDay"><Input id="rolloverDay" type="number" min="1" max="28" value={settings.academicConfiguration.rolloverDay} onChange={(event) => setSettings({ ...settings, academicConfiguration: { ...settings.academicConfiguration, rolloverDay: Number(event.target.value) } })} /></Field>
           </div>
-          <div className="mt-6 space-y-3">{settings.academicConfiguration.branches.map((branch, index) => <div key={branch._id || index} className="grid gap-3 sm:grid-cols-[1fr_10rem_auto]"><Input aria-label={`Branch ${index + 1} name`} value={branch.name} onChange={(event) => updateBranch(index, { name: event.target.value })} placeholder="Branch name" required /><Select aria-label={`Branch ${index + 1} duration`} value={branch.durationYears || 4} onChange={(event) => updateBranch(index, { durationYears: Number(event.target.value) })}><option value="4">4-year course</option><option value="5">5-year course</option></Select><Button type="button" variant="danger" size="sm" onClick={() => setSettings({ ...settings, academicConfiguration: { ...settings.academicConfiguration, branches: settings.academicConfiguration.branches.filter((_, current) => current !== index) } })}>Remove</Button></div>)}</div>
+          <div className="mt-6 space-y-3">{settings.academicConfiguration.branches.map((branch, index) => <div key={branch._id || index} className="grid gap-3 sm:grid-cols-[1fr_10rem_auto]"><Input aria-label={`Undergraduate programme ${index + 1} name`} value={branch.name} onChange={(event) => updateBranch(index, { name: event.target.value })} placeholder="Branch or programme name" required /><Select aria-label={`Undergraduate programme ${index + 1} duration`} value={branch.durationYears || 4} onChange={(event) => updateBranch(index, { durationYears: Number(event.target.value) })}><option value="4">4-year course</option><option value="5">5-year course</option></Select><Button type="button" variant="danger" size="sm" onClick={() => setSettings({ ...settings, academicConfiguration: { ...settings.academicConfiguration, branches: settings.academicConfiguration.branches.filter((_, current) => current !== index) } })}>Remove</Button></div>)}</div>
         </Card>
 
         <Button type="submit" size="lg" loading={saving}>

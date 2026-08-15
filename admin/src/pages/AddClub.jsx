@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { Button, Card, Field, Input, Page, PageHeader, Select } from "../components/ui";
@@ -11,10 +11,19 @@ export default function AddClub() {
   const [contactEmail, setContactEmail] = useState("");
   const [sameEmail, setSameEmail] = useState(true);
   const [category, setCategory] = useState("technical");
+  const [clubTypes, setClubTypes] = useState(["cultural", "technical", "departmental", "others"]);
   const [isLoading, setIsLoading] = useState(false);
   const [clubLogo, setClubLogo] = useState(null);
   const [clubLogoPreview, setClubLogoPreview] = useState(null);
   const fileInput = useRef(null);
+
+  useEffect(() => {
+    axios.get(`${import.meta.env.VITE_BASE_URI}/admin/settings`)
+      .then(({ data }) => data.success && setClubTypes(data.settings.clubTypes || clubTypes))
+      .catch(() => toast.error("Could not load club types"));
+    // The built-in list is a safe fallback when settings are unavailable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function uploadClubLogo(event) {
     const file = event.target.files[0];
@@ -149,8 +158,7 @@ export default function AddClub() {
             </Field>
             <Field label="Club category" id="category" required>
               <Select id="category" value={category} onChange={(event) => setCategory(event.target.value)}>
-                <option value="technical">Technical club</option>
-                <option value="cultural">Cultural club</option>
+                {clubTypes.map((type) => <option key={type} value={type}>{type.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}
               </Select>
             </Field>
             <label className="flex items-center gap-3 text-sm sm:col-span-2"><input type="checkbox" checked={sameEmail} onChange={(event) => setSameEmail(event.target.checked)} />Use the account email as the public contact email</label>

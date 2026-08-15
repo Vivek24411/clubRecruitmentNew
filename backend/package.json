@@ -7,8 +7,9 @@
     "migrate:v2": "node scripts/migrate-v2.js",
     "migrate:v3": "node scripts/migrate-v3-workflows.js",
     "migrate:v4": "node scripts/migrate-v4-discovr.js",
+    "migrate:v5": "node scripts/migrate-v5-programmes.js",
     "seed:demo": "node scripts/seed-demo.js",
-    "check": "node --check app.js && node --check server.js && node --check scripts/seed-demo.js && node --check scripts/migrate-v4-discovr.js"
+    "check": "node --check app.js && node --check server.js && node --check scripts/seed-demo.js && node --check scripts/migrate-v4-discovr.js && node --check scripts/migrate-v5-programmes.js"
   },
   "keywords": [],
   "author": "",

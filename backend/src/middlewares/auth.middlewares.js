@@ -1,5 +1,7 @@
 const clubModel = require("../models/club.model");
+const platformSettingsModel = require("../models/platformSettings.model");
 const studentModel = require("../models/student.model");
+const { syncAcademicState } = require("../services/academic.services");
 const { getSessionToken, verifySession } = require("../utils/auth");
 
 function unauthorized(res, msg = "Authentication required") {
@@ -47,6 +49,8 @@ module.exports.studentAuth = async (req, res, next) => {
     if (!student || student.status === "suspended" || student.tokenVersion !== decoded.ver) {
       return unauthorized(res, "Student session is no longer active");
     }
+    const settings = await platformSettingsModel.findOne({ key: "global" });
+    await syncAcademicState(student, settings);
     req.student = student;
     return next();
   } catch {
@@ -67,6 +71,8 @@ module.exports.optionalStudentAuth = async (req, _res, next) => {
     const decoded = verifySession(token, "student");
     const student = await studentModel.findById(decoded.sub).select("+tokenVersion");
     if (student && student.status !== "suspended" && student.tokenVersion === decoded.ver) {
+      const settings = await platformSettingsModel.findOne({ key: "global" });
+      await syncAcademicState(student, settings);
       req.student = student;
     }
   } catch {

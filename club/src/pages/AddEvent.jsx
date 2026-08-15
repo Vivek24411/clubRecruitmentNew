@@ -1,13 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import RoundBuilder from "../components/RoundBuilder";
+import EligibilityBuilder from "../components/EligibilityBuilder";
+import { allProgrammeRules } from "../utils/eligibility";
 import { Button, Card, DateTimeInput, Field, Input, Page, PageHeader, Select, Textarea } from "../components/ui";
-
-const YEARS = [
-  [1, "First year"], [2, "Second year"], [3, "Third year"], [4, "Fourth year"], [5, "Fifth year"],
-];
 
 const initialForm = {
   title: "",
@@ -20,9 +18,8 @@ const initialForm = {
   minTeamSize: 1,
   maxTeamSize: 1,
   eligibility: "",
-  eligibilityYears: [],
-  eligibilityBranches: [],
-  allowPassedOut: false,
+  eligibilityMode: "undergraduate",
+  programmeEligibility: [{ programme: "undergraduate", years: [] }],
   ContactInfo: [],
   status: "draft",
   deadlineNotificationsEnabled: true,
@@ -35,14 +32,7 @@ export default function AddEvent() {
   const [banner, setBanner] = useState(null);
   const [preview, setPreview] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [branches, setBranches] = useState([]);
   const set = (key, value) => setForm((previous) => ({ ...previous, [key]: value }));
-
-  useEffect(() => {
-    axios.get(`${import.meta.env.VITE_BASE_URI}/student/academic-options`)
-      .then(({ data }) => data.success && setBranches(data.academicConfiguration.branches || []))
-      .catch(() => {});
-  }, []);
 
   const selectBanner = (event) => {
     const file = event.target.files[0] || null;
@@ -63,11 +53,8 @@ export default function AddEvent() {
         ...form,
         minTeamSize: form.registrationType === "individual" ? 1 : form.minTeamSize,
         maxTeamSize: form.registrationType === "individual" ? 1 : form.maxTeamSize,
-        eligibilityBranches: branches.length > 0 && branches.every((branch) => form.eligibilityBranches.includes(branch.name))
-          ? []
-          : form.eligibilityBranches,
       };
-      ["title", "eventType", "shortDescription", "longDescription", "maxParticipants", "registrationType", "minTeamSize", "maxTeamSize", "eligibility", "status", "allowPassedOut", "deadlineNotificationsEnabled"].forEach((key) => payload.append(key, normalized[key]));
+      ["title", "eventType", "shortDescription", "longDescription", "maxParticipants", "registrationType", "minTeamSize", "maxTeamSize", "eligibility", "status", "eligibilityMode", "deadlineNotificationsEnabled"].forEach((key) => payload.append(key, normalized[key]));
       payload.append("registrationDeadlineAt", new Date(normalized.registrationDeadlineAt).toISOString());
       payload.append("numberOfRounds", normalized.rounds.length);
       payload.append("roundsJSON", JSON.stringify(normalized.rounds.map((round) => ({
@@ -77,8 +64,7 @@ export default function AddEvent() {
         submissionOpensAt: round.submissionOpensAt ? new Date(round.submissionOpensAt).toISOString() : null,
         submissionDeadlineAt: round.submissionDeadlineAt ? new Date(round.submissionDeadlineAt).toISOString() : null,
       }))));
-      payload.append("eligibilityYearsJSON", JSON.stringify(normalized.eligibilityYears));
-      payload.append("eligibilityBranchesJSON", JSON.stringify(normalized.eligibilityBranches));
+      payload.append("programmeEligibilityJSON", JSON.stringify(normalized.programmeEligibility));
       normalized.ContactInfo.filter(Boolean).forEach((item, index) => payload.append(`ContactInfo[${index}]`, item));
       if (banner) payload.append("eventBanner", banner);
       const { data } = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/addEvent`, payload);
@@ -115,19 +101,16 @@ export default function AddEvent() {
             <Field label="Registration type" id="registrationType"><Select id="registrationType" value={form.registrationType} onChange={(event) => set("registrationType", event.target.value)}><option value="individual">Individual</option><option value="team">Team only</option><option value="optional_team">Individual or team</option></Select></Field>
             {form.registrationType !== "individual" && <Field label="Team size" id="minTeam"><div className="grid grid-cols-2 gap-2"><Input aria-label="Minimum team size" id="minTeam" type="number" min="1" value={form.minTeamSize} onChange={(event) => set("minTeamSize", Number(event.target.value))} /><Input aria-label="Maximum team size" type="number" min={form.minTeamSize} value={form.maxTeamSize} onChange={(event) => set("maxTeamSize", Number(event.target.value))} /></div></Field>}
           </div>
-          <div className="mt-6">
-            <p className="label">Eligible academic years</p>
-            <div className="mt-2 flex flex-wrap gap-3">
-              {YEARS.map(([value, label]) => <label key={value} className="flex items-center gap-2 rounded-sm border border-line px-3 py-2 text-sm"><input type="checkbox" checked={form.eligibilityYears.includes(value)} onChange={(event) => set("eligibilityYears", event.target.checked ? [...form.eligibilityYears, value] : form.eligibilityYears.filter((year) => year !== value))} />{label}</label>)}
-              <label className="flex items-center gap-2 rounded-sm border border-line px-3 py-2 text-sm"><input type="checkbox" checked={form.allowPassedOut} onChange={(event) => set("allowPassedOut", event.target.checked)} />Passed out</label>
-            </div>
-            {!form.eligibilityYears.length && !form.allowPassedOut && <p className="hint">No year selected means open to every current student.</p>}
-          </div>
+          <EligibilityBuilder
+            mode={form.eligibilityMode}
+            rules={form.programmeEligibility}
+            onModeChange={(value) => set("eligibilityMode", value)}
+            onRulesChange={(value) => set("programmeEligibility", value.length ? value : allProgrammeRules())}
+          />
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
             <Field label="Additional eligibility" id="eligibility"><Textarea id="eligibility" rows="3" className="min-h-0" value={form.eligibility} onChange={(event) => set("eligibility", event.target.value)} /></Field>
             <Field label="Contact emails or phone numbers" id="contact"><Textarea id="contact" rows="3" className="min-h-0" value={form.ContactInfo.join("\n")} onChange={(event) => set("ContactInfo", event.target.value.split("\n").map((item) => item.trim()))} /></Field>
           </div>
-          <Field label="Eligible branches" id="eligibleBranch" className="mt-5" hint="Choose individual branches to restrict eligibility."><div className="flex flex-col gap-2 sm:flex-row"><Select id="eligibleBranch" value="" onChange={(event) => event.target.value && !form.eligibilityBranches.includes(event.target.value) && set("eligibilityBranches", [...form.eligibilityBranches, event.target.value])}><option value="">Add a branch restriction</option>{branches.filter((branch) => !form.eligibilityBranches.includes(branch.name)).map((branch) => <option key={branch.name} value={branch.name}>{branch.name}</option>)}</Select>{form.eligibilityBranches.length > 0 && <Button type="button" variant="secondary" size="sm" onClick={() => set("eligibilityBranches", [])}>Open to all branches</Button>}</div><div className="mt-2 flex flex-wrap gap-2">{form.eligibilityBranches.length > 0 ? form.eligibilityBranches.map((branch) => <button key={branch} type="button" className="badge badge-neutral" onClick={() => set("eligibilityBranches", form.eligibilityBranches.filter((item) => item !== branch))}>{branch} x</button>) : <span className="badge badge-info">Open to all branches</span>}</div></Field>
         </Card>
 
         <Card className="p-5 sm:p-6"><RoundBuilder rounds={form.rounds} onChange={(rounds) => set("rounds", rounds)} registrationType={form.registrationType} /></Card>

@@ -3,9 +3,9 @@ import axios from "axios";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import RoundBuilder, { normalizeRoundsForForm } from "../components/RoundBuilder";
+import EligibilityBuilder from "../components/EligibilityBuilder";
+import { eligibilityForForm } from "../utils/eligibility";
 import { Button, Card, DateTimeInput, Field, Input, Page, Select, Skeleton, Textarea } from "../components/ui";
-
-const YEARS = [[1, "First"], [2, "Second"], [3, "Third"], [4, "Fourth"], [5, "Fifth"]];
 
 export default function EditEvent() {
   const { eventId } = useParams();
@@ -14,14 +14,10 @@ export default function EditEvent() {
   const [banner, setBanner] = useState(null);
   const [notifyRegistrants, setNotifyRegistrants] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [branches, setBranches] = useState([]);
   const originalDeadline = useRef("");
   const originalRoundDeadlines = useRef({});
 
   useEffect(() => {
-    axios.get(`${import.meta.env.VITE_BASE_URI}/student/academic-options`)
-      .then(({ data }) => data.success && setBranches(data.academicConfiguration.branches || []))
-      .catch(() => {});
     axios.get(`${import.meta.env.VITE_BASE_URI}/club/getEvent`, { params: { eventId } })
       .then(({ data }) => {
         if (!data.success) throw new Error(data.msg);
@@ -30,10 +26,9 @@ export default function EditEvent() {
         originalRoundDeadlines.current = Object.fromEntries((data.event.rounds || []).map((round) => [round._id, round.submissionDeadlineAt || ""]));
         setForm({
           ...data.event,
+          ...eligibilityForForm(data.event),
           registrationDeadlineAt: data.event.registrationDeadlineAt ? new Date(new Date(data.event.registrationDeadlineAt).getTime() - new Date(data.event.registrationDeadlineAt).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "",
           rounds: normalizedRounds,
-          eligibilityYears: data.event.eligibilityYears || [],
-          eligibilityBranches: data.event.eligibilityBranches || [],
           ContactInfo: data.event.ContactInfo || [],
         });
       })
@@ -50,7 +45,7 @@ export default function EditEvent() {
     setSaving(true);
     try {
       const payload = new FormData();
-      ["title", "eventType", "shortDescription", "longDescription", "maxParticipants", "registrationType", "minTeamSize", "maxTeamSize", "eligibility", "allowPassedOut", "deadlineNotificationsEnabled"].forEach((key) => payload.append(key, form[key] ?? ""));
+      ["title", "eventType", "shortDescription", "longDescription", "maxParticipants", "registrationType", "minTeamSize", "maxTeamSize", "eligibility", "eligibilityMode", "deadlineNotificationsEnabled"].forEach((key) => payload.append(key, form[key] ?? ""));
       payload.append("registrationDeadlineAt", form.registrationDeadlineAt ? new Date(form.registrationDeadlineAt).toISOString() : "");
       payload.append("numberOfRounds", form.rounds.length);
       payload.append("roundsJSON", JSON.stringify(form.rounds.map((round) => ({
@@ -61,11 +56,7 @@ export default function EditEvent() {
         submissionDeadlineAt: round.submissionDeadlineAt ? new Date(round.submissionDeadlineAt).toISOString() : null,
       }))));
       payload.append("contactInfoJSON", JSON.stringify(form.ContactInfo));
-      payload.append("eligibilityYearsJSON", JSON.stringify(form.eligibilityYears));
-      const eligibilityBranches = branches.length > 0 && branches.every((branch) => form.eligibilityBranches.includes(branch.name))
-        ? []
-        : form.eligibilityBranches || [];
-      payload.append("eligibilityBranchesJSON", JSON.stringify(eligibilityBranches));
+      payload.append("programmeEligibilityJSON", JSON.stringify(form.programmeEligibility));
       payload.append("notifyRegistrants", String(notifyRegistrants));
       if (banner) payload.append("eventBanner", banner);
       const { data } = await axios.patch(`${import.meta.env.VITE_BASE_URI}/club/events/${eventId}`, payload);
@@ -110,9 +101,13 @@ export default function EditEvent() {
             <Field label="Overall participant limit (optional)" id="capacity" hint="Counts people, not teams: the captain and every accepted member count once. Pending invitations do not count."><Input id="capacity" type="number" min="1" max="10000" value={form.maxParticipants ?? ""} onChange={(event) => set("maxParticipants", event.target.value)} placeholder="Unlimited" /></Field>
             {form.registrationType !== "individual" && <><Field label="Minimum team" id="minTeam"><Input id="minTeam" type="number" min="1" value={form.minTeamSize || 1} onChange={(event) => set("minTeamSize", Number(event.target.value))} /></Field><Field label="Maximum team" id="maxTeam"><Input id="maxTeam" type="number" min={form.minTeamSize || 1} value={form.maxTeamSize || 1} onChange={(event) => set("maxTeamSize", Number(event.target.value))} /></Field></>}
           </div>
-          <div className="mt-5 flex flex-wrap gap-3">{YEARS.map(([value, label]) => <label key={value} className="flex items-center gap-2 rounded-sm border border-line px-3 py-2 text-sm"><input type="checkbox" checked={form.eligibilityYears?.includes(value)} onChange={(event) => set("eligibilityYears", event.target.checked ? [...form.eligibilityYears, value] : form.eligibilityYears.filter((year) => year !== value))} />{label} year</label>)}</div>
+          <EligibilityBuilder
+            mode={form.eligibilityMode}
+            rules={form.programmeEligibility}
+            onModeChange={(value) => set("eligibilityMode", value)}
+            onRulesChange={(value) => set("programmeEligibility", value)}
+          />
           <Field label="Additional eligibility" id="eligibility" className="mt-5"><Textarea id="eligibility" rows="3" className="min-h-0" value={form.eligibility || ""} onChange={(event) => set("eligibility", event.target.value)} /></Field>
-          <Field label="Eligible branches" id="eligibleBranch" className="mt-5" hint="Choose individual branches to restrict eligibility."><div className="flex flex-col gap-2 sm:flex-row"><Select id="eligibleBranch" value="" onChange={(event) => event.target.value && !form.eligibilityBranches.includes(event.target.value) && set("eligibilityBranches", [...form.eligibilityBranches, event.target.value])}><option value="">Add a branch restriction</option>{branches.filter((branch) => !form.eligibilityBranches.includes(branch.name)).map((branch) => <option key={branch.name} value={branch.name}>{branch.name}</option>)}</Select>{form.eligibilityBranches.length > 0 && <Button type="button" variant="secondary" size="sm" onClick={() => set("eligibilityBranches", [])}>Open to all branches</Button>}</div><div className="mt-2 flex flex-wrap gap-2">{form.eligibilityBranches.length > 0 ? form.eligibilityBranches.map((branch) => <button key={branch} type="button" className="badge badge-neutral" onClick={() => set("eligibilityBranches", form.eligibilityBranches.filter((item) => item !== branch))}>{branch} x</button>) : <span className="badge badge-info">Open to all branches</span>}</div></Field>
           <Field label="Contact details, one per line" id="contacts" className="mt-5"><Textarea id="contacts" rows="3" className="min-h-0" value={(form.ContactInfo || []).join("\n")} onChange={(event) => set("ContactInfo", event.target.value.split("\n").map((item) => item.trim()))} /></Field>
           {deadlineChanged && form.deadlineNotificationsEnabled !== false && <label className="mt-5 flex items-start gap-3 rounded-sm border-l-2 border-accent bg-accent-tint/40 p-4 text-sm"><input className="mt-1" type="checkbox" checked={notifyRegistrants} onChange={(event) => setNotifyRegistrants(event.target.checked)} /><span>Email registered students about changed registration or submission deadlines when this save succeeds.</span></label>}
         </Card>

@@ -25,7 +25,7 @@ router.post("/addClub",adminAuth,upload.single('clubLogo'),[
   body("password").isLength({ min: 10, max: 128 }).custom(fitsBcrypt).withMessage("Password must be 10–72 bytes long"),
   body("accountEmail").isEmail().normalizeEmail().isLength({ max: 254 }),
   body("contactEmail").optional({ checkFalsy: true }).isEmail().normalizeEmail().isLength({ max: 254 }),
-  body("category").isIn(["technical", "cultural"]),
+  body("category").isString().trim().matches(/^[a-z0-9_-]+$/).isLength({ min: 2, max: 50 }),
   body("useAccountEmailForContact").optional().isBoolean(),
 ], validateRequest, addClub);
 
@@ -62,6 +62,7 @@ router.patch('/students/:studentId/status', adminAuth, [
 
 router.patch('/students/:studentId/academics', adminAuth, [
   param('studentId').isMongoId(),
+  body('programme').isIn(['undergraduate', 'mtech', 'msc', 'mba', 'phd']),
   body('branch').isString().trim().isLength({ min: 2, max: 100 }),
   body('academicYear').isInt({ min: 1, max: 5 }).toInt(),
 ], validateRequest, updateStudentAcademics)
@@ -75,7 +76,7 @@ router.patch('/clubs/:clubId/details', adminAuth, [
   param('clubId').isMongoId(),
   body('accountEmail').optional().isEmail().normalizeEmail().isLength({ max: 254 }),
   body('contactEmail').optional({ checkFalsy: true }).isEmail().normalizeEmail().isLength({ max: 254 }),
-  body('category').optional().isIn(['technical', 'cultural']),
+  body('category').optional().isString().trim().matches(/^[a-z0-9_-]+$/).isLength({ min: 2, max: 50 }),
   body('useAccountEmailForContact').optional().isBoolean(),
 ], validateRequest, updateClubDetails)
 
@@ -120,6 +121,8 @@ router.patch('/settings', adminAuth, [
   body('academicConfiguration.branches').optional().isArray({ max: 100 }),
   body('academicConfiguration.branches.*.name').optional().isString().trim().isLength({ min: 2, max: 100 }),
   body('academicConfiguration.branches.*.durationYears').optional().isInt().isIn([4, 5]),
+  body('clubTypes').optional().isArray({ min: 4, max: 30 }),
+  body('clubTypes.*').optional().isString().trim().matches(/^[a-z0-9_-]+$/).isLength({ min: 2, max: 50 }),
 ], validateRequest, updateSettings)
 
 

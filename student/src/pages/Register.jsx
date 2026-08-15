@@ -67,6 +67,7 @@ export default function Register() {
     name: "",
     email: "",
     password: "",
+    programme: "undergraduate",
     branch: "",
     academicYear: "",
     phoneNumber: "",
@@ -77,18 +78,28 @@ export default function Register() {
   const [sendingOTP, setSendingOTP] = useState(false);
   const [verifyingOTP, setVerifyingOTP] = useState(false);
   const [registering, setRegistering] = useState(false);
-  const [academicOptions, setAcademicOptions] = useState({ branches: [], years: [] });
+  const [academicOptions, setAcademicOptions] = useState({ branches: [], programmes: [], years: [] });
 
   const navigate = useNavigate();
   const { setLoggedInStudent, refreshProfile } = useContext(StudentContextData);
 
   useEffect(() => {
     axios.get(`${import.meta.env.VITE_BASE_URI}/student/academic-options`)
-      .then(({ data }) => data.success && setAcademicOptions({ branches: data.academicConfiguration.branches || [], years: data.years || [] }))
+      .then(({ data }) => data.success && setAcademicOptions({
+        branches: data.academicConfiguration.branches || [],
+        programmes: data.programmes || [],
+        years: data.years || [],
+      }))
       .catch(() => toast.error("Could not load academic options"));
   }, []);
 
   const set = (key) => (event) => setForm((prev) => ({ ...prev, [key]: event.target.value }));
+  const selectedProgramme = academicOptions.programmes.find((programme) => programme.value === form.programme)
+    || { value: "undergraduate", label: "Undergraduate", durationYears: null, branchMode: "configured" };
+  const selectedBranch = academicOptions.branches.find((branch) => branch.name === form.branch);
+  const courseDuration = selectedProgramme.value === "undergraduate"
+    ? selectedBranch?.durationYears || 5
+    : selectedProgramme.durationYears || 5;
   async function sendOTP() {
     setSendingOTP(true);
     if (!isIitrInstituteEmail(form.email)) {
@@ -245,19 +256,37 @@ export default function Register() {
                 />
               </Field>
             ))}
-            <Field id="branch" label="Branch" required>
-              <Select id="branch" required value={form.branch} onChange={set("branch")}>
-                <option value="">Choose branch</option>
-                {academicOptions.branches.map((branch) => <option key={branch.name} value={branch.name}>{branch.name}</option>)}
+            <Field id="programme" label="Programme" required>
+              <Select
+                id="programme"
+                required
+                value={form.programme}
+                onChange={(event) => setForm((previous) => ({
+                  ...previous,
+                  programme: event.target.value,
+                  branch: "",
+                  academicYear: "",
+                }))}
+              >
+                {(academicOptions.programmes.length ? academicOptions.programmes : [selectedProgramme]).map((programme) => (
+                  <option key={programme.value} value={programme.value}>{programme.label}</option>
+                ))}
               </Select>
+            </Field>
+            <Field id="branch" label={form.programme === "undergraduate" ? "Branch" : "Branch or discipline"} required>
+              {form.programme === "undergraduate" ? (
+                <Select id="branch" required value={form.branch} onChange={(event) => setForm((previous) => ({ ...previous, branch: event.target.value, academicYear: "" }))}>
+                  <option value="">Choose branch/programme</option>
+                  {academicOptions.branches.map((branch) => <option key={branch.name} value={branch.name}>{branch.name}</option>)}
+                </Select>
+              ) : (
+                <Input id="branch" required maxLength={100} value={form.branch} onChange={set("branch")} placeholder={`Enter your ${selectedProgramme.label} branch or discipline`} />
+              )}
             </Field>
             <Field id="academicYear" label="Academic year" required>
               <Select id="academicYear" required value={form.academicYear} onChange={set("academicYear")}>
                 <option value="">Choose year</option>
-                {academicOptions.years.filter((year) => {
-                  const branch = academicOptions.branches.find((item) => item.name === form.branch);
-                  return !branch || year.value <= branch.durationYears;
-                }).map((year) => <option key={year.value} value={year.value}>{year.label}</option>)}
+                {academicOptions.years.filter((year) => year.value <= courseDuration).map((year) => <option key={year.value} value={year.value}>{year.label}</option>)}
               </Select>
             </Field>
           </div>

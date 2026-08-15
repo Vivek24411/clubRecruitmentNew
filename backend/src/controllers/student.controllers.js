@@ -25,8 +25,11 @@ const scheduleReservationModel = require("../models/scheduleReservation.model");
 const {
   eventEligibility,
   inferProgramStartYear,
+  normalizeProgramme,
   normalizedAcademicConfiguration,
   parseAcademicYear,
+  programmeDurationYears,
+  PROGRAMME_DEFINITIONS,
   syncAcademicState,
   YEAR_LABELS,
 } = require("../services/academic.services");
@@ -327,7 +330,9 @@ module.exports.register = async (req, res) => {
       return res.json({ errors: errors.array(), success: false });
     }
 
-    const { name, password, branch, phoneNumber, enrollmentNumber, verificationToken } = req.body;
+    const { name, password, phoneNumber, enrollmentNumber, verificationToken } = req.body;
+    const programme = normalizeProgramme(req.body.programme);
+    const branch = String(req.body.branch || "").trim();
     const email = normalizeEmail(req.body.email);
 
     if (!checkEmailDomain(email)) {
@@ -356,10 +361,15 @@ module.exports.register = async (req, res) => {
     const academicConfiguration = normalizedAcademicConfiguration(settings);
     const selectedYear = parseAcademicYear(req.body.academicYear || req.body.year);
     const configuredBranch = academicConfiguration.branches.find((item) => item.name === branch);
-    if (!configuredBranch) {
+    if (programme === "undergraduate" && !configuredBranch) {
       return res.status(400).json({ success: false, msg: "Choose a branch from the available branch list" });
     }
-    const courseDurationYears = configuredBranch.durationYears;
+    const courseDurationYears = programmeDurationYears(
+      programme,
+      branch,
+      academicConfiguration,
+      configuredBranch?.durationYears,
+    );
     if (selectedYear > courseDurationYears) {
       return res.status(400).json({ success: false, msg: "The selected year is not valid for this course" });
     }
@@ -368,6 +378,7 @@ module.exports.register = async (req, res) => {
       name,
       email,
       password: hashedPassword,
+      programme,
       branch,
       year: YEAR_LABELS[selectedYear],
       academicYear: selectedYear,
@@ -439,8 +450,6 @@ module.exports.getProfile = async (req, res) => {
     if (!student) {
       return res.status(404).json({ success: false, msg: "Student not found" });
     }
-    const settings = await platformSettingsModel.findOne({ key: "global" });
-    await syncAcademicState(student, settings);
     return res.json({ success: true, student: publicStudent(student) });
   } catch (error) {
     console.error("Error fetching student profile:", error);
@@ -560,6 +569,7 @@ module.exports.getAcademicOptions = async (req, res) => {
   return res.json({
     success: true,
     academicConfiguration,
+    programmes: PROGRAMME_DEFINITIONS,
     years: Object.entries(YEAR_LABELS).map(([value, label]) => ({ value: Number(value), label })),
   });
 };
@@ -629,14 +639,10 @@ module.exports.getEvent = async (req, res) => {
       return res.json({ success: false, msg: "Event not found" });
     }
     await ensureEventRounds(event);
-    const configuredBranches = normalizedAcademicConfiguration(settings).branches.map((branch) => branch.name);
-    const selectedBranches = new Set(event.eligibilityBranches || []);
-    const openToAllBranches = selectedBranches.size === 0
-      || (configuredBranches.length > 0 && configuredBranches.every((branch) => selectedBranches.has(branch)));
     const eligibility = req.student ? eventEligibility(event, req.student, settings) : null;
     return res.json({
       success: true,
-      event: { ...event.toObject(), openToAllBranches },
+      event,
       registrationOpen: platformRegistrationIsOpen(settings),
       eligibility,
     });

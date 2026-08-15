@@ -50,6 +50,7 @@ export default function Club() {
   const [loading, setLoading] = useState(true);
   const { clubId } = useParams();
   const [saving, setSaving] = useState(false);
+  const [clubTypes, setClubTypes] = useState(["cultural", "technical", "departmental", "others"]);
 
   const fetchClubDetails = useCallback(async () => {
     try {
@@ -69,6 +70,14 @@ export default function Club() {
   useEffect(() => {
     fetchClubDetails();
   }, [fetchClubDetails]);
+
+  useEffect(() => {
+    axios.get(`${import.meta.env.VITE_BASE_URI}/admin/settings`)
+      .then(({ data }) => data.success && setClubTypes(data.settings.clubTypes || clubTypes))
+      .catch(() => {});
+    // The built-in values remain available if settings cannot be loaded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (loading) {
     return (
@@ -168,7 +177,7 @@ export default function Club() {
           <Card as="form" onSubmit={saveAccount} className="p-6">
             <h2 className="eyebrow">Account settings</h2>
             <div className="mt-4 space-y-4">
-              <Field label="Category" id="category"><Select id="category" value={clubDetails.category || "technical"} onChange={(event) => setClubDetails({ ...clubDetails, category: event.target.value })}><option value="technical">Technical</option><option value="cultural">Cultural</option></Select></Field>
+              <Field label="Club type" id="category"><Select id="category" value={clubDetails.category || "technical"} onChange={(event) => setClubDetails({ ...clubDetails, category: event.target.value })}>{clubTypes.map((type) => <option key={type} value={type}>{type.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</Select></Field>
               <Field label="Recovery email" id="accountEmail" required><Input id="accountEmail" type="email" value={clubDetails.accountEmail || ""} onChange={(event) => setClubDetails({ ...clubDetails, accountEmail: event.target.value })} required /></Field>
               <Field label="Public contact email" id="contactEmail"><Input id="contactEmail" type="email" value={clubDetails.contactEmail || ""} onChange={(event) => setClubDetails({ ...clubDetails, contactEmail: event.target.value })} /></Field>
               <Button size="sm" loading={saving}>Save account</Button>

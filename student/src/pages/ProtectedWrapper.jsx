@@ -8,9 +8,12 @@ function SessionCheck() {
   return (
     <div className="grid min-h-screen place-items-center bg-paper px-6" role="status">
       <div className="reveal text-center">
-        <div className="flex items-baseline justify-center gap-2">
-          <span className="display text-2xl">Discovr</span>
-          <span className="eyebrow eyebrow-accent">IITR</span>
+        <div className="inline-flex rounded-sm bg-ink px-5 py-3">
+          <img
+            src="/discovrlogo.png"
+            alt="Discovr"
+            className="block h-auto w-48 max-w-full"
+          />
         </div>
         <hr className="rule-accent animate-draw mx-auto mt-5" style={{ animationDelay: "120ms" }} />
         <p className="mt-5 text-sm text-ink-3">Checking your session…</p>

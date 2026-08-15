@@ -19,6 +19,20 @@ import {
   Skeleton,
 } from "../components/ui";
 
+const PROGRAMME_LABELS = {
+  undergraduate: "Undergraduate",
+  mtech: "M.Tech.",
+  msc: "M.Sc.",
+  mba: "MBA",
+  phd: "PhD",
+};
+const YEAR_LABELS = ["", "First", "Second", "Third", "Fourth", "Fifth"];
+
+function programmeEligibility(event) {
+  if (event.programmeEligibility?.length) return event.programmeEligibility;
+  return [{ programme: "undergraduate", years: event.eligibilityYears || [] }];
+}
+
 /** Vertical timeline of selection rounds, with a connecting spine. */
 function RoundTimeline({ rounds }) {
   return (
@@ -303,18 +317,18 @@ export default function Event() {
                 <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{event.eligibility}</p>
               </div>
             )}
-            {event.eligibilityYears?.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {event.eligibilityYears.map((year) => <Badge key={year}>{["", "First", "Second", "Third", "Fourth", "Fifth"][year]} year</Badge>)}
-              </div>
-            )}
             <div className="mt-5">
-              <p className="eyebrow">Eligible branches</p>
-              {event.openToAllBranches || !event.eligibilityBranches?.length ? (
-                <p className="mt-2 text-sm font-medium text-ink-2">Open to all branches</p>
-              ) : (
-                <div className="mt-2 flex flex-wrap gap-2">{event.eligibilityBranches?.map((branch) => <Badge key={branch} tone="info">{branch}</Badge>)}</div>
-              )}
+              <p className="eyebrow">Eligible programmes and years</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {programmeEligibility(event).map((rule) => (
+                  <Badge key={rule.programme} tone="info">
+                    {PROGRAMME_LABELS[rule.programme] || rule.programme}: {rule.years?.length
+                      ? rule.years.map((year) => `${YEAR_LABELS[year]} year`).join(", ")
+                      : "all years"}
+                  </Badge>
+                ))}
+              </div>
+              <p className="mt-2 text-sm text-ink-3">Open to every branch or discipline within these programmes.</p>
             </div>
           </section>
 

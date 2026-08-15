@@ -1,4 +1,17 @@
 const mongoose = require("mongoose");
+const { normalizeProgrammeEligibility } = require("../services/academic.services");
+
+const programmeEligibilitySchema = new mongoose.Schema({
+  programme: {
+    type: String,
+    enum: ["undergraduate", "mtech", "msc", "mba", "phd"],
+    required: true,
+  },
+  years: {
+    type: [{ type: Number, enum: [1, 2, 3, 4, 5] }],
+    default: [],
+  },
+}, { _id: false });
 
 const submissionFieldSchema = new mongoose.Schema({
   key: { type: String, required: true, trim: true, maxlength: 80 },
@@ -79,6 +92,16 @@ const eventSchema = new mongoose.Schema({
   roundDetails: { type: Array, default: [] },
   rounds: { type: [roundSchema], default: [] },
   eligibility: { type: String, default: "", maxlength: 2000 },
+  eligibilityMode: {
+    type: String,
+    enum: ["undergraduate", "all_iitr"],
+    default: "undergraduate",
+  },
+  programmeEligibility: {
+    type: [programmeEligibilitySchema],
+    default: () => [{ programme: "undergraduate", years: [] }],
+  },
+  // Legacy fields remain readable during migration. Branches no longer affect eligibility.
   eligibilityYears: {
     type: [{ type: Number, enum: [1, 2, 3, 4, 5] }],
     default: [],
@@ -101,6 +124,15 @@ const eventSchema = new mongoose.Schema({
 });
 
 eventSchema.pre("validate", function(next) {
+  this.programmeEligibility = normalizeProgrammeEligibility(
+    this.programmeEligibility,
+    this.eligibilityMode,
+    this.eligibilityYears,
+  );
+  const undergraduateRule = this.programmeEligibility.find((rule) => rule.programme === "undergraduate");
+  this.eligibilityYears = this.eligibilityMode === "undergraduate" ? undergraduateRule?.years || [] : [];
+  this.eligibilityBranches = [];
+  this.allowPassedOut = false;
   if (this.registrationType === "individual") {
     this.minTeamSize = 1;
     this.maxTeamSize = 1;

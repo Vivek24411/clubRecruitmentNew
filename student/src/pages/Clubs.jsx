@@ -11,6 +11,7 @@ import {
   PageHeader,
   Skeleton,
 } from "../components/ui";
+import { sortClubCategories } from "../utils/clubCategories";
 
 function SearchIcon() {
   return (
@@ -91,6 +92,10 @@ export default function Clubs() {
         club.longDescription?.toLowerCase().includes(query)),
     );
   }, [category, clubs, searchTerm]);
+  const categories = useMemo(
+    () => sortClubCategories((clubs || []).map((club) => club.category)),
+    [clubs],
+  );
 
   return (
     <Page>
@@ -115,7 +120,7 @@ export default function Clubs() {
           onChange={(event) => setSearchTerm(event.target.value)}
         />
       </div>
-        <div className="flex rounded-sm border border-line bg-surface p-1" role="group" aria-label="Club category">{[["all", "All"], ["technical", "Technical"], ["cultural", "Cultural"]].map(([value, label]) => <button key={value} type="button" className={`px-3 py-1.5 text-sm font-semibold ${category === value ? "bg-ink text-white" : "text-ink-3"}`} onClick={() => setCategory(value)}>{label}</button>)}</div>
+        <div className="flex flex-wrap rounded-sm border border-line bg-surface p-1" role="group" aria-label="Club category">{[["all", "All"], ...categories.map((value) => [value, value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())])].map(([value, label]) => <button key={value} type="button" className={`px-3 py-1.5 text-sm font-semibold ${category === value ? "bg-ink text-white" : "text-ink-3"}`} onClick={() => setCategory(value)}>{label}</button>)}</div>
       </div>
 
       <div className="mt-8">
@@ -157,7 +162,7 @@ export default function Clubs() {
                 <article key={club._id} className="club-card card card-interactive group flex h-full flex-col overflow-hidden">
                   <div className="flex min-h-32 items-start justify-between gap-4 border-b border-line bg-paper-2/60 p-5">
                     <ClubMark club={club} />
-                    <span className="badge badge-neutral capitalize">{club.category || "Club"}</span>
+                    <span className="badge badge-neutral capitalize">{(club.category || "Club").replace(/_/g, " ")}</span>
                   </div>
                   <div className="flex flex-1 flex-col p-5">
                     <Link to={`/club/${club._id}`} className="block min-h-[3.4rem]">

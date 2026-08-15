@@ -5,6 +5,14 @@ import { useNavigate } from "react-router-dom";
 import { StudentContextData } from "../context/StudentContext";
 import { Button, Card, Field, Input, Meta, Monogram, Page, PageHeader } from "../components/ui";
 
+const PROGRAMME_LABELS = {
+  undergraduate: "Undergraduate",
+  mtech: "M.Tech.",
+  msc: "M.Sc.",
+  mba: "MBA",
+  phd: "PhD",
+};
+
 const DETAIL_FIELDS = [
   ["name", "Full name"],
   ["phoneNumber", "Phone number"],
@@ -143,7 +151,8 @@ export default function Profile() {
             <p className="mt-1.5 break-all text-sm text-ink-3">{profile?.email}</p>
             <dl className="mt-6 space-y-4 border-t border-line pt-5">
               <Meta label="Enrollment" value={profile?.enrollmentNumber} />
-              <Meta label="Branch" value={profile?.branch} />
+              <Meta label="Programme" value={PROGRAMME_LABELS[profile?.programme] || "Undergraduate"} />
+              <Meta label="Branch/discipline" value={profile?.branch} />
               <Meta label="Year" value={profile?.year} />
             </dl>
             <Field id="profilePicture" label="Profile picture" hint="Square JPG, PNG, or WebP. 512 × 512 px works best." className="mt-6"><input id="profilePicture" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files[0] || null; setProfilePicture(file); setPreview(file ? URL.createObjectURL(file) : ""); }} /></Field>
@@ -169,7 +178,8 @@ export default function Profile() {
                   />
                 </Field>
               ))}
-              <Field id="branch" label="Branch" hint="Contact an administrator if this is incorrect."><Input id="branch" value={profile?.branch || ""} disabled /></Field>
+              <Field id="programme" label="Programme"><Input id="programme" value={PROGRAMME_LABELS[profile?.programme] || "Undergraduate"} disabled /></Field>
+              <Field id="branch" label="Branch or discipline" hint="Contact an administrator if this is incorrect."><Input id="branch" value={profile?.branch || ""} disabled /></Field>
               <Field id="academicYear" label="Academic year" hint="Advances automatically at the annual June rollover."><Input id="academicYear" value={profile?.year || ""} disabled /></Field>
             </div>
 

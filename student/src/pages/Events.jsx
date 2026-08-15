@@ -3,6 +3,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { Link } from "react-router-dom";
 import { daysUntil, eventDeadline, formatDateTime } from "../utils/date";
+import { sortClubCategories } from "../utils/clubCategories";
 import {
   Badge,
   Button,
@@ -130,6 +131,10 @@ export default function Events() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events]);
+  const categories = useMemo(
+    () => sortClubCategories(events.map((event) => event.clubId?.category)),
+    [events],
+  );
 
   const filtersActive = searchQuery !== "" || filter !== "open" || category !== "all" || eventType !== "all";
 
@@ -176,7 +181,7 @@ export default function Events() {
           </Select>
         </Field>
 
-        <Field label="Club" id="category" className="md:w-40"><Select id="category" value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">All clubs</option><option value="technical">Technical</option><option value="cultural">Cultural</option></Select></Field>
+        <Field label="Club" id="category" className="md:w-40"><Select id="category" value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">All clubs</option>{categories.map((type) => <option key={type} value={type}>{type.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</Select></Field>
 
         <Field label="Type" id="eventType" className="md:w-44"><Select id="eventType" value={eventType} onChange={(event) => setEventType(event.target.value)}><option value="all">All types</option><option value="recruitment">Recruitment</option><option value="competition">Competition</option><option value="hackathon">Hackathon</option><option value="workshop">Workshop</option><option value="other">Other</option></Select></Field>
 

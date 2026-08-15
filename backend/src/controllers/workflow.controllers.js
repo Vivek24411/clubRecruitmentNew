@@ -42,8 +42,8 @@ async function workflowData(event) {
     eventId: event._id,
     overallStatus: { $ne: "withdrawn" },
   })
-      .populate("studentId", "name email branch year academicYear academicStatus enrollmentNumber phoneNumber profilePicture")
-      .populate("membersAccepted", "name email branch year academicYear academicStatus enrollmentNumber phoneNumber profilePicture")
+      .populate("studentId", "name email programme branch year academicYear academicStatus enrollmentNumber phoneNumber profilePicture")
+      .populate("membersAccepted", "name email programme branch year academicYear academicStatus enrollmentNumber phoneNumber profilePicture")
       .sort({ registeredAt: 1 });
   await Promise.all(registrations.map((registration) => ensureRegistrationWorkflow(event, registration)));
   const registrationIds = registrations.map((registration) => registration._id);
@@ -53,8 +53,8 @@ async function workflowData(event) {
       registrationId: { $in: registrationIds },
       status: { $nin: ["revoked", "withdrawn"] },
     })
-      .populate("studentId", "name email branch year enrollmentNumber phoneNumber profilePicture")
-      .populate("participantIds", "name email branch year enrollmentNumber phoneNumber profilePicture")
+      .populate("studentId", "name email programme branch year enrollmentNumber phoneNumber profilePicture")
+      .populate("participantIds", "name email programme branch year enrollmentNumber phoneNumber profilePicture")
       .sort({ createdAt: 1 }),
     roundSubmissionModel.find({ eventId: event._id, registrationId: { $in: registrationIds } })
       .populate("submittedBy", "name email")

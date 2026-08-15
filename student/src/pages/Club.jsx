@@ -145,7 +145,7 @@ export default function Club() {
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
           <ClubMark club={club} />
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2"><p className="eyebrow eyebrow-accent">Student club</p><Badge className="capitalize">{club.category || "technical"}</Badge></div>
+            <div className="flex flex-wrap items-center gap-2"><p className="eyebrow eyebrow-accent">Student club</p><Badge className="capitalize">{(club.category || "technical").replace(/_/g, " ")}</Badge></div>
             <h1 className="display mt-2 text-3xl sm:text-4xl">{club.name}</h1>
             {club.shortDescription && (
               <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-2">

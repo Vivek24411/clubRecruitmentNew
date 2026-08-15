@@ -21,6 +21,13 @@ const studentSchema = new mongoose.Schema({
     required: true,
     select: false,
   },
+  programme: {
+    type: String,
+    enum: ["undergraduate", "mtech", "msc", "mba", "phd"],
+    default: "undergraduate",
+    required: true,
+    index: true,
+  },
   branch:{
     type: String,
     required: true,
@@ -50,7 +57,8 @@ const studentSchema = new mongoose.Schema({
   },
   courseDurationYears: {
     type: Number,
-    enum: [4, 5],
+    min: 1,
+    max: 5,
     default: 4,
   },
   phoneNumber: {

@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { eventDeadline, formatDateTime } from "../utils/date";
+import { eligibilitySummary } from "../utils/eligibility";
 import {
   Badge,
   Button,
@@ -21,20 +22,6 @@ const STATUS_TONE = {
   archived: "neutral",
   cancelled: "bad",
 };
-
-function eligibilitySummary(event) {
-  const parts = [];
-  if (event.eligibilityYears?.length) {
-    const labels = ["", "First", "Second", "Third", "Fourth", "Fifth"];
-    parts.push(`${event.eligibilityYears.map((year) => labels[year]).join(", ")} year`);
-  }
-  if (event.allowPassedOut) parts.push("Passed-out students");
-  if (event.eligibilityBranches?.length) {
-    parts.push(`${event.eligibilityBranches.length} selected branch${event.eligibilityBranches.length === 1 ? "" : "es"}`);
-  }
-  if (event.eligibility) parts.push(event.eligibility);
-  return parts.length ? parts.join(" · ") : "Open to all current students";
-}
 
 export default function Event() {
   const { eventId } = useParams();
@@ -152,8 +139,8 @@ export default function Event() {
                 }
               />
               <Meta label="Eligibility" value={eligibilitySummary(event)} />
-              <Meta label="Eligible years" value={event.eligibilityYears?.length ? event.eligibilityYears.map((year) => `${year}${year === 1 ? "st" : year === 2 ? "nd" : year === 3 ? "rd" : "th"}`).join(", ") : "All current years"} />
-              <Meta label="Eligible branches" value={event.eligibilityBranches?.length ? event.eligibilityBranches.join(", ") : "Open to all branches"} />
+              <Meta label="Branches/disciplines" value="All within the selected programmes" />
+              {event.eligibility && <Meta label="Additional note" value={event.eligibility} />}
             </MetaGrid>
           </section>
 

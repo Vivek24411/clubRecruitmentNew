@@ -14,6 +14,7 @@ const {
   upsertScheduleSlot,
 } = require("../src/services/eventWorkflow.services");
 const registerationEventModel = require("../src/models/registerationEvent.model");
+const eventModel = require("../src/models/event.model");
 const scheduleSlotModel = require("../src/models/scheduleSlot.model");
 const scheduleReservationModel = require("../src/models/scheduleReservation.model");
 const roundCandidateModel = require("../src/models/roundCandidate.model");
@@ -33,6 +34,24 @@ test("student profiles and sessions expose optional visual media", () => {
   assert.ok(sessionModel.schema.path("sessionThumbnail"));
   assert.ok(sessionModel.schema.path("sessionThumbnailPublicId"));
   assert.ok(sessionModel.schema.path("createdAt"));
+  assert.deepEqual(studentModel.schema.path("programme").enumValues, ["undergraduate", "mtech", "msc", "mba", "phd"]);
+});
+
+test("event records normalize programme rules and discard legacy branch eligibility", async () => {
+  const event = new eventModel({
+    clubId: new mongoose.Types.ObjectId(),
+    title: "Programme test",
+    shortDescription: "Programme eligibility",
+    longDescription: "Programme eligibility validation",
+    eligibilityMode: "all_iitr",
+    programmeEligibility: [{ programme: "mtech", years: [1, 2] }],
+    eligibilityBranches: ["A restricted branch"],
+    allowPassedOut: true,
+  });
+  await event.validate();
+  assert.deepEqual(event.programmeEligibility.map((rule) => rule.toObject()), [{ programme: "mtech", years: [1, 2] }]);
+  assert.deepEqual(event.eligibilityBranches, []);
+  assert.equal(event.allowPassedOut, false);
 });
 
 test("registration attempts are historical rather than uniquely locked per student", () => {
@@ -50,11 +69,12 @@ test("academic year rolls on the configured June date", () => {
   assert.equal(inferProgramStartYear(3, new Date("2026-08-01T10:00:00Z"), config), 2024);
 });
 
-test("default academic options include the five-year GPT branch", () => {
+test("default academic options include the five-year integrated GPT programme", () => {
   assert.deepEqual(
-    DEFAULT_BRANCHES.find((branch) => branch.name === "Geophysical Technology (GPT)"),
-    { name: "Geophysical Technology (GPT)", durationYears: 5 },
+    DEFAULT_BRANCHES.find((branch) => branch.name === "Integrated M.Tech. Geophysical Technology"),
+    { name: "Integrated M.Tech. Geophysical Technology", durationYears: 5 },
   );
+  assert.equal(DEFAULT_BRANCHES.length, 20);
 });
 
 test("academic state becomes passed out after the configured course duration", () => {
@@ -74,6 +94,47 @@ test("event eligibility enforces structured years", () => {
   };
   assert.equal(eventEligibility({ eligibilityYears: [2], eligibilityBranches: [], allowPassedOut: false }, student, settings).eligible, true);
   assert.equal(eventEligibility({ eligibilityYears: [1], eligibilityBranches: [], allowPassedOut: false }, student, settings).eligible, false);
+});
+
+test("postgraduate and PhD durations use the June programme rollover", () => {
+  const settings = { academicConfiguration: { rolloverMonth: 6, rolloverDay: 1, branches: [] } };
+  const mtech = deriveAcademicState({
+    programme: "mtech",
+    programStartYear: 2024,
+    academicYear: 2,
+    branch: "Power Systems Engineering",
+  }, settings, new Date("2026-06-01T10:00:00Z"));
+  const phd = deriveAcademicState({
+    programme: "phd",
+    programStartYear: 2022,
+    academicYear: 4,
+    branch: "Electrical Engineering",
+  }, settings, new Date("2026-06-01T10:00:00Z"));
+  assert.equal(mtech.academicStatus, "passed_out");
+  assert.equal(mtech.courseDurationYears, 2);
+  assert.equal(phd.academicYear, 5);
+  assert.equal(phd.courseDurationYears, 5);
+});
+
+test("event eligibility uses programme and year but never branch", () => {
+  const settings = { academicConfiguration: { rolloverMonth: 6, rolloverDay: 1, branches: [] } };
+  const student = {
+    programme: "mtech",
+    programStartYear: inferProgramStartYear(2, new Date(), settings),
+    academicYear: 2,
+    branch: "Any manually entered discipline",
+  };
+  const event = {
+    eligibilityMode: "all_iitr",
+    programmeEligibility: [
+      { programme: "undergraduate", years: [] },
+      { programme: "mtech", years: [2] },
+    ],
+    eligibilityBranches: ["A different branch"],
+  };
+  assert.equal(eventEligibility(event, student, settings).eligible, true);
+  assert.equal(eventEligibility({ ...event, programmeEligibility: [{ programme: "mtech", years: [1] }] }, student, settings).eligible, false);
+  assert.equal(eventEligibility({ ...event, programmeEligibility: [{ programme: "mba", years: [] }] }, student, settings).eligible, false);
 });
 
 test("round normalization supports team and individual interview modes", () => {

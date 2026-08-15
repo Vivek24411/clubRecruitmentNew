@@ -9,6 +9,7 @@ const STATUS_TONES = {
   under_review: "warn", scheduled: "info", eligible: "neutral", active: "accent",
   withdrawn: "neutral", revoked: "neutral", missed: "bad",
 };
+const PROGRAMME_LABELS = { undergraduate: "UG", mtech: "M.Tech.", msc: "M.Sc.", mba: "MBA", phd: "PhD" };
 const displayDate = (value) => value ? new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "Not scheduled";
 const localDateTime = (value) => {
   if (!value) return "";
@@ -29,7 +30,7 @@ function PersonRow({ student, captain = false }) {
     <div className="grid items-center gap-2 border-t border-line/70 py-2 text-xs first:border-0 sm:grid-cols-[1.1fr_1.2fr_.8fr]">
       <div className="flex min-w-0 items-center gap-2.5"><StudentAvatar student={student} /><p className="min-w-0 truncate font-semibold text-ink">{student?.name || "Student"}{captain ? " · Captain" : ""}</p></div>
       <p className="break-all text-ink-3">{student?.email || "—"}</p>
-      <p className="text-ink-3">{student?.branch || student?.enrollmentNumber || "—"}</p>
+      <p className="text-ink-3">{[PROGRAMME_LABELS[student?.programme] || "UG", student?.branch || student?.enrollmentNumber].filter(Boolean).join(" · ") || "—"}</p>
     </div>
   );
 }
@@ -43,7 +44,7 @@ function CandidateIdentity({ candidate, registration, finalRound }) {
         <div className="min-w-0">
           <p className="font-semibold">{student?.name || "Student"}</p>
           <p className="mt-0.5 break-all text-xs text-ink-3">{student?.email}</p>
-          <p className="mt-1 text-xs text-ink-3">{student?.branch || "Branch not provided"}{student?.enrollmentNumber ? ` · ${student.enrollmentNumber}` : ""}</p>
+          <p className="mt-1 text-xs text-ink-3">{PROGRAMME_LABELS[student?.programme] || "UG"} · {student?.branch || "Branch not provided"}{student?.enrollmentNumber ? ` · ${student.enrollmentNumber}` : ""}</p>
           <p className="mt-1 text-xs text-ink-4">Individual evaluation</p>
           <Badge className="mt-2 capitalize" tone={STATUS_TONES[candidate.status]}>
             {finalRound && candidate.status === "advanced" ? "selected" : candidate.status.replaceAll("_", " ")}

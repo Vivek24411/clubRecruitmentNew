@@ -70,12 +70,17 @@ export default function StudentLayout({ children }) {
 
       <header className={`app-header ${lifted ? "is-lifted" : ""}`}>
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5 sm:px-6">
-          <NavLink to="/" className="group mr-auto flex items-center gap-3">
-            <span className="brand-mark">D</span>
-            <span>
-              <span className="brand-name block text-sm font-semibold leading-tight">Discovr</span>
-              <span className="eyebrow brand-meta mt-0.5 block">Student network</span>
-            </span>
+          <NavLink
+            to="/"
+            className="group mr-auto flex items-center gap-2.5"
+            aria-label="Discovr home"
+          >
+            <img
+              src="/discovr-o.png"
+              alt=""
+              className="block h-8 w-8 flex-none object-contain transition-transform duration-300 group-hover:scale-105"
+            />
+            <span className="brand-name text-base font-semibold leading-none">Discovr</span>
           </NavLink>
 
           <SlidingNav

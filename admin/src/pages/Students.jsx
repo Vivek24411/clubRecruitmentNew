@@ -19,9 +19,9 @@ export default function Students() {
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [academicOptions, setAcademicOptions] = useState({ branches: [] });
+  const [academicOptions, setAcademicOptions] = useState({ branches: [], programmes: [] });
   const [editing, setEditing] = useState(null);
-  const [academicForm, setAcademicForm] = useState({ branch: "", academicYear: 1 });
+  const [academicForm, setAcademicForm] = useState({ programme: "undergraduate", branch: "", academicYear: 1 });
   const [savingAcademics, setSavingAcademics] = useState(false);
 
   const load = useCallback(async () => {
@@ -47,13 +47,17 @@ export default function Students() {
   useEffect(() => {
     axios
       .get(`${import.meta.env.VITE_BASE_URI}/admin/settings`)
-      .then(({ data }) => setAcademicOptions(data.settings?.academicConfiguration || { branches: [] }))
+      .then(({ data }) => setAcademicOptions({
+        branches: data.settings?.academicConfiguration?.branches || [],
+        programmes: data.settings?.programmes || [],
+      }))
       .catch(() => toast.error("Could not load academic options"));
   }, []);
 
   const openAcademicEditor = (student) => {
     setEditing(student);
     setAcademicForm({
+      programme: student.programme || "undergraduate",
       branch: student.branch || academicOptions.branches[0]?.name || "",
       academicYear: Number(student.academicYear) || 1,
     });
@@ -159,7 +163,7 @@ export default function Students() {
                     </td>
                     <td className="tabular">{student.enrollmentNumber || "—"}</td>
                     <td className="text-ink-2">
-                      {[student.branch, student.year].filter(Boolean).join(" · ") || "—"}
+                      {[academicOptions.programmes.find((programme) => programme.value === (student.programme || "undergraduate"))?.label || "Undergraduate", student.branch, student.year].filter(Boolean).join(" · ") || "—"}
                     </td>
                     <td>
                       <Badge tone={suspended ? "bad" : "ok"}>{student.status || "active"}</Badge>
@@ -204,23 +208,34 @@ export default function Students() {
         description={editing ? `Update the verified course details for ${editing.name}. This action is recorded in the audit log.` : ""}
       >
         <form onSubmit={saveAcademics} className="space-y-4">
-          <Field label="Branch" id="studentBranch" required>
-            <Select
-              id="studentBranch"
-              value={academicForm.branch}
-              onChange={(event) => {
-                const branch = academicOptions.branches.find((item) => item.name === event.target.value);
-                setAcademicForm({
-                  branch: event.target.value,
-                  academicYear: Math.min(academicForm.academicYear, branch?.durationYears || 4),
-                });
-              }}
-              required
-            >
-              {academicOptions.branches.map((branch) => (
-                <option key={branch.name} value={branch.name}>{branch.name}</option>
-              ))}
+          <Field label="Programme" id="studentProgramme" required>
+            <Select id="studentProgramme" value={academicForm.programme} onChange={(event) => setAcademicForm({ programme: event.target.value, branch: "", academicYear: 1 })} required>
+              {academicOptions.programmes.map((programme) => <option key={programme.value} value={programme.value}>{programme.label}</option>)}
             </Select>
+          </Field>
+          <Field label="Branch or discipline" id="studentBranch" required>
+            {academicForm.programme === "undergraduate" ? (
+              <Select
+                id="studentBranch"
+                value={academicForm.branch}
+                onChange={(event) => {
+                  const branch = academicOptions.branches.find((item) => item.name === event.target.value);
+                  setAcademicForm({
+                    ...academicForm,
+                    branch: event.target.value,
+                    academicYear: Math.min(academicForm.academicYear, branch?.durationYears || 4),
+                  });
+                }}
+                required
+              >
+                <option value="">Choose branch/programme</option>
+                {academicOptions.branches.map((branch) => (
+                  <option key={branch.name} value={branch.name}>{branch.name}</option>
+                ))}
+              </Select>
+            ) : (
+              <Input id="studentBranch" value={academicForm.branch} onChange={(event) => setAcademicForm({ ...academicForm, branch: event.target.value })} maxLength={100} required />
+            )}
           </Field>
           <Field label="Current year" id="studentYear" required>
             <Select
@@ -230,7 +245,9 @@ export default function Students() {
               required
             >
               {Array.from({
-                length: academicOptions.branches.find((branch) => branch.name === academicForm.branch)?.durationYears || 4,
+                length: academicForm.programme === "undergraduate"
+                  ? academicOptions.branches.find((branch) => branch.name === academicForm.branch)?.durationYears || 4
+                  : academicOptions.programmes.find((programme) => programme.value === academicForm.programme)?.durationYears || 5,
               }, (_, index) => (
                 <option key={index + 1} value={index + 1}>
                   {['First', 'Second', 'Third', 'Fourth', 'Fifth'][index]} year

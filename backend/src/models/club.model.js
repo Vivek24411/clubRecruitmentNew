@@ -31,8 +31,10 @@ const clubSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    enum: ["technical", "cultural"],
     default: "technical",
+    trim: true,
+    lowercase: true,
+    maxlength: 50,
     index: true,
   },
   shortDescription: {

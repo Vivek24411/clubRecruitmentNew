@@ -15,6 +15,7 @@ const { notifyStudent, notifyTeam } = require("../services/notification.services
 const { sendOtp } = require("../services/student.services");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
+const { normalizeProgrammeEligibility } = require("../services/academic.services");
 const {
   ensureEventRounds,
   normalizeRounds,
@@ -475,10 +476,14 @@ module.exports.addEvent = async (req, res) => {
       : round.evaluationScope,
   }));
   const roundDetails = req.body.roundsJSON ? [] : normalizedRoundDetails(rawRounds);
-  const eligibilityYears = parsedArray(req.body.eligibilityYearsJSON)
+  const eligibilityMode = req.body.eligibilityMode === "all_iitr" ? "all_iitr" : "undergraduate";
+  const legacyYears = parsedArray(req.body.eligibilityYearsJSON)
     .map(Number).filter((year) => year >= 1 && year <= 5);
-  const eligibilityBranches = parsedArray(req.body.eligibilityBranchesJSON)
-    .map((branch) => String(branch).trim()).filter(Boolean).slice(0, 100);
+  const programmeEligibility = normalizeProgrammeEligibility(
+    parsedArray(req.body.programmeEligibilityJSON),
+    eligibilityMode,
+    legacyYears,
+  );
 
 
   let eventBanner = "";
@@ -518,9 +523,8 @@ module.exports.addEvent = async (req, res) => {
       eventType: eventType || "recruitment",
       rounds,
       numberOfRounds: rounds.length,
-      eligibilityYears,
-      eligibilityBranches,
-      allowPassedOut: req.body.allowPassedOut === true || req.body.allowPassedOut === "true",
+      eligibilityMode,
+      programmeEligibility,
       deadlineNotificationsEnabled: req.body.deadlineNotificationsEnabled !== "false",
     });
 
@@ -798,10 +802,16 @@ module.exports.updateEvent = async (req, res) => {
   if (req.body.eligibilityYearsJSON !== undefined) {
     event.eligibilityYears = parsedArray(req.body.eligibilityYearsJSON).map(Number).filter((year) => year >= 1 && year <= 5);
   }
-  if (req.body.eligibilityBranchesJSON !== undefined) {
-    event.eligibilityBranches = parsedArray(req.body.eligibilityBranchesJSON).map((branch) => String(branch).trim()).filter(Boolean).slice(0, 100);
+  if (req.body.eligibilityMode !== undefined) {
+    event.eligibilityMode = req.body.eligibilityMode === "all_iitr" ? "all_iitr" : "undergraduate";
   }
-  if (req.body.allowPassedOut !== undefined) event.allowPassedOut = req.body.allowPassedOut === true || req.body.allowPassedOut === "true";
+  if (req.body.programmeEligibilityJSON !== undefined || req.body.eligibilityMode !== undefined) {
+    event.programmeEligibility = normalizeProgrammeEligibility(
+      parsedArray(req.body.programmeEligibilityJSON, event.programmeEligibility),
+      event.eligibilityMode,
+      event.eligibilityYears,
+    );
+  }
   if (req.body.roundsJSON !== undefined) {
     const rounds = normalizeRounds(parsedArray(req.body.roundsJSON)).map((round) => ({
       ...round,
@@ -1044,13 +1054,14 @@ module.exports.exportApplications = async (req, res) => {
   const event = await ownedEvent(req.params.eventId, req.club._id);
   if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
   const registrations = await registerationEventModel.find({ eventId: event._id }).populate("studentId").populate("membersAccepted");
-  const rows = [["Team", "Captain", "Email", "Phone", "Branch", "Year", "Members", "Status", "Score", "Registered At"]];
+  const rows = [["Team", "Captain", "Email", "Phone", "Programme", "Branch / Discipline", "Year", "Members", "Status", "Score", "Registered At"]];
   for (const registration of registrations) {
     rows.push([
       registration.teamName,
       registration.studentId?.name,
       registration.studentId?.email,
       registration.studentId?.phoneNumber,
+      registration.studentId?.programme || "undergraduate",
       registration.studentId?.branch,
       registration.studentId?.year,
       (registration.membersAccepted || []).map((member) => member.name).join(", "),
@@ -1068,7 +1079,7 @@ module.exports.exportApplications = async (req, res) => {
 module.exports.getSessionAttendees = async (req, res) => {
   const session = await sessionModel.findOne({ _id: req.params.sessionId, clubId: req.club._id });
   if (!session) return res.status(404).json({ success: false, msg: "Session not found" });
-  const attendees = await sessionRsvpModel.find({ sessionId: session._id }).populate("studentId", "name email branch year enrollmentNumber").sort({ createdAt: 1 });
+  const attendees = await sessionRsvpModel.find({ sessionId: session._id }).populate("studentId", "name email programme branch year enrollmentNumber").sort({ createdAt: 1 });
   return res.json({ success: true, session, attendees });
 };
 

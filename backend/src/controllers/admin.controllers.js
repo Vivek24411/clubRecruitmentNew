@@ -15,8 +15,15 @@ const { destroyUploadedFile } = require("../utils/uploads");
 const {
   YEAR_LABELS,
   inferProgramStartYear,
+  normalizeProgramme,
   normalizedAcademicConfiguration,
+  programmeDurationYears,
+  PROGRAMME_DEFINITIONS,
 } = require("../services/academic.services");
+const {
+  normalizeClubType,
+  normalizedClubTypes,
+} = require("../services/platformConfiguration.services");
 
 function escapedRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -69,7 +76,8 @@ module.exports.addClub = async (req, res) => {
     return res.status(400).json({ errors: error.array(), success: false, msg: "Please correct the club details" });
   }
 
-  const { name, userName, password, category } = req.body;
+  const { name, userName, password } = req.body;
+  const category = normalizeClubType(req.body.category);
   const accountEmail = String(req.body.accountEmail || "").trim().toLowerCase();
   const contactEmail = req.body.useAccountEmailForContact === true || req.body.useAccountEmailForContact === "true"
     ? accountEmail
@@ -81,6 +89,11 @@ module.exports.addClub = async (req, res) => {
 
 
   try {
+    const settings = await platformSettingsModel.findOne({ key: "global" });
+    if (!normalizedClubTypes(settings).includes(category)) {
+      await destroyUploadedFile(req.file);
+      return res.status(400).json({ success: false, msg: "Choose a configured club type" });
+    }
     const club = await clubModel.findOne({ userName: userName.trim().toLowerCase() });
     if (club) {
       await destroyUploadedFile(req.file);
@@ -245,17 +258,21 @@ module.exports.updateStudentAcademics = async (req, res) => {
 
   const settings = await platformSettingsModel.findOne({ key: "global" });
   const configuration = normalizedAcademicConfiguration(settings);
+  const programme = normalizeProgramme(req.body.programme);
   const branch = configuration.branches.find((item) => item.name === req.body.branch);
+  const branchName = String(req.body.branch || "").trim();
   const academicYear = Number(req.body.academicYear);
-  if (!branch) {
+  if (programme === "undergraduate" && !branch) {
     return res.status(400).json({ success: false, msg: "Choose a branch from the configured branch list" });
   }
-  if (academicYear > branch.durationYears) {
+  const courseDurationYears = programmeDurationYears(programme, branchName, configuration, branch?.durationYears);
+  if (academicYear > courseDurationYears) {
     return res.status(400).json({ success: false, msg: "The selected year is not valid for this course" });
   }
 
-  student.branch = branch.name;
-  student.courseDurationYears = branch.durationYears;
+  student.programme = programme;
+  student.branch = branchName;
+  student.courseDurationYears = courseDurationYears;
   student.academicYear = academicYear;
   student.academicStatus = "studying";
   student.programStartYear = inferProgramStartYear(academicYear, new Date(), configuration);
@@ -267,7 +284,7 @@ module.exports.updateStudentAcademics = async (req, res) => {
     action: "student.academics_update",
     targetType: "student",
     targetId: student._id,
-    metadata: { branch: student.branch, academicYear },
+    metadata: { programme, branch: student.branch, academicYear },
   });
   return res.json({ success: true, msg: "Student academics corrected", student });
 };
@@ -287,6 +304,14 @@ module.exports.updateClubStatus = async (req, res) => {
 module.exports.updateClubDetails = async (req, res) => {
   const club = await clubModel.findById(req.params.clubId);
   if (!club) return res.status(404).json({ success: false, msg: "Club not found" });
+  if (req.body.category !== undefined) {
+    const settings = await platformSettingsModel.findOne({ key: "global" });
+    const category = normalizeClubType(req.body.category);
+    if (!normalizedClubTypes(settings).includes(category)) {
+      return res.status(400).json({ success: false, msg: "Choose a configured club type" });
+    }
+    req.body.category = category;
+  }
   for (const field of ["category", "accountEmail", "contactEmail"]) {
     if (req.body[field] !== undefined) {
       club[field] = typeof req.body[field] === "string" ? req.body[field].trim().toLowerCase() : req.body[field];
@@ -379,16 +404,27 @@ module.exports.getSettings = async (req, res) => {
     settings: {
       ...settings.toObject(),
       academicConfiguration: normalizedAcademicConfiguration(settings),
+      clubTypes: normalizedClubTypes(settings),
+      programmes: PROGRAMME_DEFINITIONS,
     },
   });
 };
 
 module.exports.updateSettings = async (req, res) => {
+  const clubTypes = req.body.clubTypes === undefined ? undefined : normalizedClubTypes({ clubTypes: req.body.clubTypes });
+  if (clubTypes) {
+    const usedTypes = await clubModel.distinct("category");
+    const missingType = usedTypes.find((type) => type && !clubTypes.includes(type));
+    if (missingType) {
+      return res.status(400).json({ success: false, msg: `The ${missingType} club type is still assigned to a club` });
+    }
+  }
   const update = {
     registrationEnabled: req.body.registrationEnabled,
     maintenanceMessage: req.body.maintenanceMessage,
     recruitmentCycle: req.body.recruitmentCycle,
     academicConfiguration: req.body.academicConfiguration,
+    clubTypes,
     updatedAt: new Date(),
     updatedBy: req.admin.email,
   };
@@ -399,5 +435,14 @@ module.exports.updateSettings = async (req, res) => {
     { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
   );
   await writeAudit({ actorRole: "admin", actorId: req.admin.email, action: "settings.update", targetType: "platform", targetId: "global", metadata: update });
-  return res.json({ success: true, msg: "Recruitment settings updated", settings });
+  return res.json({
+    success: true,
+    msg: "Recruitment settings updated",
+    settings: {
+      ...settings.toObject(),
+      academicConfiguration: normalizedAcademicConfiguration(settings),
+      clubTypes: normalizedClubTypes(settings),
+      programmes: PROGRAMME_DEFINITIONS,
+    },
+  });
 };
