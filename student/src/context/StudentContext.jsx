@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { useCallback, useEffect } from "react";
 import axios from "axios";
+import { detachPushRegistration } from "../utils/pushNotifications";
 
 export const StudentContextData = React.createContext(null);
 
@@ -27,6 +28,7 @@ const StudentContext = ({ children }) => {
 
   const signOut = useCallback(async () => {
     try {
+      await detachPushRegistration().catch(() => {});
       await axios.post(`${import.meta.env.VITE_BASE_URI}/student/logout`);
     } finally {
       localStorage.removeItem("token");

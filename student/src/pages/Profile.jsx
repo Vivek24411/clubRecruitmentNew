@@ -1,10 +1,11 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { uploadDirect } from "../utils/directUpload";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { StudentContextData } from "../context/StudentContext";
 import { Button, Card, Field, Input, Meta, Monogram, Page, PageHeader } from "../components/ui";
+import { disablePushNotifications, enablePushNotifications, getPushNotificationState } from "../utils/pushNotifications";
 
 const PROGRAMME_LABELS = {
   undergraduate: "Undergraduate",
@@ -74,6 +75,32 @@ export default function Profile() {
   const [profilePicture, setProfilePicture] = useState(null);
   const [preview, setPreview] = useState("");
   const pictureInput = useRef(null);
+  const [pushState, setPushState] = useState({ status: "loading", configured: true });
+  const [pushWorking, setPushWorking] = useState(false);
+
+  const refreshPushState = useCallback(() => {
+    getPushNotificationState().then(setPushState);
+  }, []);
+
+  useEffect(() => {
+    refreshPushState();
+    window.addEventListener("push-state-changed", refreshPushState);
+    return () => window.removeEventListener("push-state-changed", refreshPushState);
+  }, [refreshPushState]);
+
+  const changePushState = async (enable) => {
+    setPushWorking(true);
+    try {
+      const state = enable ? await enablePushNotifications() : await disablePushNotifications();
+      setPushState(state);
+      toast.success(enable ? "Browser notifications enabled" : "Browser notifications disabled on this device");
+    } catch (error) {
+      toast.error(error.message || "Could not update browser notifications");
+      refreshPushState();
+    } finally {
+      setPushWorking(false);
+    }
+  };
 
   const chooseProfilePicture = (file) => {
     if (file && (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024)) {
@@ -216,6 +243,23 @@ export default function Profile() {
                   onChange={setNotification("email")}
                   label="Email updates"
                 />
+              </div>
+              <div className="mt-5 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-ink">Browser push notifications</p>
+                  <p className="mt-1 text-xs leading-relaxed text-ink-3">
+                    {pushState.status === "enabled" && "Enabled on this browser. You can receive updates when Discovr is closed."}
+                    {pushState.status === "blocked" && "Blocked by your browser. Allow notifications in the site settings to enable them."}
+                    {pushState.status === "unsupported" && "This browser does not support web push notifications."}
+                    {pushState.status === "unconfigured" && "Firebase push notifications have not been configured for this deployment yet."}
+                    {["disabled", "loading"].includes(pushState.status) && "Enable this once per browser to receive recruitment updates while the site is closed."}
+                  </p>
+                </div>
+                {pushState.status === "enabled" ? (
+                  <Button type="button" size="sm" variant="secondary" loading={pushWorking} disabled={pushWorking} onClick={() => changePushState(false)}>Disable on this device</Button>
+                ) : (
+                  <Button type="button" size="sm" variant="secondary" loading={pushWorking} disabled={pushWorking || ["blocked", "unsupported", "unconfigured", "loading"].includes(pushState.status)} onClick={() => changePushState(true)}>Enable browser notifications</Button>
+                )}
               </div>
             </fieldset>
 

@@ -3,6 +3,8 @@ import { NavLink, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { StudentContextData } from "../context/StudentContext";
 import { Monogram, SlidingNav } from "./ui";
+import { toast } from "react-toastify";
+import { syncPushRegistration } from "../utils/pushNotifications";
 
 const publicLinks = [
   ["/", "Discover"],
@@ -41,6 +43,18 @@ export default function StudentLayout({ children }) {
       window.removeEventListener("notifications-updated", loadUnread);
       document.removeEventListener("visibilitychange", onVisibility);
     };
+  }, [loggedInStudent]);
+
+  useEffect(() => {
+    if (!loggedInStudent) return undefined;
+    void syncPushRegistration().catch(() => {});
+    const onPush = (event) => {
+      const message = event.detail?.data || event.detail?.notification || {};
+      toast.info(message.body || message.title || "You have a new recruitment update");
+      window.dispatchEvent(new Event("notifications-updated"));
+    };
+    window.addEventListener("discovr-push-notification", onPush);
+    return () => window.removeEventListener("discovr-push-notification", onPush);
   }, [loggedInStudent]);
 
   useEffect(() => {

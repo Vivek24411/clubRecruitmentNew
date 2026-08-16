@@ -48,6 +48,7 @@ const { attachDirectAsset, attachDirectAssets, signDirectUpload } = require("../
 const { getMyEventWorkflow, submitRoundWork } = require("../controllers/workflow.controllers");
 const { checkEmailDomain } = require("../services/student.services");
 const { catalogueCache, publicCache } = require("../middlewares/cacheControl");
+const { registerPushInstallation, unregisterPushInstallation, getPushInstallationStatus } = require("../controllers/push.controllers");
 const router = express.Router();
 const fitsBcrypt = (value) => Buffer.byteLength(String(value), "utf8") <= 72;
 const isIitrEmail = (value) => checkEmailDomain(value);
@@ -204,6 +205,17 @@ router.get('/notifications', studentAuth, getNotifications)
 router.get('/notifications/unread-count', studentAuth, getUnreadNotificationCount)
 router.post('/notifications/read', studentAuth, [body('notificationId').isMongoId()], validateRequest, markNotificationRead)
 router.post('/notifications/read-all', studentAuth, markAllNotificationsRead)
+
+const validInstallationId = (value) => /^[A-Za-z0-9_-]{10,200}$/.test(String(value || ""));
+router.put('/push/registration', studentAuth, [
+  body('installationId').custom(validInstallationId).withMessage('Invalid Firebase installation ID'),
+], validateRequest, registerPushInstallation)
+router.delete('/push/registration', studentAuth, [
+  body('installationId').custom(validInstallationId).withMessage('Invalid Firebase installation ID'),
+], validateRequest, unregisterPushInstallation)
+router.get('/push/registration', studentAuth, [
+  query('installationId').custom(validInstallationId).withMessage('Invalid Firebase installation ID'),
+], validateRequest, getPushInstallationStatus)
 
 router.get('/sessionRsvp', studentAuth, [query('sessionId').isMongoId()], validateRequest, getSessionRsvp)
 router.post('/sessionRsvp', studentAuth, [body('sessionId').isMongoId()], validateRequest, rsvpSession)

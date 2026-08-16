@@ -11,13 +11,17 @@
     "migrate:v4": "node scripts/migrate-v4-discovr.js",
     "migrate:v5": "node scripts/migrate-v5-programmes.js",
     "migrate:v6": "node scripts/migrate-v6-scale-indexes.js",
+    "migrate:v7": "node scripts/migrate-v7-push-notifications.js",
     "seed:demo": "node scripts/seed-demo.js",
-    "check": "node --check app.js && node --check server.js && node --check worker.js && node --check src/middlewares/directUpload.js && node --check src/services/jobQueue.services.js && node --check src/services/authPrincipalCache.services.js && node --check scripts/seed-demo.js && node --check scripts/migrate-v4-discovr.js && node --check scripts/migrate-v5-programmes.js && node --check scripts/migrate-v6-scale-indexes.js"
+    "check": "node --check app.js && node --check server.js && node --check worker.js && node --check src/middlewares/directUpload.js && node --check src/services/jobQueue.services.js && node --check src/services/firebaseMessaging.services.js && node --check src/services/authPrincipalCache.services.js && node --check scripts/seed-demo.js && node --check scripts/migrate-v4-discovr.js && node --check scripts/migrate-v5-programmes.js && node --check scripts/migrate-v6-scale-indexes.js && node --check scripts/migrate-v7-push-notifications.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cloudinary": "^2.10.0",
@@ -25,6 +29,7 @@
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "express-validator": "^7.2.1",
+    "firebase-admin": "^14.2.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.18.0",
     "multer": "^2.0.2",

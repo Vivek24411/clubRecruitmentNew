@@ -36,6 +36,15 @@ function validateEnv() {
   if (process.env.SESSION_MAX_AGE_MS && (!Number.isFinite(Number(process.env.SESSION_MAX_AGE_MS)) || Number(process.env.SESSION_MAX_AGE_MS) <= 0)) {
     throw new Error("SESSION_MAX_AGE_MS must be a positive number");
   }
+  if (process.env.PUSH_NOTIFICATIONS_ENABLED === "true") {
+    if (!process.env.FIREBASE_PROJECT_ID) throw new Error("FIREBASE_PROJECT_ID is required when push notifications are enabled");
+    const hasFirebaseCredential = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64
+      || process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+      || (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY)
+      || process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    if (!hasFirebaseCredential) throw new Error("Firebase service-account credentials are required when push notifications are enabled");
+    if (!process.env.STUDENT_APP_ORIGIN) throw new Error("STUDENT_APP_ORIGIN is required when push notifications are enabled");
+  }
 }
 
 module.exports = validateEnv;

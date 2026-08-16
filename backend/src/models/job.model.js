@@ -11,6 +11,11 @@ const jobSchema = new mongoose.Schema({
   lockedBy: { type: String, default: null },
   lastError: { type: String, default: "", maxlength: 1000 },
   completedAt: { type: Date, default: null },
+  delivery: {
+    inAppAt: { type: Date, default: null },
+    emailAt: { type: Date, default: null },
+    pushAt: { type: Date, default: null },
+  },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

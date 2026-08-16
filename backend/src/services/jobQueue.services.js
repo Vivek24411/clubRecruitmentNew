@@ -4,6 +4,7 @@ const jobModel = require("../models/job.model");
 const notificationModel = require("../models/notification.model");
 const studentModel = require("../models/student.model");
 const { sendNotificationEmail } = require("./student.services");
+const { sendPushNotification } = require("./firebaseMessaging.services");
 
 const workerId = `${os.hostname()}:${process.pid}:${crypto.randomUUID().slice(0, 8)}`;
 
@@ -45,15 +46,29 @@ async function deliverNotification(job) {
   const student = await studentModel.findById(studentId).select("email notificationPreferences").lean();
   if (!student) return;
   const deliveryKey = `job:${job._id}`;
-  if (student.notificationPreferences?.inApp !== false) {
-    await notificationModel.updateOne(
-      { deliveryKey },
-      { $setOnInsert: { studentId, ...notification, deliveryKey } },
-      { upsert: true },
-    );
+  const markDelivered = (channel) => jobModel.updateOne(
+    { _id: job._id, lockedBy: workerId },
+    { $set: { [`delivery.${channel}At`]: new Date(), updatedAt: new Date() } },
+  );
+  if (!job.delivery?.inAppAt) {
+    if (student.notificationPreferences?.inApp !== false) {
+      await notificationModel.updateOne(
+        { deliveryKey },
+        { $setOnInsert: { studentId, ...notification, deliveryKey } },
+        { upsert: true },
+      );
+    }
+    await markDelivered("inApp");
   }
-  if (student.notificationPreferences?.email !== false) {
-    await sendNotificationEmail(student.email, notification, { idempotencyKey: deliveryKey });
+  if (!job.delivery?.emailAt) {
+    if (student.notificationPreferences?.email !== false) {
+      await sendNotificationEmail(student.email, notification, { idempotencyKey: deliveryKey });
+    }
+    await markDelivered("email");
+  }
+  if (!job.delivery?.pushAt) {
+    await sendPushNotification(studentId, notification);
+    await markDelivered("push");
   }
 }
 
