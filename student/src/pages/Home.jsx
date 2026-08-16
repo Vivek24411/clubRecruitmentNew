@@ -187,10 +187,8 @@ export default function Home() {
                 {openEvents.slice(0, 4).map((event) => (
                   <CardLink key={event._id} to={`/event/${event._id}`} className="group overflow-hidden p-0">
                     <div className="grid min-w-0 sm:grid-cols-[13rem_minmax(0,1fr)]">
-                      <div className="min-w-0 bg-paper-2">
-                        <div className="relative aspect-video w-full overflow-hidden">
-                        {event.eventBanner ? <img src={event.eventBanner} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" /> : <div className="grid h-full place-items-center"><Monogram name={event.clubId?.name || event.title} size="sm" /></div>}
-                        </div>
+                      <div className="relative aspect-video min-w-0 overflow-hidden bg-paper-2 sm:aspect-auto sm:h-full">
+                        {event.eventBanner || event.clubId?.clubBanner ? <img src={event.eventBanner || event.clubId.clubBanner} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" /> : <div className="grid h-full min-h-32 place-items-center"><Monogram name={event.clubId?.name || event.title} size="sm" /></div>}
                       </div>
                       <div className="min-w-0 p-4">
                         <div className="flex items-start justify-between gap-3">
@@ -294,10 +292,14 @@ export default function Home() {
               <Link
                 key={club._id || club.name}
                 to={club._id ? `/club/${club._id}` : "/clubs"}
-                className="card card-interactive group flex min-h-44 flex-col items-center justify-center p-5 text-center"
+                className="card card-interactive group overflow-hidden text-center"
               >
-                {club.clubLogo ? <img src={club.clubLogo} alt="" className="h-20 w-20 rounded-lg border border-line bg-surface object-contain p-1.5 transition-transform duration-500 group-hover:scale-105" /> : <Monogram name={club.name} size="lg" />}
-                <span className="display mt-4 text-base">{club.name}</span>
+                <span className="relative block aspect-[16/7] overflow-hidden bg-gradient-to-br from-ink via-ink-2 to-accent">
+                  {club.clubBanner && <img src={club.clubBanner} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />}
+                  <span className="absolute inset-0 bg-gradient-to-t from-ink/55 via-transparent to-transparent" />
+                  <span className="absolute bottom-3 left-1/2 -translate-x-1/2">{club.clubLogo ? <img src={club.clubLogo} alt="" className="h-16 w-16 rounded-lg border border-white/80 bg-white object-contain p-1.5 shadow-md" /> : <Monogram name={club.name} size="lg" />}</span>
+                </span>
+                <span className="display block px-4 py-4 text-base">{club.name}</span>
               </Link>
             ))}
           </div>

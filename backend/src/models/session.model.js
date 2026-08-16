@@ -76,6 +76,9 @@ sessionSchema.pre('save', function(next) {
   next();
 });
 
+sessionSchema.index({ status: 1, date: 1, time: 1 });
+sessionSchema.index({ clubId: 1, status: 1, createdAt: -1 });
+
 const sessionModel = mongoose.model("Session", sessionSchema);
 
 module.exports = sessionModel;

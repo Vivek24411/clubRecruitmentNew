@@ -16,6 +16,7 @@ import {
   Skeleton,
   Textarea,
 } from "../components/ui";
+import { uploadDirect } from "../utils/directUpload";
 
 const SESSION_STATUSES = ["draft", "published", "cancelled", "completed", "archived"];
 
@@ -63,9 +64,12 @@ export default function Session() {
     event.preventDefault();
     setSaving(true);
     try {
-      const payload = new FormData();
-      ["title", "shortDescription", "longDescription", "date", "time", "duration", "venue", "capacity", "status"].forEach((key) => payload.append(key, session[key] ?? ""));
-      if (thumbnail) payload.append("sessionThumbnail", thumbnail);
+      const directAsset = await uploadDirect(thumbnail, { role: "club", kind: "sessionThumbnail" });
+      const payload = Object.fromEntries(
+        ["title", "shortDescription", "longDescription", "date", "time", "duration", "venue", "capacity", "status"]
+          .map((key) => [key, session[key] ?? ""]),
+      );
+      if (directAsset) payload.directAsset = directAsset;
       const { data } = await axios.patch(
         `${import.meta.env.VITE_BASE_URI}/club/sessions/${sessionId}`,
         payload,

@@ -29,5 +29,6 @@ roundCandidateSchema.index(
 );
 roundCandidateSchema.index({ participantIds: 1, status: 1 });
 roundCandidateSchema.index({ sourceCandidateIds: 1 });
+roundCandidateSchema.index({ eventId: 1, roundId: 1, status: 1, createdAt: 1 });
 
 module.exports = mongoose.model("RoundCandidate", roundCandidateSchema);

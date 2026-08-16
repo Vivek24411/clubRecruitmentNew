@@ -10,5 +10,6 @@ const sessionRsvpSchema = new mongoose.Schema({
 });
 
 sessionRsvpSchema.index({ sessionId: 1, studentId: 1 }, { unique: true });
+sessionRsvpSchema.index({ sessionId: 1, status: 1, createdAt: 1 });
 
 module.exports = mongoose.model('SessionRsvp', sessionRsvpSchema);

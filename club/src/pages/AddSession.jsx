@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
@@ -12,6 +12,7 @@ import {
   Select,
   Textarea,
 } from "../components/ui";
+import { uploadDirect } from "../utils/directUpload";
 
 export default function AddSession() {
   const navigate = useNavigate();
@@ -27,14 +28,52 @@ export default function AddSession() {
   const [status, setStatus] = useState("draft");
   const [thumbnail, setThumbnail] = useState(null);
   const [preview, setPreview] = useState("");
+  const [formError, setFormError] = useState("");
+  const invalidShown = useRef(false);
+
+  const fieldLabel = (name) => ({
+    title: "Session title",
+    shortDescription: "Short description",
+    longDescription: "Detailed description",
+    date: "Date",
+    time: "Start time",
+    duration: "Duration",
+    venue: "Venue",
+    capacity: "Capacity",
+  }[name] || name || "Field");
+
+  const validationError = (error) => {
+    const detail = error.response?.data?.errors?.[0];
+    if (!detail) return error.response?.data?.msg || "Failed to create session";
+    const field = detail.path || detail.param;
+    return `${fieldLabel(field)}: ${detail.msg || "Please enter a valid value"}`;
+  };
+
+  const showInvalidField = (event) => {
+    event.preventDefault();
+    if (invalidShown.current) return;
+    invalidShown.current = true;
+    window.setTimeout(() => { invalidShown.current = false; }, 100);
+    const input = event.target;
+    const message = `${fieldLabel(input.name || input.id)}: ${input.validationMessage}`;
+    setFormError(message);
+    toast.error(message);
+    input.scrollIntoView({ behavior: "smooth", block: "center" });
+    input.focus({ preventScroll: true });
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    setFormError("");
     setIsLoading(true);
     try {
-      const payload = new FormData();
-      Object.entries({ title, shortDescription, date, time, duration, longDescription, venue, capacity: capacity || "", status }).forEach(([key, value]) => payload.append(key, value));
-      if (thumbnail) payload.append("sessionThumbnail", thumbnail);
+      const directAsset = await uploadDirect(thumbnail, { role: "club", kind: "sessionThumbnail" });
+      const payload = {
+        title, shortDescription, date, time, duration, longDescription, venue,
+        capacity: capacity || null,
+        status,
+        ...(directAsset ? { directAsset } : {}),
+      };
       const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/addSession`, payload);
 
       if (response.data.success) {
@@ -45,7 +84,9 @@ export default function AddSession() {
       }
     } catch (error) {
       console.error("Error adding session:", error);
-      toast.error(error.response?.data?.msg || "Failed to create session");
+      const message = validationError(error);
+      setFormError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -59,7 +100,8 @@ export default function AddSession() {
         description="Give students a chance to meet your club and understand how selection works."
       />
 
-      <form onSubmit={handleSubmit} className="mt-10 space-y-6">
+      <form onSubmit={handleSubmit} onInvalidCapture={showInvalidField} className="mt-10 space-y-6">
+        {formError && <div role="alert" className="rounded-sm border border-bad/30 bg-bad-tint px-4 py-3 text-sm font-medium text-bad">{formError}</div>}
         {/* About ---------------------------------------------------------- */}
         <Card className="reveal p-6">
           <h2 className="display text-xl">About</h2>
@@ -68,6 +110,7 @@ export default function AddSession() {
             <Field label="Session title" id="title" required>
               <Input
                 id="title"
+                name="title"
                 type="text"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
@@ -84,6 +127,7 @@ export default function AddSession() {
             >
               <Input
                 id="shortDescription"
+                name="shortDescription"
                 value={shortDescription}
                 onChange={(event) => setShortDescription(event.target.value)}
                 required
@@ -99,6 +143,7 @@ export default function AddSession() {
             >
               <Textarea
                 id="longDescription"
+                name="longDescription"
                 rows={6}
                 value={longDescription}
                 onChange={(event) => setLongDescription(event.target.value)}
@@ -116,6 +161,7 @@ export default function AddSession() {
             <Field label="Date" id="date" required>
               <Input
                 id="date"
+                name="date"
                 type="date"
                 value={date}
                 onChange={(event) => setDate(event.target.value)}
@@ -126,6 +172,7 @@ export default function AddSession() {
             <Field label="Start time" id="time" required>
               <Input
                 id="time"
+                name="time"
                 type="time"
                 value={time}
                 onChange={(event) => setTime(event.target.value)}
@@ -137,6 +184,7 @@ export default function AddSession() {
             <Field label="Duration" id="duration" required hint="In minutes.">
               <Input
                 id="duration"
+                name="duration"
                 type="number"
                 min="1"
                 className="tabular"
@@ -150,6 +198,7 @@ export default function AddSession() {
             <Field label="Capacity" id="capacity" hint="Blank means unlimited.">
               <Input
                 id="capacity"
+                name="capacity"
                 type="number"
                 min="1"
                 className="tabular"
@@ -162,6 +211,7 @@ export default function AddSession() {
             <Field label="Venue" id="venue" required className="sm:col-span-2">
               <Input
                 id="venue"
+                name="venue"
                 value={venue}
                 onChange={(event) => setVenue(event.target.value)}
                 required
@@ -175,7 +225,7 @@ export default function AddSession() {
           <h2 className="display text-xl">Session thumbnail</h2>
           <p className="mt-1.5 text-sm text-ink-3">Recommended: 1600 × 900 px (16:9), JPG, PNG, or WebP under 5 MB.</p>
           <Field label="Choose image" id="sessionThumbnail" className="mt-5"><input id="sessionThumbnail" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files[0] || null; setThumbnail(file); setPreview(file ? URL.createObjectURL(file) : ""); }} /></Field>
-          {preview && <img src={preview} alt="Session thumbnail preview" className="mt-5 aspect-video w-full rounded-sm border border-line bg-paper-2 object-contain" />}
+          {preview && <img src={preview} alt="Session thumbnail preview" className="mt-5 aspect-video w-full rounded-sm border border-line bg-paper-2 object-cover" />}
         </Card>
 
         {/* Publish -------------------------------------------------------- */}

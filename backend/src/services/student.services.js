@@ -18,14 +18,14 @@ function getResendClient() {
     return resendClient;
 }
 
-async function sendEmail({ to, subject, text, html }) {
+async function sendEmail({ to, subject, text, html, idempotencyKey }) {
     const { data, error } = await getResendClient().emails.send({
         from: brandedFromEmail(process.env.RESEND_FROM_EMAIL),
         to,
         subject,
         text,
         html,
-    });
+    }, idempotencyKey ? { idempotencyKey } : undefined);
     if (error) throw new Error(`Resend email failed: ${error.message || error.name || 'unknown error'}`);
     return data;
 }
@@ -177,7 +177,7 @@ module.exports.sendOtp = async (email, otp) => {
     });
 };
 
-module.exports.sendNotificationEmail = async (email, { title, message, link, type, emailDetails }) => {
+module.exports.sendNotificationEmail = async (email, { title, message, link, type, emailDetails }, { idempotencyKey } = {}) => {
     if (!process.env.RESEND_API_KEY) return;
     let detailsUrl = null;
     if (process.env.STUDENT_APP_ORIGIN && link?.startsWith('/') && !link.startsWith('//')) {
@@ -188,6 +188,7 @@ module.exports.sendNotificationEmail = async (email, { title, message, link, typ
         subject: String(title || "Discovr update").replace(/[\r\n]/g, " "),
         text: `${message || "You have a new application update."}${emailDetails?.venue ? `\nVenue: ${emailDetails.venue}` : ""}${emailDetails?.meetingUrl ? `\nMeeting link: ${emailDetails.meetingUrl}` : ""}${detailsUrl ? `\n\nView details: ${detailsUrl}` : ""}`,
         html: buildNotificationEmailHtml({ title, message, detailsUrl, type, emailDetails }),
+        idempotencyKey,
     });
 };
 

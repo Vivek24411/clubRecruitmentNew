@@ -52,7 +52,8 @@ async function connectDB() {
       socketTimeoutMS: 45000,
       maxPoolSize: 10,
       minPoolSize: 1,
-      maxIdleTimeMS: 30000
+      maxIdleTimeMS: 30000,
+      autoIndex: process.env.NODE_ENV !== 'production'
     };
 
     registerConnectionListeners();

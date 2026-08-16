@@ -6,6 +6,7 @@ const roundCandidateModel = require("../models/roundCandidate.model");
 const roundSubmissionModel = require("../models/roundSubmission.model");
 const scheduleSlotModel = require("../models/scheduleSlot.model");
 const scheduleReservationModel = require("../models/scheduleReservation.model");
+const studentModel = require("../models/student.model");
 const { notifyStudent } = require("../services/notification.services");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryAsset, destroyUploadedFile } = require("../utils/uploads");
@@ -37,38 +38,90 @@ async function ownedEvent(eventId, clubId) {
   return ensureEventRounds(event);
 }
 
-async function workflowData(event) {
-  const registrations = await registerationEventModel.find({
+function escapedRegex(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function workflowData(event, query = {}) {
+  const selectedRound = event.rounds.find((round) => String(round._id) === String(query.roundId)) || event.rounds[0];
+  const page = Math.max(Number(query.page) || 1, 1);
+  const limit = Math.min(Math.max(Number(query.limit) || 50, 10), 100);
+  const filter = {
     eventId: event._id,
-    overallStatus: { $ne: "withdrawn" },
-  })
-      .populate("studentId", "name email programme branch year academicYear academicStatus enrollmentNumber phoneNumber profilePicture")
-      .populate("membersAccepted", "name email programme branch year academicYear academicStatus enrollmentNumber phoneNumber profilePicture")
-      .sort({ registeredAt: 1 });
-  await Promise.all(registrations.map((registration) => ensureRegistrationWorkflow(event, registration)));
-  const registrationIds = registrations.map((registration) => registration._id);
-  const [candidates, submissions, slots] = await Promise.all([
-    roundCandidateModel.find({
-      eventId: event._id,
-      registrationId: { $in: registrationIds },
-      status: { $nin: ["revoked", "withdrawn"] },
-    })
+    status: query.status && query.status !== "all" ? query.status : { $nin: ["revoked", "withdrawn"] },
+  };
+  if (selectedRound?._id) filter.roundId = selectedRound._id;
+
+  const search = String(query.search || "").trim().slice(0, 100);
+  if (search) {
+    const pattern = new RegExp(escapedRegex(search), "i");
+    const [students, registrations] = await Promise.all([
+      studentModel.find({ $or: [{ name: pattern }, { email: pattern }, { enrollmentNumber: pattern }, { branch: pattern }] }).select("_id").limit(500).lean(),
+      registerationEventModel.find({ eventId: event._id, teamName: pattern }).select("_id").limit(500).lean(),
+    ]);
+    const studentIds = students.map((student) => student._id);
+    const registrationIds = registrations.map((registration) => registration._id);
+    filter.$or = [
+      { studentId: { $in: studentIds } },
+      { participantIds: { $in: studentIds } },
+      { registrationId: { $in: registrationIds } },
+    ];
+  }
+
+  const [candidates, total, grouped, registrationTotal] = await Promise.all([
+    roundCandidateModel.find(filter)
       .populate("studentId", "name email programme branch year enrollmentNumber phoneNumber profilePicture")
       .populate("participantIds", "name email programme branch year enrollmentNumber phoneNumber profilePicture")
-      .sort({ createdAt: 1 }),
-    roundSubmissionModel.find({ eventId: event._id, registrationId: { $in: registrationIds } })
+      .sort({ createdAt: 1, _id: 1 })
+      .skip((page - 1) * limit)
+      .limit(limit),
+    roundCandidateModel.countDocuments(filter),
+    roundCandidateModel.aggregate([
+      { $match: { eventId: event._id, status: { $nin: ["revoked", "withdrawn"] } } },
+      { $group: { _id: { roundId: "$roundId", status: "$status" }, count: { $sum: 1 } } },
+    ]),
+    registerationEventModel.countDocuments({ eventId: event._id, overallStatus: { $ne: "withdrawn" } }),
+  ]);
+
+  const registrationIds = [...new Set(candidates.map((candidate) => String(candidate.registrationId)))];
+  const candidateIds = candidates.map((candidate) => candidate._id);
+  const [registrations, submissions, slots] = await Promise.all([
+    registerationEventModel.find({ _id: { $in: registrationIds } })
+      .populate("studentId", "name email programme branch year academicYear academicStatus enrollmentNumber phoneNumber profilePicture")
+      .populate("membersAccepted", "name email programme branch year academicYear academicStatus enrollmentNumber phoneNumber profilePicture")
+      .lean(),
+    roundSubmissionModel.find({ candidateId: { $in: candidateIds } })
       .populate("submittedBy", "name email")
-      .sort({ submittedAt: -1 }),
-    scheduleSlotModel.find({
-      eventId: event._id,
-      registrationId: { $in: registrationIds },
-      status: { $ne: "cancelled" },
-    })
+      .sort({ submittedAt: -1 })
+      .lean(),
+    scheduleSlotModel.find({ candidateId: { $in: candidateIds }, status: { $ne: "cancelled" } })
       .populate("studentId", "name email")
       .populate("participantIds", "name email")
-      .sort({ startAt: 1 }),
+      .sort({ startAt: 1 })
+      .lean(),
   ]);
-  return { registrations, candidates, submissions, slots };
+
+  const roundCounts = {};
+  for (const item of grouped) {
+    const roundId = String(item._id.roundId);
+    roundCounts[roundId] ||= { total: 0, statuses: {} };
+    roundCounts[roundId].total += item.count;
+    roundCounts[roundId].statuses[item._id.status] = item.count;
+  }
+  const finalRoundId = String(event.rounds.at(-1)?._id || "");
+  return {
+    registrations,
+    candidates,
+    submissions,
+    slots,
+    summary: {
+      registrations: registrationTotal,
+      roundCounts,
+      finalSelectedCount: roundCounts[finalRoundId]?.statuses?.advanced || 0,
+    },
+    pagination: { page, limit, total, pages: Math.max(Math.ceil(total / limit), 1) },
+    selectedRoundId: selectedRound?._id || null,
+  };
 }
 
 module.exports.getEventWorkflow = async (req, res) => {
@@ -76,13 +129,111 @@ module.exports.getEventWorkflow = async (req, res) => {
   const event = await ownedEvent(req.params.eventId, req.club._id);
   if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
   const [data, targetEvents] = await Promise.all([
-    workflowData(event),
+    workflowData(event, req.query),
     eventModel.find({ clubId: req.club._id, _id: { $ne: event._id }, status: { $ne: "archived" } })
       .select("title status rounds roundDetails numberOfRounds")
       .sort({ createdAt: -1 }),
   ]);
   await Promise.all(targetEvents.map((target) => ensureEventRounds(target)));
   return res.json({ success: true, event, ...data, targetEvents });
+};
+
+function csvValue(value) {
+  let text = value == null ? "" : String(value);
+  if (/^[\t\r\n ]*[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+module.exports.exportRoundCandidates = async (req, res) => {
+  if (invalidRequest(req, res)) return;
+  const event = await ownedEvent(req.params.eventId, req.club._id);
+  const round = eventRound(event, req.params.roundId);
+  if (!event || !round) return res.status(404).json({ success: false, msg: "Event or round not found" });
+
+  const filter = {
+    eventId: event._id,
+    roundId: round._id,
+    status: req.query.status && req.query.status !== "all"
+      ? req.query.status
+      : { $nin: ["revoked", "withdrawn"] },
+  };
+  const search = String(req.query.search || "").trim().slice(0, 100);
+  if (search) {
+    const pattern = new RegExp(escapedRegex(search), "i");
+    const [students, registrations] = await Promise.all([
+      studentModel.find({ $or: [{ name: pattern }, { email: pattern }, { enrollmentNumber: pattern }, { branch: pattern }] }).select("_id").limit(1000).lean(),
+      registerationEventModel.find({ eventId: event._id, teamName: pattern }).select("_id").limit(1000).lean(),
+    ]);
+    const studentIds = students.map((student) => student._id);
+    filter.$or = [
+      { studentId: { $in: studentIds } },
+      { participantIds: { $in: studentIds } },
+      { registrationId: { $in: registrations.map((registration) => registration._id) } },
+    ];
+  }
+
+  const candidates = await roundCandidateModel.find(filter)
+    .populate("studentId", "name email enrollmentNumber phoneNumber programme branch year")
+    .populate("participantIds", "name email enrollmentNumber phoneNumber programme branch year")
+    .populate({
+      path: "registrationId",
+      select: "teamName studentId membersAccepted registeredAt overallStatus",
+      populate: [
+        { path: "studentId", select: "name email enrollmentNumber phoneNumber programme branch year" },
+        { path: "membersAccepted", select: "name email enrollmentNumber phoneNumber programme branch year" },
+      ],
+    })
+    .sort({ createdAt: 1, _id: 1 })
+    .lean();
+  const submissions = await roundSubmissionModel.find({ candidateId: { $in: candidates.map((candidate) => candidate._id) } })
+    .sort({ submittedAt: -1 })
+    .lean();
+  const byCandidate = new Map();
+  submissions.forEach((submission) => {
+    const key = String(submission.candidateId);
+    if (!byCandidate.has(key)) byCandidate.set(key, submission);
+  });
+
+  const rows = [[
+    "Round", "Evaluation", "Application / team", "Candidate", "Email", "Phone",
+    "Enrollment", "Programme", "Branch / discipline", "Year", "All participants",
+    "Round status", "Application status", "Score", "Reviewer notes", "Applied at",
+    "Submitted at", "Submission answers", "Submission files",
+  ]];
+  candidates.forEach((candidate) => {
+    const registration = candidate.registrationId;
+    const person = candidate.scope === "participant" ? (candidate.studentId || candidate.participantIds?.[0]) : registration?.studentId;
+    const participants = candidate.participantIds || [];
+    const submission = byCandidate.get(String(candidate._id));
+    rows.push([
+      `${round.order}. ${round.title}`,
+      candidate.scope === "participant" ? "Per student" : "Whole application/team",
+      registration?.teamName || registration?.studentId?.name || "Application",
+      candidate.scope === "participant" ? person?.name : registration?.studentId?.name,
+      person?.email,
+      person?.phoneNumber,
+      person?.enrollmentNumber,
+      person?.programme,
+      person?.branch,
+      person?.year,
+      participants.map((student) => `${student.name} <${student.email}>`).join("; "),
+      candidate.status,
+      registration?.overallStatus,
+      candidate.score,
+      candidate.notes,
+      registration?.registeredAt ? new Date(registration.registeredAt).toISOString() : "",
+      submission?.submittedAt ? new Date(submission.submittedAt).toISOString() : "",
+      (submission?.answers || []).map((answer) => `${answer.key}: ${answer.value}`).join(" | "),
+      (submission?.files || []).map((file) => file.url).join(" | "),
+    ]);
+  });
+
+  const csv = rows.map((row) => row.map(csvValue).join(",")).join("\n");
+  const eventName = String(event.title).replace(/[^a-z0-9_-]/gi, "_");
+  const roundName = String(round.title).replace(/[^a-z0-9_-]/gi, "_");
+  res.set("Content-Type", "text/csv; charset=utf-8");
+  res.set("Content-Disposition", `attachment; filename="${eventName}-${roundName}-applications.csv"`);
+  return res.send(`\uFEFF${csv}`);
 };
 
 async function recomputeRegistrationProgress(event, registrationId) {

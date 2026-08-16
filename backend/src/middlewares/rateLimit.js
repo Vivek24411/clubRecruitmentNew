@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const buckets = new Map();
 const rateLimitBucketModel = require("../models/rateLimitBucket.model");
 
@@ -5,6 +6,27 @@ function requestIdentity(req, keyPrefix, keyGenerator) {
   const generated = keyGenerator?.(req);
   const identity = generated || req.ip || req.socket?.remoteAddress || "unknown";
   return `${keyPrefix}:${identity}`;
+}
+
+function normalizeIdentifier(value) {
+  return String(value || "").trim().toLowerCase().slice(0, 254);
+}
+
+function bodyIdentifier(...fields) {
+  return (req) => {
+    const parts = fields.map((field) => normalizeIdentifier(req.body?.[field])).filter(Boolean);
+    return parts.length ? `account:${parts.join(":")}` : `ip:${req.ip || req.socket?.remoteAddress || "unknown"}`;
+  };
+}
+
+function sessionOrIp(req) {
+  const bearer = req.headers.authorization?.startsWith("Bearer ")
+    ? req.headers.authorization.slice(7).trim()
+    : "";
+  const cookieToken = String(req.headers.cookie || "").match(/(?:^|;\s*)(?:student|club|admin)_session=([^;]+)/)?.[1] || "";
+  const token = bearer && !["undefined", "null"].includes(bearer) ? bearer : cookieToken;
+  if (!token) return `ip:${req.ip || req.socket?.remoteAddress || "unknown"}`;
+  return `session:${crypto.createHash("sha256").update(token).digest("hex").slice(0, 24)}`;
 }
 
 function rejectRequest(res, resetAt) {
@@ -98,3 +120,5 @@ setInterval(() => {
 }, 10 * 60 * 1000).unref();
 
 module.exports = rateLimit;
+module.exports.bodyIdentifier = bodyIdentifier;
+module.exports.sessionOrIp = sessionOrIp;

@@ -1,9 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const { body, param, query } = require("express-validator");
-const { clubLogin, logout, changePassword, sendPasswordResetOtp, verifyPasswordResetOtp, resetPassword, addSession, getProfile, updateProfile, getSessions, getSession, addEvent, getEvents, getEvent, getDashBoard, getEventsRegisteredStudents, finalizeStudent, scheduleInterview, selectStudentForRound, updateEvent, updateEventStatus, updateSession, updateApplication, bulkUpdateApplications, exportApplications, getSessionAttendees, markAttendance } = require("../controllers/club.contollers");
+const { clubLogin, logout, changePassword, sendPasswordResetOtp, verifyPasswordResetOtp, resetPassword, addSession, getProfile, updateProfile, getSessions, getSession, addEvent, getEvents, getEvent, getDashBoard, getEventsRegisteredStudents, finalizeStudent, scheduleInterview, selectStudentForRound, updateEvent, updateEventStatus, deleteEvent, updateSession, updateApplication, bulkUpdateApplications, exportApplications, getSessionAttendees, markAttendance } = require("../controllers/club.contollers");
 const { clubAuth } = require("../middlewares/auth.middlewares");
 const upload = require("../middlewares/upload");
+const { attachDirectAsset, signDirectUpload } = require("../middlewares/directUpload");
 const {
   getEventWorkflow,
   publishRoundDecisions,
@@ -11,15 +12,16 @@ const {
   autoScheduleRound,
   cancelScheduleSlot,
   extractCandidates,
+  exportRoundCandidates,
   updateCandidateReview,
 } = require("../controllers/workflow.controllers");
 const rateLimit = require("../middlewares/rateLimit");
 const validateRequest = require("../middlewares/validateRequest");
 
-const loginRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "club-login", persistent: true });
-const resetRequestRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyPrefix: "club-password-reset", persistent: true });
-const resetVerifyRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "club-password-reset-verify", persistent: true });
-const passwordChangeRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyPrefix: "club-password-change", persistent: true });
+const loginRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "club-login", persistent: true, keyGenerator: rateLimit.bodyIdentifier("userName") });
+const resetRequestRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyPrefix: "club-password-reset", persistent: true, keyGenerator: rateLimit.bodyIdentifier("userName", "email") });
+const resetVerifyRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "club-password-reset-verify", persistent: true, keyGenerator: rateLimit.bodyIdentifier("userName", "email") });
+const passwordChangeRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyPrefix: "club-password-change", persistent: true, keyGenerator: rateLimit.sessionOrIp });
 const fitsBcrypt = (value) => Buffer.byteLength(String(value), "utf8") <= 72;
 const validProgrammeEligibility = (value) => {
   const maxYears = { undergraduate: 5, mtech: 2, msc: 2, mba: 2, phd: 5 };
@@ -38,6 +40,10 @@ const validProgrammeEligibility = (value) => {
     throw new Error("Programme eligibility is invalid");
   }
 };
+
+router.post('/uploads/sign', clubAuth, [
+  body('kind').isIn(['clubLogo', 'clubBanner', 'eventBanner', 'sessionThumbnail']),
+], validateRequest, signDirectUpload(['clubLogo', 'clubBanner', 'eventBanner', 'sessionThumbnail']))
 
 router.post(
   "/login",
@@ -79,6 +85,7 @@ router.post(
   "/addSession",
   clubAuth,
   upload.single('sessionThumbnail'),
+  attachDirectAsset('sessionThumbnail'),
   [
     body("title").isString().trim().isLength({ min: 2, max: 150 }),
     body("shortDescription").isString().trim().isLength({ min: 2, max: 500 }),
@@ -95,7 +102,7 @@ router.post(
 
 router.get('/getProfile',clubAuth,getProfile)
 
-router.post('/updateProfile',clubAuth,upload.single('clubLogo'),[
+router.post('/updateProfile',clubAuth,upload.single('clubLogo'),attachDirectAsset('clubLogo'),attachDirectAsset('clubBanner', 'directBannerAsset', 'clubBannerFile'),[
 
   body("name").optional().isString().trim().isLength({ min: 2, max: 150 }),
   body("userName").optional().isString().trim().isLength({ min: 1, max: 80 }),
@@ -120,7 +127,7 @@ router.get('/getSession', clubAuth, [
 ], validateRequest, getSession)
 
 router.post('/addEvent',clubAuth,
-  upload.single('eventBanner'),[
+  upload.single('eventBanner'),attachDirectAsset('eventBanner'),[
   body("title").isString().trim().isLength({ min: 2, max: 150 }),
   body("shortDescription").isString().trim().isLength({ min: 2, max: 500 }),
   body("longDescription").isString().isLength({ min: 2, max: 10000 }),
@@ -141,6 +148,7 @@ router.post('/addEvent',clubAuth,
   body('eligibilityYearsJSON').optional().isString().isLength({ max: 100 }),
   body('deadlineNotificationsEnabled').optional().isBoolean(),
   body('roundsJSON').optional().isString().isLength({ max: 200000 }),
+  body('contactInfoJSON').optional().isString().isLength({ max: 10000 }),
   body('roundDetailsJSON').optional().custom((value, { req }) => {
     const expectedRounds = Number(req.body.numberOfRounds || 0);
     const roundValue = req.body.roundsJSON || value;
@@ -167,7 +175,7 @@ router.get('/getEvent', clubAuth, [
   query('eventId').isMongoId().withMessage('eventId is required')
 ], validateRequest, getEvent)
 
-router.patch('/events/:eventId', clubAuth, upload.single('eventBanner'), [
+router.patch('/events/:eventId', clubAuth, upload.single('eventBanner'), attachDirectAsset('eventBanner'), [
   param('eventId').isMongoId(),
   body('title').optional().isString().trim().isLength({ min: 2, max: 150 }),
   body('shortDescription').optional().isString().isLength({ max: 500 }),
@@ -195,7 +203,11 @@ router.patch('/events/:eventId/status', clubAuth, [
   body('status').isIn(['draft', 'published', 'closed', 'archived', 'cancelled']),
 ], validateRequest, updateEventStatus)
 
-router.patch('/sessions/:sessionId', clubAuth, upload.single('sessionThumbnail'), [
+router.delete('/events/:eventId', clubAuth, [
+  param('eventId').isMongoId(),
+], validateRequest, deleteEvent)
+
+router.patch('/sessions/:sessionId', clubAuth, upload.single('sessionThumbnail'), attachDirectAsset('sessionThumbnail'), [
   param('sessionId').isMongoId(),
   body('title').optional().isString().trim().isLength({ min: 2, max: 150 }),
   body('shortDescription').optional().isString().isLength({ max: 500 }),
@@ -248,6 +260,12 @@ router.post('/events/:eventId/applications/bulk', clubAuth, [
 ], validateRequest, bulkUpdateApplications)
 
 router.get('/events/:eventId/applications/export', clubAuth, [param('eventId').isMongoId()], validateRequest, exportApplications)
+router.get('/events/:eventId/rounds/:roundId/export', clubAuth, [
+  param('eventId').isMongoId(),
+  param('roundId').isMongoId(),
+  query('status').optional().isIn(['all', 'eligible', 'scheduled', 'active', 'submitted', 'under_review', 'waitlisted', 'advanced', 'rejected', 'missed']),
+  query('search').optional().isString().isLength({ max: 100 }),
+], validateRequest, exportRoundCandidates)
 router.get('/sessions/:sessionId/attendees', clubAuth, [param('sessionId').isMongoId()], validateRequest, getSessionAttendees)
 router.patch('/sessions/:sessionId/attendance', clubAuth, [
   param('sessionId').isMongoId(),
@@ -259,6 +277,11 @@ router.patch('/sessions/:sessionId/attendance', clubAuth, [
 
 router.get('/events/:eventId/workflow', clubAuth, [
   param('eventId').isMongoId(),
+  query('roundId').optional().isMongoId(),
+  query('status').optional().isIn(['all', 'eligible', 'scheduled', 'active', 'submitted', 'under_review', 'waitlisted', 'advanced', 'rejected', 'missed']),
+  query('search').optional().isString().isLength({ max: 100 }),
+  query('page').optional().isInt({ min: 1 }),
+  query('limit').optional().isInt({ min: 10, max: 100 }),
 ], validateRequest, getEventWorkflow)
 
 router.post('/events/:eventId/rounds/:roundId/decisions', clubAuth, [

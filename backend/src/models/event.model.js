@@ -163,6 +163,7 @@ eventSchema.pre("save", function(next) {
 });
 
 eventSchema.index({ clubId: 1, status: 1, createdAt: -1 });
+eventSchema.index({ status: 1, registrationDeadlineAt: 1, publishedAt: -1 });
 
 module.exports = mongoose.model("Event", eventSchema);
 module.exports.roundSchema = roundSchema;

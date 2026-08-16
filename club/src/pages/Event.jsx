@@ -4,6 +4,8 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { eventDeadline, formatDateTime } from "../utils/date";
 import { eligibilitySummary } from "../utils/eligibility";
+import { useContext } from "react";
+import { ClubContextData } from "../context/ClubContext.jsx";
 import {
   Badge,
   Button,
@@ -24,6 +26,7 @@ const STATUS_TONE = {
 };
 
 export default function Event() {
+  const { clubProfile } = useContext(ClubContextData);
   const { eventId } = useParams();
   const [event, setEvent] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -85,7 +88,10 @@ export default function Event() {
       <header className="reveal mt-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <span className="eyebrow eyebrow-accent capitalize">{event.eventType || "Event"} event</span>
+            <div className="flex items-center gap-3">
+              {clubProfile?.clubLogo && <img src={clubProfile.clubLogo} alt="" className="h-11 w-11 rounded-md border border-line bg-white object-contain p-1" />}
+              <span className="eyebrow eyebrow-accent capitalize">{event.eventType || "Event"} event</span>
+            </div>
             <h1 className="display mt-2 text-3xl sm:text-4xl">{event.title}</h1>
             {event.shortDescription && (
               <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-2">
@@ -113,7 +119,7 @@ export default function Event() {
       {/* ------------------------------------------------------------------ */}
       {/* Body                                                                */}
       {/* ------------------------------------------------------------------ */}
-      {event.eventBanner && <img src={event.eventBanner} alt="" className="mt-9 aspect-video w-full rounded-md border border-line bg-paper-2 object-contain shadow-sm" />}
+      {event.eventBanner && <img src={event.eventBanner} alt="" className="mt-9 aspect-[16/7] max-h-[30rem] w-full rounded-md border border-line bg-paper-2 object-cover shadow-sm" />}
 
       <div className="mt-10 grid gap-8 lg:grid-cols-3">
         <div className="space-y-8 lg:col-span-2">

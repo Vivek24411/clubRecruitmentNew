@@ -79,6 +79,14 @@ const clubSchema = new mongoose.Schema({
   clubLogoPublicId: {
     type: String,
   },
+  clubBanner: {
+    type: String,
+    default: "",
+  },
+  clubBannerPublicId: {
+    type: String,
+    default: "",
+  },
   resources: {
     type: [{
       title: { type: String, required: true, trim: true, maxlength: 150 },
@@ -115,6 +123,8 @@ clubSchema.pre("validate", function(next) {
   if (!this.accountEmail && this.contactEmail) this.accountEmail = this.contactEmail;
   next();
 });
+
+clubSchema.index({ status: 1, category: 1, name: 1 });
 
 clubSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);

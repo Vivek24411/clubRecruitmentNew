@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { ClubContextData } from "../context/ClubContext.jsx";
 import { safeExternalUrl } from "../utils/url";
+import { uploadDirect } from "../utils/directUpload";
 import {
   Button,
   Card,
@@ -327,6 +328,9 @@ export default function Profile() {
   const [form, setForm] = useState(EMPTY);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [logo, setLogo] = useState(null);
+  const [banner, setBanner] = useState(null);
+  const [logoPreview, setLogoPreview] = useState("");
+  const [bannerPreview, setBannerPreview] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -356,16 +360,26 @@ export default function Profile() {
     event.preventDefault();
     setIsSubmitting(true);
     try {
-      const payload = new FormData();
-      ["name", "userName", "shortDescription", "longDescription", "website", "linkedin", "instagram", "achivements", "recruitmentMethods", "contactEmail", "contactPhone"].forEach((key) => payload.append(key, form[key] || ""));
-      payload.append("resourcesJSON", JSON.stringify(form.resources));
-      payload.append("annualEventsJSON", JSON.stringify(form.annualEvents));
-      if (logo) payload.append("clubLogo", logo);
+      const [directAsset, directBannerAsset] = await Promise.all([
+        uploadDirect(logo, { role: "club", kind: "clubLogo" }),
+        uploadDirect(banner, { role: "club", kind: "clubBanner" }),
+      ]);
+      const payload = Object.fromEntries(
+        ["name", "userName", "shortDescription", "longDescription", "website", "linkedin", "instagram", "achivements", "recruitmentMethods", "contactEmail", "contactPhone"]
+          .map((key) => [key, form[key] || ""]),
+      );
+      payload.resourcesJSON = JSON.stringify(form.resources);
+      payload.annualEventsJSON = JSON.stringify(form.annualEvents);
+      if (directAsset) payload.directAsset = directAsset;
+      if (directBannerAsset) payload.directBannerAsset = directBannerAsset;
       const response = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/updateProfile`, payload);
       if (response.data.success) {
         setClubProfile(response.data.club);
         setEditing(false);
         setLogo(null);
+        setBanner(null);
+        setLogoPreview("");
+        setBannerPreview("");
         toast.success("Profile updated successfully");
       } else {
         toast.error(response.data.msg || "Failed to update profile");
@@ -463,7 +477,21 @@ export default function Profile() {
                 />
               </Field>
             </div>
-            <Field label="Replace logo" id="clubLogo" className="mt-5"><input id="clubLogo" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setLogo(event.target.files[0] || null)} className="block w-full text-sm" /></Field>
+            <div className="mt-6 grid gap-5 sm:grid-cols-2">
+              <Field label="Club logo" id="clubLogo" hint="Square or transparent image, ideally 512 × 512 px.">
+                <label htmlFor="clubLogo" className="flex cursor-pointer items-center gap-4 rounded-sm border border-dashed border-line-2 bg-paper-2/50 p-4 transition-colors hover:border-accent">
+                  {(logoPreview || clubProfile?.clubLogo) ? <img src={logoPreview || clubProfile.clubLogo} alt="Logo preview" className="h-16 w-16 rounded-md border border-line bg-surface object-contain p-1.5" /> : <Monogram name={form.name || "Club"} size="md" />}
+                  <span><span className="block text-sm font-semibold">{logo ? logo.name : "Choose a new logo"}</span><span className="mt-1 block text-xs text-ink-3">JPG, PNG, or WebP under 5 MB</span></span>
+                </label>
+                <input id="clubLogo" type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files[0] || null; setLogo(file); setLogoPreview(file ? URL.createObjectURL(file) : ""); }} />
+              </Field>
+              <Field label="Club page banner" id="clubBanner" hint="Wide image, ideally 1600 × 600 px. It appears behind the logo on student pages.">
+                <label htmlFor="clubBanner" className="block cursor-pointer overflow-hidden rounded-sm border border-dashed border-line-2 bg-paper-2/50 transition-colors hover:border-accent">
+                  {(bannerPreview || clubProfile?.clubBanner) ? <img src={bannerPreview || clubProfile.clubBanner} alt="Banner preview" className="aspect-[8/3] w-full object-cover" /> : <span className="grid aspect-[8/3] place-items-center px-4 text-center text-sm font-semibold text-ink-3">Choose a wide banner</span>}
+                </label>
+                <input id="clubBanner" type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files[0] || null; setBanner(file); setBannerPreview(file ? URL.createObjectURL(file) : ""); }} />
+              </Field>
+            </div>
           </Card>
 
           <Card className="reveal p-6" style={{ "--d": "80ms" }}>
@@ -560,6 +588,15 @@ export default function Profile() {
         /* ---------------------------------------------------------------- */
         /* View                                                              */
         /* ---------------------------------------------------------------- */
+        <>
+        <div className="relative mt-10 aspect-[8/3] overflow-hidden rounded-md border border-line bg-gradient-to-br from-ink via-ink-2 to-accent shadow-sm">
+          {clubProfile?.clubBanner && <img src={clubProfile.clubBanner} alt="" className="absolute inset-0 h-full w-full object-cover" />}
+          <div className="absolute inset-0 bg-gradient-to-t from-ink/70 via-transparent to-transparent" />
+          <div className="absolute bottom-5 left-5 flex items-end gap-4">
+            {clubProfile?.clubLogo ? <img src={clubProfile.clubLogo} alt={`${clubProfile.name} logo`} className="h-20 w-20 rounded-lg border border-white/70 bg-white object-contain p-2 shadow-lg" /> : <Monogram name={clubProfile?.name || "Club"} size="lg" />}
+            <p className="display pb-1 text-xl text-white sm:text-2xl">{clubProfile?.name}</p>
+          </div>
+        </div>
         <div className="mt-10 grid gap-10 lg:grid-cols-3">
           <div className="space-y-8 lg:col-span-2">
             {clubProfile?.shortDescription && (
@@ -596,7 +633,7 @@ export default function Profile() {
 
           <aside className="space-y-6 lg:sticky lg:top-24 lg:h-fit">
             <Card className="p-6">
-              {clubProfile?.clubLogo ? <img src={clubProfile.clubLogo} alt={`${clubProfile.name} logo`} className="h-28 w-28 rounded-lg border border-line bg-surface object-contain p-2 shadow-sm" /> : <Monogram name={clubProfile?.name || "Club"} size="lg" />}
+              {clubProfile?.clubLogo ? <img src={clubProfile.clubLogo} alt={`${clubProfile.name} logo`} className="h-24 w-24 rounded-lg border border-line bg-surface object-contain p-2 shadow-sm" /> : <Monogram name={clubProfile?.name || "Club"} size="lg" />}
               <h2 className="display mt-5 text-xl leading-snug">{clubProfile?.name}</h2>
               <dl className="mt-6 space-y-4 border-t border-line pt-5">
                 <Meta label="Username" value={clubProfile?.userName} />
@@ -619,6 +656,7 @@ export default function Profile() {
             )}
           </aside>
         </div>
+        </>
       )}
     </Page>
   );

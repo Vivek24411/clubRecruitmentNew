@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -7,6 +7,7 @@ import {
   Badge,
   Button,
   EmptyState,
+  Input,
   Monogram,
   Page,
   PageHeader,
@@ -27,6 +28,10 @@ const STATUS_TONE = {
 export default function Events() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [deleting, setDeleting] = useState("");
 
   useEffect(() => {
     axios
@@ -52,6 +57,29 @@ export default function Events() {
     }
   };
 
+  const deleteEvent = async (event) => {
+    if (!window.confirm(`Permanently delete “${event.title}”? This is only allowed when no student activity exists and cannot be undone.`)) return;
+    setDeleting(event._id);
+    try {
+      const { data } = await axios.delete(`${import.meta.env.VITE_BASE_URI}/club/events/${event._id}`);
+      if (!data.success) throw new Error(data.msg);
+      setEvents((items) => items.filter((item) => item._id !== event._id));
+      toast.success(data.msg);
+    } catch (error) {
+      toast.error(error.response?.data?.msg || error.message || "Could not delete event");
+    } finally {
+      setDeleting("");
+    }
+  };
+
+  const filteredEvents = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return events.filter((event) =>
+      (statusFilter === "all" || event.status === statusFilter)
+      && (typeFilter === "all" || event.eventType === typeFilter)
+      && (!query || `${event.title} ${event.shortDescription || ""}`.toLowerCase().includes(query)));
+  }, [events, search, statusFilter, typeFilter]);
+
   return (
     <Page>
       <PageHeader
@@ -61,7 +89,13 @@ export default function Events() {
         actions={<Button to="/addEvent" variant="accent">Create event</Button>}
       />
 
-      <div className="mt-8">
+      <div className="mt-8 grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_12rem]">
+        <label><span className="eyebrow">Search</span><Input className="mt-1.5" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Event title or description…" /></label>
+        <label><span className="eyebrow">Status</span><Select className="mt-1.5" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option>{STATUSES.map((status) => <option key={status} value={status} className="capitalize">{status}</option>)}</Select></label>
+        <label><span className="eyebrow">Type</span><Select className="mt-1.5" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="all">All types</option><option value="recruitment">Recruitment</option><option value="hackathon">Hackathon</option><option value="competition">Competition</option><option value="workshop">Workshop</option><option value="other">Other</option></Select></label>
+      </div>
+
+      <div className="mt-6">
         {loading ? (
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 3 }).map((_, index) => (
@@ -81,9 +115,11 @@ export default function Events() {
             description="Create your first recruitment event to start accepting applications."
             action={<Button to="/addEvent">Create an event</Button>}
           />
+        ) : filteredEvents.length === 0 ? (
+          <EmptyState title="No matching events" description="Try changing the search, status, or event type filter." action={<Button variant="secondary" onClick={() => { setSearch(""); setStatusFilter("all"); setTypeFilter("all"); }}>Clear filters</Button>} />
         ) : (
           <div className="stagger grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {events.map((event) => {
+            {filteredEvents.map((event) => {
               const deadline = eventDeadline(event);
               return (
                 <article key={event._id} className="card flex flex-col overflow-hidden">
@@ -147,6 +183,9 @@ export default function Events() {
                       <Link className="link" to={`/events/${event._id}/edit`}>
                         Edit
                       </Link>
+                      <button type="button" disabled={deleting === event._id} onClick={() => deleteEvent(event)} className="link text-bad disabled:opacity-50">
+                        {deleting === event._id ? "Deleting…" : "Delete"}
+                      </button>
                       <Link className="link ml-auto" to={`/event-applications/${event._id}`}>
                         Applications →
                       </Link>

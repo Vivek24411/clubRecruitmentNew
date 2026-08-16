@@ -37,7 +37,7 @@ function ClubMark({ club }) {
       alt=""
       loading="lazy"
       onError={() => setFailed(true)}
-      className="h-20 w-20 flex-none rounded-lg border border-line bg-surface object-contain p-2 shadow-sm transition-transform duration-300 group-hover:scale-[1.03]"
+      className="h-16 w-16 flex-none rounded-lg border border-white/80 bg-white object-contain p-1.5 shadow-md transition-transform duration-300 group-hover:scale-[1.03]"
     />
   );
 }
@@ -160,9 +160,11 @@ export default function Clubs() {
             <div className="stagger grid auto-rows-fr items-stretch gap-5 md:grid-cols-2 xl:grid-cols-3">
               {filteredClubs.map((club) => (
                 <article key={club._id} className="club-card card card-interactive group flex h-full flex-col overflow-hidden">
-                  <div className="flex min-h-32 items-start justify-between gap-4 border-b border-line bg-paper-2/60 p-5">
-                    <ClubMark club={club} />
-                    <span className="badge badge-neutral capitalize">{(club.category || "Club").replace(/_/g, " ")}</span>
+                  <div className="relative aspect-[16/7] overflow-hidden border-b border-line bg-gradient-to-br from-ink via-ink-2 to-accent">
+                    {club.clubBanner && <img src={club.clubBanner} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" />}
+                    <div className="absolute inset-0 bg-gradient-to-t from-ink/60 via-transparent to-transparent" />
+                    <div className="absolute bottom-4 left-4"><ClubMark club={club} /></div>
+                    <span className="badge badge-neutral absolute right-3 top-3 capitalize">{(club.category || "Club").replace(/_/g, " ")}</span>
                   </div>
                   <div className="flex flex-1 flex-col p-5">
                     <Link to={`/club/${club._id}`} className="block min-h-[3.4rem]">

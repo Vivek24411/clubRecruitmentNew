@@ -1,24 +1,53 @@
 import React from 'react'
 import { Routes, Route } from 'react-router-dom'
-import DashBoard from './pages/DashBoard'
-import Sessions from './pages/Sessions'
-import Session from './pages/Session'
-import Events from './pages/Events'
-import Event from './pages/Event'
-import Profile from './pages/Profile'
-import Login from './pages/Login'
 import UserProtectedWrapper from './pages/UserProtectedWrapper'
-import AddClub from './pages/AddClub'
-import Clubs from './pages/Clubs'
-import Club from './pages/Club'
-import Students from './pages/Students'
-import Settings from './pages/Settings'
-import AuditLogs from './pages/AuditLogs'
+
+const DashBoard = React.lazy(() => import('./pages/DashBoard'))
+const Sessions = React.lazy(() => import('./pages/Sessions'))
+const Session = React.lazy(() => import('./pages/Session'))
+const Events = React.lazy(() => import('./pages/Events'))
+const Event = React.lazy(() => import('./pages/Event'))
+const Profile = React.lazy(() => import('./pages/Profile'))
+const Login = React.lazy(() => import('./pages/Login'))
+const AddClub = React.lazy(() => import('./pages/AddClub'))
+const Clubs = React.lazy(() => import('./pages/Clubs'))
+const Club = React.lazy(() => import('./pages/Club'))
+const Students = React.lazy(() => import('./pages/Students'))
+const Settings = React.lazy(() => import('./pages/Settings'))
+const AuditLogs = React.lazy(() => import('./pages/AuditLogs'))
+
+const preloadRoutes = () => Promise.allSettled([
+  import('./pages/DashBoard'), import('./pages/Sessions'), import('./pages/Session'),
+  import('./pages/Events'), import('./pages/Event'), import('./pages/Profile'), import('./pages/Login'),
+  import('./pages/AddClub'), import('./pages/Clubs'), import('./pages/Club'),
+  import('./pages/Students'), import('./pages/Settings'), import('./pages/AuditLogs'),
+])
+
+function RouteFallback() {
+  return (
+    <div className="grid min-h-[100dvh] place-items-center bg-paper px-6 text-ink" role="status" aria-live="polite">
+      <div className="text-center">
+        <p className="display text-2xl">Discovr</p>
+        <div className="mx-auto mt-4 h-0.5 w-20 animate-pulse bg-accent" />
+        <p className="mt-4 text-sm text-ink-3">Loading page…</p>
+      </div>
+    </div>
+  )
+}
 
 const App = () => {
+  React.useEffect(() => {
+    if (window.requestIdleCallback) {
+      const id = window.requestIdleCallback(() => { void preloadRoutes() }, { timeout: 1500 })
+      return () => window.cancelIdleCallback(id)
+    }
+    const id = window.setTimeout(() => { void preloadRoutes() }, 500)
+    return () => window.clearTimeout(id)
+  }, [])
+
   return (
     <>
-    <Routes>
+    <React.Suspense fallback={<RouteFallback />}><Routes>
       <Route path='/' element={<UserProtectedWrapper><DashBoard/></UserProtectedWrapper>} />
       <Route path='/events' element={<UserProtectedWrapper><Events/></UserProtectedWrapper>} />
       <Route path='/event/:eventId' element={<UserProtectedWrapper><Event/></UserProtectedWrapper>} />
@@ -32,7 +61,7 @@ const App = () => {
       <Route path='/students' element={<UserProtectedWrapper><Students/></UserProtectedWrapper>} />
       <Route path='/settings' element={<UserProtectedWrapper><Settings/></UserProtectedWrapper>} />
       <Route path='/audit-logs' element={<UserProtectedWrapper><AuditLogs/></UserProtectedWrapper>} />
-    </Routes>
+    </Routes></React.Suspense>
     </>
   )
 }

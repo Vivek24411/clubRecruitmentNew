@@ -4,11 +4,12 @@ const { login, logout, getProfile, addClub, getAllSessions, getSessionDetail, ge
 const { adminAuth } = require("../middlewares/auth.middlewares");
 const router = express.Router();
 const upload = require("../middlewares/upload");
+const { attachDirectAsset, signDirectUpload } = require("../middlewares/directUpload");
 const rateLimit = require("../middlewares/rateLimit");
 const validateRequest = require("../middlewares/validateRequest");
 const fitsBcrypt = (value) => Buffer.byteLength(String(value), "utf8") <= 72;
 
-const loginRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 8, keyPrefix: "admin-login", persistent: true });
+const loginRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 8, keyPrefix: "admin-login", persistent: true, keyGenerator: rateLimit.bodyIdentifier("email") });
 
 router.post("/login", loginRateLimit, [
   body("email").isEmail().normalizeEmail().isLength({ max: 254 }),
@@ -19,7 +20,11 @@ router.post('/logout', logout)
 
 router.get('/getProfile',adminAuth,getProfile)
 
-router.post("/addClub",adminAuth,upload.single('clubLogo'),[
+router.post('/uploads/sign', adminAuth, [
+  body('kind').equals('clubLogo'),
+], validateRequest, signDirectUpload(['clubLogo']))
+
+router.post("/addClub",adminAuth,upload.single('clubLogo'),attachDirectAsset('clubLogo'),[
   body("name").isString().trim().isLength({ min: 2, max: 150 }).withMessage("Club name is required"),
   body("userName").isString().trim().isLength({ min: 1, max: 80 }).withMessage("Username is required"),
   body("password").isLength({ min: 10, max: 128 }).custom(fitsBcrypt).withMessage("Password must be 10–72 bytes long"),

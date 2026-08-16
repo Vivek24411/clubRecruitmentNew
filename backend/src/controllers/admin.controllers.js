@@ -10,7 +10,7 @@ const platformSettingsModel = require("../models/platformSettings.model");
 const registerationEventModel = require("../models/registerationEvent.model");
 const sessionRsvpModel = require("../models/sessionRsvp.model");
 const { writeAudit } = require("../services/audit.services");
-const { notifyStudent, notifyTeam } = require("../services/notification.services");
+const { notifyStudent, notifyTeam, notifyRegistrations } = require("../services/notification.services");
 const { destroyUploadedFile } = require("../utils/uploads");
 const {
   YEAR_LABELS,
@@ -21,9 +21,12 @@ const {
   PROGRAMME_DEFINITIONS,
 } = require("../services/academic.services");
 const {
+  getPlatformSettingsCached,
+  invalidatePlatformSettingsCache,
   normalizeClubType,
   normalizedClubTypes,
 } = require("../services/platformConfiguration.services");
+const { invalidatePrincipal } = require("../services/authPrincipalCache.services");
 
 function escapedRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -89,7 +92,7 @@ module.exports.addClub = async (req, res) => {
 
 
   try {
-    const settings = await platformSettingsModel.findOne({ key: "global" });
+    const settings = await getPlatformSettingsCached();
     if (!normalizedClubTypes(settings).includes(category)) {
       await destroyUploadedFile(req.file);
       return res.status(400).json({ success: false, msg: "Choose a configured club type" });
@@ -246,6 +249,7 @@ module.exports.updateStudentStatus = async (req, res) => {
   student.status = req.body.status;
   student.tokenVersion += 1;
   await student.save();
+  invalidatePrincipal("student", student._id);
   await writeAudit({ actorRole: "admin", actorId: req.admin.email, action: `student.${student.status}`, targetType: "student", targetId: student._id });
   const safeStudent = student.toObject();
   delete safeStudent.tokenVersion;
@@ -256,7 +260,7 @@ module.exports.updateStudentAcademics = async (req, res) => {
   const student = await studentModel.findById(req.params.studentId);
   if (!student) return res.status(404).json({ success: false, msg: "Student not found" });
 
-  const settings = await platformSettingsModel.findOne({ key: "global" });
+  const settings = await getPlatformSettingsCached();
   const configuration = normalizedAcademicConfiguration(settings);
   const programme = normalizeProgramme(req.body.programme);
   const branch = configuration.branches.find((item) => item.name === req.body.branch);
@@ -278,6 +282,7 @@ module.exports.updateStudentAcademics = async (req, res) => {
   student.programStartYear = inferProgramStartYear(academicYear, new Date(), configuration);
   student.year = YEAR_LABELS[academicYear];
   await student.save();
+  invalidatePrincipal("student", student._id);
   await writeAudit({
     actorRole: "admin",
     actorId: req.admin.email,
@@ -295,6 +300,7 @@ module.exports.updateClubStatus = async (req, res) => {
   club.status = req.body.status;
   club.tokenVersion += 1;
   await club.save();
+  invalidatePrincipal("club", club._id);
   await writeAudit({ actorRole: "admin", actorId: req.admin.email, action: `club.${club.status}`, targetType: "club", targetId: club._id });
   const safeClub = club.toObject();
   delete safeClub.tokenVersion;
@@ -305,7 +311,7 @@ module.exports.updateClubDetails = async (req, res) => {
   const club = await clubModel.findById(req.params.clubId);
   if (!club) return res.status(404).json({ success: false, msg: "Club not found" });
   if (req.body.category !== undefined) {
-    const settings = await platformSettingsModel.findOne({ key: "global" });
+    const settings = await getPlatformSettingsCached();
     const category = normalizeClubType(req.body.category);
     if (!normalizedClubTypes(settings).includes(category)) {
       return res.status(400).json({ success: false, msg: "Choose a configured club type" });
@@ -320,6 +326,7 @@ module.exports.updateClubDetails = async (req, res) => {
   if (req.body.useAccountEmailForContact) club.contactEmail = club.accountEmail;
   try {
     await club.save();
+    invalidatePrincipal("club", club._id);
   } catch (error) {
     return res.status(error?.code === 11000 ? 409 : 400).json({
       success: false,
@@ -336,6 +343,7 @@ module.exports.resetClubPassword = async (req, res) => {
   club.password = await bcrypt.hash(req.body.newPassword, 12);
   club.tokenVersion += 1;
   await club.save();
+  invalidatePrincipal("club", club._id);
   await writeAudit({ actorRole: "admin", actorId: req.admin.email, action: "club.password_reset", targetType: "club", targetId: club._id });
   return res.json({ success: true, msg: "Club password reset; existing sessions were revoked" });
 };
@@ -350,12 +358,12 @@ module.exports.moderateEvent = async (req, res) => {
   if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
   if (previous?.status !== "cancelled" && event.status === "cancelled") {
     const registrations = await registerationEventModel.find({ eventId: event._id });
-    await Promise.all(registrations.map((registration) => notifyTeam(registration, {
+    await notifyRegistrations(registrations, {
       type: "event_cancelled",
       title: `${event.title} was cancelled`,
       message: "An administrator cancelled this recruitment event. Your application history remains available.",
       link: "/applications",
-    })));
+    });
   }
   await writeAudit({ actorRole: "admin", actorId: req.admin.email, action: `event.${event.status}`, targetType: "event", targetId: event._id });
   return res.json({ success: true, msg: `Event ${event.status}`, event });
@@ -399,6 +407,7 @@ module.exports.getSettings = async (req, res) => {
     { $setOnInsert: { key: "global" } },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
+  invalidatePlatformSettingsCache();
   return res.json({
     success: true,
     settings: {
@@ -434,6 +443,7 @@ module.exports.updateSettings = async (req, res) => {
     { $set: update, $setOnInsert: { key: "global" } },
     { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
   );
+  invalidatePlatformSettingsCache();
   await writeAudit({ actorRole: "admin", actorId: req.admin.email, action: "settings.update", targetType: "platform", targetId: "global", metadata: update });
   return res.json({
     success: true,

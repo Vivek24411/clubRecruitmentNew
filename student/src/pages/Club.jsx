@@ -14,7 +14,7 @@ function ClubMark({ club }) {
       src={club.clubLogo}
       alt=""
       onError={() => setFailed(true)}
-      className="h-24 w-24 flex-none rounded-lg border border-line bg-surface object-contain p-2 shadow-sm"
+      className="h-20 w-20 flex-none rounded-lg border border-white/80 bg-white object-contain p-1.5 shadow-lg sm:h-24 sm:w-24"
     />
   );
 }
@@ -142,18 +142,19 @@ export default function Club() {
       {/* Masthead                                                            */}
       {/* ------------------------------------------------------------------ */}
       <header className="reveal mt-6">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-          <ClubMark club={club} />
-          <div className="min-w-0 flex-1">
+        <div className="relative aspect-[8/3] overflow-hidden rounded-md border border-line bg-gradient-to-br from-ink via-ink-2 to-accent shadow-sm">
+          {club.clubBanner && <img src={club.clubBanner} alt="" className="absolute inset-0 h-full w-full object-cover" />}
+          <div className="absolute inset-0 bg-gradient-to-t from-ink/75 via-ink/10 to-transparent" />
+          <div className="absolute inset-x-5 bottom-5 flex items-end gap-4">
+            <ClubMark club={club} />
+            <div className="min-w-0 flex-1 pb-1 text-white">
             <div className="flex flex-wrap items-center gap-2"><p className="eyebrow eyebrow-accent">Student club</p><Badge className="capitalize">{(club.category || "technical").replace(/_/g, " ")}</Badge></div>
-            <h1 className="display mt-2 text-3xl sm:text-4xl">{club.name}</h1>
-            {club.shortDescription && (
-              <p className="mt-3 max-w-2xl text-base leading-relaxed text-ink-2">
-                {club.shortDescription}
-              </p>
-            )}
+            <h1 className="display mt-2 line-clamp-2 text-2xl text-white sm:text-4xl">{club.name}</h1>
+            </div>
           </div>
         </div>
+
+        {club.shortDescription && <p className="mt-5 max-w-3xl text-base leading-relaxed text-ink-2">{club.shortDescription}</p>}
 
         <div className="mt-7 flex flex-wrap gap-3">
           <Button to={`/events/club/${clubId}`}>Recruitment events</Button>

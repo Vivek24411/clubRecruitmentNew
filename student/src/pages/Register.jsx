@@ -119,7 +119,7 @@ export default function Register() {
         toast.error(response.data.msg || "Failed to send OTP");
       }
     } catch (error) {
-      toast.error("Error sending OTP. Please try again.");
+      toast.error(error.response?.data?.msg || "Error sending OTP. Please try again.");
       console.error(error);
     } finally {
       setSendingOTP(false);
@@ -138,7 +138,6 @@ export default function Register() {
       });
 
       if (response.data.success) {
-        toast.success("OTP verified successfully");
         try {
           const registerResponse = await axios.post(
             `${import.meta.env.VITE_BASE_URI}/student/register`,
@@ -146,7 +145,7 @@ export default function Register() {
           );
           if (registerResponse.data.success) {
             localStorage.setItem("token", registerResponse.data.token);
-            toast.success("Registration successful");
+            toast.success(registerResponse.data.msg || "Registration successful");
             setLoggedInStudent(true);
             await refreshProfile();
             const returnTo = sessionStorage.getItem("studentReturnTo");
@@ -158,7 +157,7 @@ export default function Register() {
           }
         } catch (registerError) {
           console.error(registerError);
-          toast.error("Error during registration. Please try again.");
+          toast.error(registerError.response?.data?.msg || "Error during registration. Please try again.");
           setRegistering(false);
         }
       } else {
@@ -168,7 +167,7 @@ export default function Register() {
       }
     } catch (error) {
       console.error(error);
-      toast.error("Error verifying OTP. Please try again.");
+      toast.error(error.response?.data?.msg || "Error verifying OTP. Please try again.");
       setVerifyingOTP(false);
       setRegistering(false);
     }

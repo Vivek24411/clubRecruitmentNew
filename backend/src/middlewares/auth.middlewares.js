@@ -1,8 +1,9 @@
 const clubModel = require("../models/club.model");
-const platformSettingsModel = require("../models/platformSettings.model");
 const studentModel = require("../models/student.model");
 const { syncAcademicState } = require("../services/academic.services");
+const { getPlatformSettingsCached } = require("../services/platformConfiguration.services");
 const { getSessionToken, verifySession } = require("../utils/auth");
+const { getPrincipal, putPrincipal } = require("../services/authPrincipalCache.services");
 
 function unauthorized(res, msg = "Authentication required") {
   return res.status(401).json({ success: false, msg });
@@ -28,7 +29,7 @@ module.exports.clubAuth = async (req, res, next) => {
 
   try {
     const decoded = verifySession(token, "club");
-    const club = await clubModel.findById(decoded.sub).select("+tokenVersion");
+    const club = await getPrincipal({ role: "club", id: decoded.sub, version: decoded.ver, model: clubModel });
     if (!club || club.status === "suspended" || club.tokenVersion !== decoded.ver) {
       return unauthorized(res, "Club session is no longer active");
     }
@@ -45,12 +46,13 @@ module.exports.studentAuth = async (req, res, next) => {
 
   try {
     const decoded = verifySession(token, "student");
-    const student = await studentModel.findById(decoded.sub).select("+tokenVersion");
+    const student = await getPrincipal({ role: "student", id: decoded.sub, version: decoded.ver, model: studentModel });
     if (!student || student.status === "suspended" || student.tokenVersion !== decoded.ver) {
       return unauthorized(res, "Student session is no longer active");
     }
-    const settings = await platformSettingsModel.findOne({ key: "global" });
+    const settings = await getPlatformSettingsCached();
     await syncAcademicState(student, settings);
+    putPrincipal("student", student, decoded.ver);
     req.student = student;
     return next();
   } catch {
@@ -69,10 +71,11 @@ module.exports.optionalStudentAuth = async (req, _res, next) => {
 
   try {
     const decoded = verifySession(token, "student");
-    const student = await studentModel.findById(decoded.sub).select("+tokenVersion");
+    const student = await getPrincipal({ role: "student", id: decoded.sub, version: decoded.ver, model: studentModel });
     if (student && student.status !== "suspended" && student.tokenVersion === decoded.ver) {
-      const settings = await platformSettingsModel.findOne({ key: "global" });
+      const settings = await getPlatformSettingsCached();
       await syncAcademicState(student, settings);
+      putPrincipal("student", student, decoded.ver);
       req.student = student;
     }
   } catch {

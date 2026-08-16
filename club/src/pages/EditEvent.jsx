@@ -6,6 +6,7 @@ import RoundBuilder, { normalizeRoundsForForm } from "../components/RoundBuilder
 import EligibilityBuilder from "../components/EligibilityBuilder";
 import { eligibilityForForm } from "../utils/eligibility";
 import { Button, Card, DateTimeInput, Field, Input, Page, Select, Skeleton, Textarea } from "../components/ui";
+import { uploadDirect } from "../utils/directUpload";
 
 export default function EditEvent() {
   const { eventId } = useParams();
@@ -44,21 +45,24 @@ export default function EditEvent() {
     if (!form.rounds.length) return toast.error("Keep at least one event round");
     setSaving(true);
     try {
-      const payload = new FormData();
-      ["title", "eventType", "shortDescription", "longDescription", "maxParticipants", "registrationType", "minTeamSize", "maxTeamSize", "eligibility", "eligibilityMode", "deadlineNotificationsEnabled"].forEach((key) => payload.append(key, form[key] ?? ""));
-      payload.append("registrationDeadlineAt", form.registrationDeadlineAt ? new Date(form.registrationDeadlineAt).toISOString() : "");
-      payload.append("numberOfRounds", form.rounds.length);
-      payload.append("roundsJSON", JSON.stringify(form.rounds.map((round) => ({
+      const directAsset = await uploadDirect(banner, { role: "club", kind: "eventBanner" });
+      const payload = Object.fromEntries(
+        ["title", "eventType", "shortDescription", "longDescription", "maxParticipants", "registrationType", "minTeamSize", "maxTeamSize", "eligibility", "eligibilityMode", "deadlineNotificationsEnabled"]
+          .map((key) => [key, form[key] ?? ""]),
+      );
+      payload.registrationDeadlineAt = form.registrationDeadlineAt ? new Date(form.registrationDeadlineAt).toISOString() : "";
+      payload.numberOfRounds = form.rounds.length;
+      payload.roundsJSON = JSON.stringify(form.rounds.map((round) => ({
         ...round,
         startsAt: round.startsAt ? new Date(round.startsAt).toISOString() : null,
         endsAt: round.endsAt ? new Date(round.endsAt).toISOString() : null,
         submissionOpensAt: round.submissionOpensAt ? new Date(round.submissionOpensAt).toISOString() : null,
         submissionDeadlineAt: round.submissionDeadlineAt ? new Date(round.submissionDeadlineAt).toISOString() : null,
-      }))));
-      payload.append("contactInfoJSON", JSON.stringify(form.ContactInfo));
-      payload.append("programmeEligibilityJSON", JSON.stringify(form.programmeEligibility));
-      payload.append("notifyRegistrants", String(notifyRegistrants));
-      if (banner) payload.append("eventBanner", banner);
+      })));
+      payload.contactInfoJSON = JSON.stringify(form.ContactInfo);
+      payload.programmeEligibilityJSON = JSON.stringify(form.programmeEligibility);
+      payload.notifyRegistrants = notifyRegistrants;
+      if (directAsset) payload.directAsset = directAsset;
       const { data } = await axios.patch(`${import.meta.env.VITE_BASE_URI}/club/events/${eventId}`, payload);
       if (!data.success) throw new Error(data.msg);
       const normalizedRounds = normalizeRoundsForForm(data.event.rounds || []);
@@ -112,7 +116,7 @@ export default function EditEvent() {
           {deadlineChanged && form.deadlineNotificationsEnabled !== false && <label className="mt-5 flex items-start gap-3 rounded-sm border-l-2 border-accent bg-accent-tint/40 p-4 text-sm"><input className="mt-1" type="checkbox" checked={notifyRegistrants} onChange={(event) => setNotifyRegistrants(event.target.checked)} /><span>Email registered students about changed registration or submission deadlines when this save succeeds.</span></label>}
         </Card>
         <Card className="p-5 sm:p-6"><RoundBuilder rounds={form.rounds} onChange={(rounds) => set("rounds", rounds)} registrationType={form.registrationType} /></Card>
-        <Card className="p-5 sm:p-6"><h2 className="display text-xl">Banner</h2><p className="mt-1.5 text-sm text-ink-3">Recommended: 1600 × 900 px (16:9).</p>{form.eventBanner && !banner && <img src={form.eventBanner} alt="Current event banner" className="mt-5 aspect-video w-full rounded-sm border border-line bg-paper-2 object-contain" />}<Field label="Replace banner" id="banner" className="mt-5"><input id="banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setBanner(event.target.files[0] || null)} /></Field></Card>
+        <Card className="p-5 sm:p-6"><h2 className="display text-xl">Banner</h2><p className="mt-1.5 text-sm text-ink-3">Recommended: 1600 × 700 px.</p>{form.eventBanner && !banner && <img src={form.eventBanner} alt="Current event banner" className="mt-5 aspect-[16/7] w-full rounded-sm border border-line bg-paper-2 object-cover" />}<Field label="Replace banner" id="banner" className="mt-5"><input id="banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setBanner(event.target.files[0] || null)} /></Field></Card>
         <div className="flex flex-wrap gap-3"><Button type="submit" size="lg" loading={saving}>{saving ? "Saving..." : "Save event"}</Button><Button to={`/event/${eventId}`} variant="secondary" size="lg">Cancel</Button></div>
       </form>
     </Page>

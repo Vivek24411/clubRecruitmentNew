@@ -29,4 +29,6 @@ const roundSubmissionSchema = new mongoose.Schema({
   submittedAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 
+roundSubmissionSchema.index({ eventId: 1, roundId: 1, submittedAt: -1 });
+
 module.exports = mongoose.model("RoundSubmission", roundSubmissionSchema);

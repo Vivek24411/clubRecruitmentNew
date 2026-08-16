@@ -220,7 +220,7 @@ export default function Event() {
               to={event.clubId._id ? `/club/${event.clubId._id}` : "/clubs"}
               className="flex items-center gap-2.5"
             >
-              <Monogram name={event.clubId.name} size="sm" />
+              {event.clubId.clubLogo ? <img src={event.clubId.clubLogo} alt="" className="h-10 w-10 rounded-md border border-line bg-white object-contain p-1" /> : <Monogram name={event.clubId.name} size="sm" />}
               <span className="text-sm font-semibold">{event.clubId.name}</span>
             </Link>
           )}
@@ -249,7 +249,7 @@ export default function Event() {
         <img
           src={event.eventBanner}
           alt=""
-          className="reveal mt-8 aspect-video w-full rounded-md border border-line bg-paper-2 object-contain shadow-sm"
+          className="reveal mt-8 aspect-[16/7] max-h-[30rem] w-full rounded-md border border-line bg-paper-2 object-cover shadow-sm"
           style={{ "--d": "80ms" }}
           onError={(error) => {
             error.currentTarget.style.display = "none";
@@ -505,6 +505,25 @@ export default function Event() {
                               >
                                 Cancel
                               </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {registration.invitations?.length > 0 && (
+                      <div className="mt-6 border-t border-line pt-5">
+                        <p className="eyebrow">Invitations for you</p>
+                        <p className="mt-1.5 text-xs leading-relaxed text-ink-4">Accepting one will withdraw your current individual application and move you into that team.</p>
+                        <ul className="mt-3 space-y-2">
+                          {registration.invitations.map((offer) => (
+                            <li key={offer._id} className="rounded-sm border border-line p-3">
+                              <p className="text-sm font-semibold">{offer.teamName || `${offer.studentId?.name}'s team`}</p>
+                              <p className="mt-0.5 text-xs text-ink-3">Captain: {offer.studentId?.name}</p>
+                              <div className="mt-3 flex gap-2">
+                                <Button size="sm" disabled={!open || working} onClick={() => action("acceptMemberOffer", { studentId: offer.studentId?._id }, "Join this team? Your current individual application and its round work will be withdrawn.")}>Accept</Button>
+                                <Button size="sm" variant="secondary" disabled={working} onClick={() => action("declineMemberOffer", { captainId: offer.studentId?._id })}>Decline</Button>
+                              </div>
                             </li>
                           ))}
                         </ul>

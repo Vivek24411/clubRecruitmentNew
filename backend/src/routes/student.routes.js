@@ -32,6 +32,7 @@ const {
   transferCaptain,
   getMyApplications,
   getNotifications,
+  getUnreadNotificationCount,
   markNotificationRead,
   markAllNotificationsRead,
   rsvpSession,
@@ -43,18 +44,24 @@ const { optionalStudentAuth, studentAuth } = require("../middlewares/auth.middle
 const rateLimit = require("../middlewares/rateLimit");
 const validateRequest = require("../middlewares/validateRequest");
 const upload = require("../middlewares/upload");
+const { attachDirectAsset, attachDirectAssets, signDirectUpload } = require("../middlewares/directUpload");
 const { getMyEventWorkflow, submitRoundWork } = require("../controllers/workflow.controllers");
 const { checkEmailDomain } = require("../services/student.services");
+const { catalogueCache, publicCache } = require("../middlewares/cacheControl");
 const router = express.Router();
 const fitsBcrypt = (value) => Buffer.byteLength(String(value), "utf8") <= 72;
 const isIitrEmail = (value) => checkEmailDomain(value);
 
-const otpRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyPrefix: "otp", persistent: true });
-const verifyRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "otp-verify", persistent: true });
-const loginRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "student-login", persistent: true });
+// This is only a last-resort abuse ceiling. A campus NAT may legitimately
+// carry several requests for each of 4,000 accounts during launch week.
+const authIpCeiling = rateLimit({ windowMs: 15 * 60 * 1000, max: 20000, keyPrefix: "student-auth-ip", persistent: true });
+const otpRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyPrefix: "otp", persistent: true, keyGenerator: rateLimit.bodyIdentifier("email", "purpose") });
+const verifyRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "otp-verify", persistent: true, keyGenerator: rateLimit.bodyIdentifier("email", "purpose") });
+const loginRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "student-login", persistent: true, keyGenerator: rateLimit.bodyIdentifier("email") });
 
 router.post(
   "/sendOtp",
+  authIpCeiling,
   otpRateLimit,
   [
     body("email").custom(isIitrEmail).withMessage("Invalid IITR email address").bail().normalizeEmail().isLength({ max: 254 }),
@@ -64,13 +71,13 @@ router.post(
   sendOtp
 );
 
-router.post("/verifyOtp", verifyRateLimit, [
+router.post("/verifyOtp", authIpCeiling, verifyRateLimit, [
     body("email").custom(isIitrEmail).withMessage("Invalid IITR email address"),
     body("otp").isLength({ min: 6, max: 6 }).isNumeric().withMessage("Invalid OTP"),
     body("purpose").optional().isIn(["signup", "password_reset"]),
 ], validateRequest, verifyOtp);
 
-router.get('/academic-options', getAcademicOptions)
+router.get('/academic-options', publicCache(300), getAcademicOptions)
 
 router.post("/register",[
     body('email').custom(isIitrEmail).withMessage("Invalid IITR email address"),
@@ -86,7 +93,7 @@ router.post("/register",[
     body('verificationToken').isString().isLength({ min: 20, max: 128 }).withMessage("Email verification is required")
 ], validateRequest, register);
 
-router.post("/login", loginRateLimit, [
+router.post("/login", authIpCeiling, loginRateLimit, [
     body('email').custom(isIitrEmail).withMessage("Invalid IITR email address"),
     body('password').isLength({ min: 4, max: 128 }).withMessage("Invalid password")
 ], validateRequest, login);
@@ -95,7 +102,11 @@ router.post('/logout', logout)
 
 router.get('/getProfile',studentAuth,getProfile)
 
-router.patch('/profile', studentAuth, upload.single('profilePicture'), [
+router.post('/uploads/sign', studentAuth, [
+  body('kind').isIn(['profilePicture', 'submission']),
+], validateRequest, signDirectUpload(['profilePicture', 'submission']))
+
+router.patch('/profile', studentAuth, upload.single('profilePicture'), attachDirectAsset('profilePicture'), [
   body('name').optional().isString().trim().isLength({ min: 2, max: 100 }),
   body('phoneNumber').optional().isMobilePhone('any'),
   body('notificationPreferences').optional().isObject(),
@@ -109,33 +120,33 @@ router.post('/changePassword', studentAuth, [
   body('newPassword').isLength({ min: 10, max: 128 }).custom(fitsBcrypt).withMessage("Password must be 10–72 bytes long"),
 ], validateRequest, changePassword)
 
-router.get('/getSessions', getAllSessions)
+router.get('/getSessions', publicCache(60), getAllSessions)
 
-router.get('/getSession', [
+router.get('/getSession', publicCache(60), [
   query('sessionId').isMongoId().withMessage("Invalid session ID")
 ], validateRequest, getSession);
 
-router.get('/getAllClubs', getAllClubs)
+router.get('/getAllClubs', publicCache(300), getAllClubs)
 
-router.get('/getClub', [
+router.get('/getClub', publicCache(300), [
   query('clubId').isMongoId().withMessage("Invalid club ID")
 ], validateRequest, getClub);
 
-router.get('/getEvents', optionalStudentAuth, getAllEvents)
+router.get('/getEvents', optionalStudentAuth, catalogueCache(60), getAllEvents)
 
-router.get('/getEvent', optionalStudentAuth, [
+router.get('/getEvent', optionalStudentAuth, catalogueCache(60), [
   query('eventId').isMongoId().withMessage("Invalid event ID")
 ], validateRequest, getEvent);
 
-router.get('/getClubEvents', [
+router.get('/getClubEvents', publicCache(60), [
   query('clubId').isMongoId().withMessage("Invalid club ID")
 ], validateRequest, getClubEvents)
 
-router.get('/getClubSessions', [
+router.get('/getClubSessions', publicCache(60), [
   query('clubId').isMongoId().withMessage("Invalid club ID")
 ], validateRequest, getClubSessions)
 
-router.get('/getDashboard', optionalStudentAuth, getDashBoard)
+router.get('/getDashboard', optionalStudentAuth, catalogueCache(60), getDashBoard)
 
 router.post('/registerEvent',studentAuth,[
   body('eventId').isMongoId().withMessage("Invalid event ID")
@@ -190,6 +201,7 @@ router.post('/addTeamName',studentAuth, [
 
 router.get('/myApplications', studentAuth, getMyApplications)
 router.get('/notifications', studentAuth, getNotifications)
+router.get('/notifications/unread-count', studentAuth, getUnreadNotificationCount)
 router.post('/notifications/read', studentAuth, [body('notificationId').isMongoId()], validateRequest, markNotificationRead)
 router.post('/notifications/read-all', studentAuth, markAllNotificationsRead)
 
@@ -201,7 +213,7 @@ router.get('/events/:eventId/workflow', studentAuth, [
   param('eventId').isMongoId(),
 ], validateRequest, getMyEventWorkflow)
 
-router.put('/events/:eventId/rounds/:roundId/submission', studentAuth, upload.submissionUpload.array('files', 5), [
+router.put('/events/:eventId/rounds/:roundId/submission', studentAuth, upload.submissionUpload.array('files', 5), attachDirectAssets('submission'), [
   param('eventId').isMongoId(),
   param('roundId').isMongoId(),
   body('candidateId').isMongoId(),

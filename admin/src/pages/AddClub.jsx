@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { Button, Card, Field, Input, Page, PageHeader, Select } from "../components/ui";
+import { uploadDirect } from "../utils/directUpload";
 
 export default function AddClub() {
   const [name, setName] = useState("");
@@ -64,21 +65,21 @@ export default function AddClub() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("name", name);
-    formData.append("userName", userName);
-    formData.append("password", password);
-    formData.append("accountEmail", accountEmail);
-    formData.append("contactEmail", sameEmail ? accountEmail : contactEmail);
-    formData.append("useAccountEmailForContact", String(sameEmail));
-    formData.append("category", category);
-    if (clubLogo) formData.append("clubLogo", clubLogo);
-
     setIsLoading(true);
     try {
+      const directAsset = await uploadDirect(clubLogo, { role: "admin", kind: "clubLogo" });
       const response = await axios.post(
         `${import.meta.env.VITE_BASE_URI}/admin/addClub`,
-        formData,
+        {
+          name,
+          userName,
+          password,
+          accountEmail,
+          contactEmail: sameEmail ? accountEmail : contactEmail,
+          useAccountEmailForContact: sameEmail,
+          category,
+          ...(directAsset ? { directAsset } : {}),
+        },
       );
       if (response.data.success) {
         toast.success(response.data.msg);

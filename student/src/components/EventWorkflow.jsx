@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { Badge, Button, Card, Field, Input, SkeletonList, Textarea } from "./ui";
+import { uploadDirect } from "../utils/directUpload";
 
 const tone = { advanced: "ok", rejected: "bad", waitlisted: "warn", submitted: "info", under_review: "warn", scheduled: "info", eligible: "neutral", active: "accent", withdrawn: "neutral", revoked: "neutral", missed: "bad" };
 const format = (value) => value ? new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : null;
@@ -18,16 +19,15 @@ function SubmissionForm({ eventId, round, candidate, existing, onSaved }) {
     event.preventDefault();
     setSaving(true);
     try {
-      const payload = new FormData();
-      payload.append("candidateId", candidate._id);
-      payload.append("answersJSON", JSON.stringify(Object.entries(answers).map(([key, value]) => ({ key, value }))));
-      const keys = [];
-      Object.entries(files).forEach(([key, file]) => {
-        if (!file) return;
-        payload.append("files", file);
-        keys.push(key);
-      });
-      payload.append("fileKeysJSON", JSON.stringify(keys));
+      const entries = Object.entries(files).filter(([, file]) => Boolean(file));
+      const directAssets = await Promise.all(entries.map(([, file]) =>
+        uploadDirect(file, { role: "student", kind: "submission" })));
+      const payload = {
+        candidateId: candidate._id,
+        answersJSON: JSON.stringify(Object.entries(answers).map(([key, value]) => ({ key, value }))),
+        fileKeysJSON: JSON.stringify(entries.map(([key]) => key)),
+        directAssets,
+      };
       const { data } = await axios.put(`${import.meta.env.VITE_BASE_URI}/student/events/${eventId}/rounds/${round._id}/submission`, payload);
       if (!data.success) throw new Error(data.msg);
       toast.success(data.msg);

@@ -16,7 +16,6 @@ const { clearSessionCookie, setSessionCookie } = require("../utils/auth");
 const { notifyStudent } = require("../services/notification.services");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryAsset, destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
-const platformSettingsModel = require("../models/platformSettings.model");
 const applicationHistoryModel = require("../models/applicationHistory.model");
 const roundCandidateModel = require("../models/roundCandidate.model");
 const roundSubmissionModel = require("../models/roundSubmission.model");
@@ -33,6 +32,8 @@ const {
   syncAcademicState,
   YEAR_LABELS,
 } = require("../services/academic.services");
+const { getPlatformSettingsCached } = require("../services/platformConfiguration.services");
+const { invalidatePrincipal } = require("../services/authPrincipalCache.services");
 const {
   candidateIncludesStudent,
   ensureEventRounds,
@@ -46,7 +47,7 @@ const {
 
 const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
 const tokenHash = (token) => crypto.createHash("sha256").update(token).digest("hex");
-const PUBLIC_CLUB_FIELDS = "name category shortDescription longDescription website linkedin instagram achivements recruitmentMethods contactEmail contactPhone clubLogo resources annualEvents status";
+const PUBLIC_CLUB_FIELDS = "name category shortDescription longDescription website linkedin instagram achivements recruitmentMethods contactEmail contactPhone clubLogo clubBanner resources annualEvents status";
 const DUMMY_PASSWORD_HASH = "$2b$12$4Qj6z7mmoEgcnxHLS0xDR.jjYdMm05/mtrLZVBInMaqjKAuvz9taa";
 
 function publicStudent(student) {
@@ -87,7 +88,7 @@ function platformRegistrationIsOpen(settings, now = new Date()) {
 }
 
 async function requireOpenRecruitment(res) {
-  const settings = await platformSettingsModel.findOne({ key: "global" });
+  const settings = await getPlatformSettingsCached();
   if (platformRegistrationIsOpen(settings)) return true;
   res.status(403).json({ success: false, msg: "Recruitment registrations are currently closed" });
   return false;
@@ -235,6 +236,13 @@ module.exports.sendOtp = async (req, res) => {
     });
   }
 
+  if (purpose === "signup" && await studentModel.exists({ email })) {
+    return res.status(409).json({
+      success: false,
+      msg: "A student account already exists for this email. Sign in instead.",
+    });
+  }
+
   const accountExists = purpose !== "password_reset" || await studentModel.exists({ email });
 
   const otp = crypto.randomInt(100000, 1000000).toString();
@@ -289,6 +297,14 @@ module.exports.verifyOtp = async (req, res) => {
   const { otp } = req.body;
   const purpose = req.body.purpose || "signup";
 
+  if (purpose === "signup" && await studentModel.exists({ email })) {
+    await otpModel.deleteOne({ email, purpose });
+    return res.status(409).json({
+      success: false,
+      msg: "A student account already exists for this email. Sign in instead.",
+    });
+  }
+
   const otpRecord = await otpModel.findOne({
     email,
     purpose,
@@ -341,7 +357,7 @@ module.exports.register = async (req, res) => {
 
     const existingStudent = await studentModel.findOne({ email });
     if (existingStudent) {
-      return res.json({ success: false, msg: "Student already exists" });
+      return res.status(409).json({ success: false, msg: "A student account already exists for this email. Sign in instead." });
     }
 
     const existingPhoneNumber = await studentModel.findOne({ phoneNumber });
@@ -357,7 +373,7 @@ module.exports.register = async (req, res) => {
       return res.status(400).json({ success: false, msg: "Email verification expired or invalid" });
     }
 
-    const settings = await platformSettingsModel.findOne({ key: "global" });
+    const settings = await getPlatformSettingsCached();
     const academicConfiguration = normalizedAcademicConfiguration(settings);
     const selectedYear = parseAcademicYear(req.body.academicYear || req.body.year);
     const configuredBranch = academicConfiguration.branches.find((item) => item.name === branch);
@@ -430,7 +446,7 @@ module.exports.login = async (req, res) => {
     return res.status(403).json({ success: false, msg: "Student account is suspended" });
   }
 
-  const settings = await platformSettingsModel.findOne({ key: "global" });
+  const settings = await getPlatformSettingsCached();
   await syncAcademicState(student, settings);
 
   const token = await student.createToken();
@@ -493,6 +509,7 @@ module.exports.updateProfile = async (req, res) => {
       student.profilePicturePublicId = req.file.filename;
     }
     await student.save();
+    invalidatePrincipal("student", student._id);
     if (req.file && oldPicturePublicId && oldPicturePublicId !== req.file.filename) {
       await destroyCloudinaryImage(oldPicturePublicId);
     }
@@ -516,6 +533,7 @@ module.exports.changePassword = async (req, res) => {
   student.password = await bcrypt.hash(req.body.newPassword, 12);
   student.tokenVersion += 1;
   await student.save();
+  invalidatePrincipal("student", student._id);
   await writeAudit({ actorRole: "student", actorId: student._id, action: "auth.password_change", targetType: "student", targetId: student._id });
   clearSessionCookie(res, "student");
   return res.json({ success: true, msg: "Password changed. Please sign in again." });
@@ -564,7 +582,7 @@ module.exports.getAllClubs = async (req, res) => {
 };
 
 module.exports.getAcademicOptions = async (req, res) => {
-  const settings = await platformSettingsModel.findOne({ key: "global" });
+  const settings = await getPlatformSettingsCached();
   const academicConfiguration = normalizedAcademicConfiguration(settings);
   return res.json({
     success: true,
@@ -633,7 +651,7 @@ module.exports.getEvent = async (req, res) => {
       eventModel
         .findOne({ _id: eventId, status: { $in: ["published", "closed"] } })
         .populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS }),
-      platformSettingsModel.findOne({ key: "global" }),
+      getPlatformSettingsCached(),
     ]);
     if (!event || !event.clubId) {
       return res.json({ success: false, msg: "Event not found" });
@@ -694,7 +712,7 @@ module.exports.getDashBoard = async (req, res, next) => {
   const [events, sessions, settings] = await Promise.all([
     eventModel.find({ status: "published" }).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS }),
     sessionModel.find({ status: "published" }).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS }),
-    platformSettingsModel.findOne({ key: "global" }).select("registrationEnabled maintenanceMessage recruitmentCycle"),
+    getPlatformSettingsCached(),
   ]);
   const openEvents = events.filter((event) => event.clubId && registrationIsOpen(event));
   const memberships = req.student
@@ -724,7 +742,7 @@ module.exports.registerEvent = async (req, res, next) => {
 
     const [event, settings] = await Promise.all([
       eventModel.findById(eventId),
-      platformSettingsModel.findOne({ key: "global" }),
+      getPlatformSettingsCached(),
     ]);
     if (!event) {
       return res.json({ success: false, msg: "Event not found" });
@@ -891,9 +909,21 @@ module.exports.getEventDetails = async (req, res, next) => {
     .populate("membersOffered", "name email profilePicture");
 
   if (captainExists) {
+    const invitations = await registerationEventModel
+      .find({
+        eventId,
+        _id: { $ne: captainExists._id },
+        membersOffered: studentId,
+        overallStatus: { $ne: "withdrawn" },
+      })
+      .populate("studentId", "name email profilePicture")
+      .select("studentId teamName membersAccepted");
     return res.json({
       success: true,
-      detail: await registrationForStudent(captainExists, captainExists.eventId, studentId),
+      detail: {
+        ...await registrationForStudent(captainExists, captainExists.eventId, studentId),
+        invitations,
+      },
       Show: 1,
     });
   }
@@ -964,7 +994,7 @@ module.exports.addMemberOffer = async (req, res, next) => {
     if (!member) {
       return res.json({ success: false, msg: "Member not found" });
     }
-    const settings = await platformSettingsModel.findOne({ key: "global" });
+    const settings = await getPlatformSettingsCached();
     const memberEligibility = eventEligibility(event, member, settings);
     if (!memberEligibility.eligible) {
       return res.status(400).json({ success: false, msg: `This student is not eligible: ${memberEligibility.reason}` });
@@ -975,15 +1005,18 @@ module.exports.addMemberOffer = async (req, res, next) => {
       studentId: member._id,
       overallStatus: { $ne: "withdrawn" },
     });
-    if (alreadyRegistered) {
+    if (alreadyRegistered?.membersAccepted?.length) {
       return res.json({
         success: false,
-        msg: "Member already registered for this event",
+        msg: "This student is already captain of a team with accepted members",
       });
     }
 
     const memberMembership = await activeEventMembership(eventId, member._id);
-    if (memberMembership) {
+    const isStandaloneCaptain = alreadyRegistered
+      && memberMembership?.role === "captain"
+      && String(memberMembership.registrationId) === String(alreadyRegistered._id);
+    if (memberMembership && !isStandaloneCaptain) {
       return res.status(409).json({ success: false, msg: "Member already belongs to a team for this event" });
     }
 
@@ -1084,7 +1117,7 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
     if (!await requireActiveEventClub(event, res)) return;
     if (!await requireOpenRecruitment(res)) return;
 
-    const settings = await platformSettingsModel.findOne({ key: "global" });
+    const settings = await getPlatformSettingsCached();
     const invitationEligibility = eventEligibility(event, req.student, settings);
     if (!invitationEligibility.eligible) {
       return res.status(403).json({ success: false, msg: invitationEligibility.reason });
@@ -1105,12 +1138,26 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
     }
 
     const existingMembership = await activeEventMembership(eventId, memberId);
+    const ownRegistration = await registerationEventModel.findOne({
+      eventId,
+      studentId: memberId,
+      overallStatus: { $ne: "withdrawn" },
+    });
+    const movingOwnApplication = Boolean(
+      ownRegistration
+      && String(ownRegistration._id) !== String(captainRegisteration._id)
+      && !(ownRegistration.membersAccepted || []).length,
+    );
+    const ownCaptainMembership = !existingMembership || (
+      existingMembership.role === "captain"
+      && String(existingMembership.registrationId) === String(ownRegistration?._id)
+    );
     const acceptedElsewhere = await registerationEventModel.exists({
       eventId,
       membersAccepted: memberId,
       overallStatus: { $ne: "withdrawn" },
     });
-    if (existingMembership || acceptedElsewhere) {
+    if ((existingMembership && (!movingOwnApplication || !ownCaptainMembership)) || acceptedElsewhere) {
       return res.status(409).json({ success: false, msg: "You already belong to a team for this event" });
     }
 
@@ -1119,17 +1166,26 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
       return res.status(400).json({ success: false, msg: "This team is full" });
     }
 
-    if (event.maxParticipants && await activeParticipantCount(eventId) >= event.maxParticipants) {
+    if (!movingOwnApplication && event.maxParticipants && await activeParticipantCount(eventId) >= event.maxParticipants) {
       return res.status(409).json({ success: false, msg: "This event has reached its participant limit" });
     }
 
     try {
-      await eventMembershipModel.create({
-        eventId,
-        registrationId: captainRegisteration._id,
-        studentId: memberId,
-        role: "member",
-      });
+      if (movingOwnApplication && existingMembership) {
+        const moved = await eventMembershipModel.findOneAndUpdate(
+          { _id: existingMembership._id, registrationId: ownRegistration._id, role: "captain" },
+          { registrationId: captainRegisteration._id, role: "member", joinedAt: new Date() },
+          { new: true },
+        );
+        if (!moved) return res.status(409).json({ success: false, msg: "Your application changed. Refresh and try again" });
+      } else {
+        await eventMembershipModel.create({
+          eventId,
+          registrationId: captainRegisteration._id,
+          studentId: memberId,
+          role: "member",
+        });
+      }
     } catch (error) {
       if (error?.code === 11000) {
         return res.status(409).json({ success: false, msg: "You already belong to a team for this event" });
@@ -1152,8 +1208,23 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
       { new: true }
     );
     if (!joinedRegistration) {
-      await eventMembershipModel.deleteOne({ eventId, studentId: memberId });
+      if (movingOwnApplication && existingMembership) {
+        await eventMembershipModel.updateOne(
+          { _id: existingMembership._id, registrationId: captainRegisteration._id },
+          { registrationId: ownRegistration._id, role: "captain", joinedAt: existingMembership.joinedAt },
+        );
+      } else {
+        await eventMembershipModel.deleteOne({ eventId, studentId: memberId });
+      }
       return res.status(409).json({ success: false, msg: "This team became full or the invitation expired" });
+    }
+
+    if (movingOwnApplication) {
+      await recordApplicationHistory({ studentId: memberId, registration: ownRegistration, role: "captain", reason: "withdrawn" });
+      ownRegistration.overallStatus = "withdrawn";
+      ownRegistration.membersOffered = [];
+      await ownRegistration.save();
+      await clearRegistrationWorkflow(ownRegistration._id);
     }
 
     await registerationEventModel.updateMany(
@@ -1171,7 +1242,12 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
     })));
     await writeAudit({ actorRole: "student", actorId: memberId, action: "team.accept_invitation", targetType: "registration", targetId: joinedRegistration._id });
 
-    return res.json({ success: true, msg: "Member accepted successfully" });
+    return res.json({
+      success: true,
+      msg: movingOwnApplication
+        ? "Invitation accepted. Your individual application was replaced by the team application."
+        : "Invitation accepted successfully",
+    });
   } catch (err) {
     console.error("Team invitation acceptance failed:", err);
     return res.status(500).json({ success: false, msg: "Unable to accept the team invitation" });
@@ -1580,6 +1656,11 @@ module.exports.getNotifications = async (req, res) => {
   return res.json({ success: true, notifications, unreadCount });
 };
 
+module.exports.getUnreadNotificationCount = async (req, res) => {
+  const unreadCount = await notificationModel.countDocuments({ studentId: req.student._id, readAt: null });
+  return res.json({ success: true, unreadCount });
+};
+
 module.exports.markNotificationRead = async (req, res) => {
   const notification = await notificationModel.findOneAndUpdate(
     { _id: req.body.notificationId, studentId: req.student._id },
@@ -1610,15 +1691,6 @@ module.exports.rsvpSession = async (req, res) => {
   if (Number.isNaN(sessionAt.getTime())) return res.status(400).json({ success: false, msg: "Session schedule is incomplete" });
   if (sessionAt <= new Date()) return res.status(400).json({ success: false, msg: "Session has already started" });
 
-  const confirmedCount = await sessionRsvpModel.countDocuments({
-    sessionId: session._id,
-    status: { $in: ["confirmed", "attended"] },
-  });
-  await sessionModel.updateOne(
-    { _id: session._id, confirmedRsvpCount: { $exists: false } },
-    { $set: { confirmedRsvpCount: confirmedCount } }
-  );
-
   const existing = await sessionRsvpModel.findOne({ sessionId: session._id, studentId: req.student._id });
   if (["confirmed", "attended"].includes(existing?.status)) {
     return res.json({ success: true, msg: "RSVP already confirmed", rsvp: existing });
@@ -1627,6 +1699,13 @@ module.exports.rsvpSession = async (req, res) => {
   let status = "confirmed";
   let reservedSlot = false;
   if (session.capacity) {
+    if (session.confirmedRsvpCount == null) {
+      const confirmedCount = await sessionRsvpModel.countDocuments({
+        sessionId: session._id,
+        status: { $in: ["confirmed", "attended"] },
+      });
+      await sessionModel.updateOne({ _id: session._id }, { $set: { confirmedRsvpCount: confirmedCount } });
+    }
     const reservedSession = await sessionModel.findOneAndUpdate(
       {
         _id: session._id,
@@ -1639,13 +1718,8 @@ module.exports.rsvpSession = async (req, res) => {
     reservedSlot = Boolean(reservedSession);
     if (!reservedSlot) status = "waitlisted";
   } else {
-    const reservedSession = await sessionModel.findOneAndUpdate(
-      { _id: session._id, status: "published" },
-      { $inc: { confirmedRsvpCount: 1 } },
-      { new: true }
-    );
-    reservedSlot = Boolean(reservedSession);
-    if (!reservedSlot) return res.status(409).json({ success: false, msg: "Session is no longer available" });
+    // Unlimited sessions do not need a contended counter update.
+    reservedSlot = true;
   }
 
   let rsvp;
@@ -1656,7 +1730,7 @@ module.exports.rsvpSession = async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
   } catch (error) {
-    if (reservedSlot) {
+    if (reservedSlot && session.capacity) {
       await sessionModel.updateOne({ _id: session._id, confirmedRsvpCount: { $gt: 0 } }, { $inc: { confirmedRsvpCount: -1 } });
     }
     throw error;
@@ -1666,14 +1740,6 @@ module.exports.rsvpSession = async (req, res) => {
 };
 
 module.exports.cancelSessionRsvp = async (req, res) => {
-  const confirmedCount = await sessionRsvpModel.countDocuments({
-    sessionId: req.body.sessionId,
-    status: { $in: ["confirmed", "attended"] },
-  });
-  await sessionModel.updateOne(
-    { _id: req.body.sessionId, confirmedRsvpCount: { $exists: false } },
-    { $set: { confirmedRsvpCount: confirmedCount } }
-  );
   const rsvp = await sessionRsvpModel.findOneAndUpdate(
     { sessionId: req.body.sessionId, studentId: req.student._id, status: { $in: ["confirmed", "waitlisted"] } },
     { status: "cancelled", updatedAt: new Date() },
@@ -1681,20 +1747,23 @@ module.exports.cancelSessionRsvp = async (req, res) => {
   );
   if (!rsvp) return res.status(404).json({ success: false, msg: "Active RSVP not found" });
   if (rsvp.status === "confirmed") {
-    await sessionModel.updateOne({ _id: rsvp.sessionId, confirmedRsvpCount: { $gt: 0 } }, { $inc: { confirmedRsvpCount: -1 } });
-    const promoted = await sessionRsvpModel.findOneAndUpdate(
-      { sessionId: rsvp.sessionId, status: "waitlisted" },
-      { status: "confirmed", updatedAt: new Date() },
-      { new: true, sort: { createdAt: 1 } }
-    );
-    if (promoted) {
-      await sessionModel.updateOne({ _id: rsvp.sessionId }, { $inc: { confirmedRsvpCount: 1 } });
-      await notifyStudent(promoted.studentId, {
-        type: "session_rsvp_promoted",
-        title: "Your RSVP is confirmed",
-        message: "A place opened up and you have been moved from the waitlist.",
-        link: `/session/${rsvp.sessionId}`,
-      });
+    const limitedSession = await sessionModel.findOne({ _id: rsvp.sessionId, capacity: { $ne: null } }).select("capacity");
+    if (limitedSession) {
+      await sessionModel.updateOne({ _id: rsvp.sessionId, confirmedRsvpCount: { $gt: 0 } }, { $inc: { confirmedRsvpCount: -1 } });
+      const promoted = await sessionRsvpModel.findOneAndUpdate(
+        { sessionId: rsvp.sessionId, status: "waitlisted" },
+        { status: "confirmed", updatedAt: new Date() },
+        { new: true, sort: { createdAt: 1 } }
+      );
+      if (promoted) {
+        await sessionModel.updateOne({ _id: rsvp.sessionId }, { $inc: { confirmedRsvpCount: 1 } });
+        await notifyStudent(promoted.studentId, {
+          type: "session_rsvp_promoted",
+          title: "Your RSVP is confirmed",
+          message: "A place opened up and you have been moved from the waitlist.",
+          link: `/session/${rsvp.sessionId}`,
+        });
+      }
     }
   }
   await writeAudit({ actorRole: "student", actorId: req.student._id, action: "session.rsvp_cancel", targetType: "session", targetId: rsvp.sessionId });
@@ -1732,6 +1801,7 @@ module.exports.forgotPassword = async (req, res) => {
     student.tokenVersion += 1;
     student.markModified("password");
     await student.save();
+    invalidatePrincipal("student", student._id);
     await writeAudit({ actorRole: "student", actorId: student._id, action: "auth.password_reset", targetType: "student", targetId: student._id });
 
     clearSessionCookie(res, "student");

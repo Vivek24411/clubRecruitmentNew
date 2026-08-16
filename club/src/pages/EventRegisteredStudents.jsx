@@ -104,7 +104,10 @@ export default function EventRegisteredStudents() {
   const [selected, setSelected] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedTab, setSelectedTab] = useState(false);
+  const [page, setPage] = useState(1);
   const [operation, setOperation] = useState("");
   const [autoForm, setAutoForm] = useState({ startAt: "", endAt: "", durationMinutes: 20, bufferMinutes: 0, venue: "", meetingUrl: "" });
   const [manual, setManual] = useState(null);
@@ -112,17 +115,29 @@ export default function EventRegisteredStudents() {
 
   const load = useCallback(async () => {
     try {
-      const { data: response } = await axios.get(`${import.meta.env.VITE_BASE_URI}/club/events/${eventId}/workflow`);
+      const { data: response } = await axios.get(`${import.meta.env.VITE_BASE_URI}/club/events/${eventId}/workflow`, {
+        params: {
+          roundId: roundId || undefined,
+          status: statusFilter,
+          search: debouncedSearch || undefined,
+          page,
+          limit: 50,
+        },
+      });
       if (!response.success) throw new Error(response.msg);
       setData(response);
-      setRoundId((current) => current || response.event.rounds?.[0]?._id || "");
+      setRoundId((current) => current || response.selectedRoundId || response.event.rounds?.[0]?._id || "");
     } catch (error) {
       toast.error(error.response?.data?.msg || error.message || "Could not load event workflow");
     }
-  }, [eventId]);
+  }, [debouncedSearch, eventId, page, roundId, statusFilter]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setSelected([]); setDrafts({}); setStatusFilter("all"); }, [roundId]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+  useEffect(() => { setSelected([]); setDrafts({}); }, [roundId, page, statusFilter, debouncedSearch]);
 
   const round = data?.event?.rounds?.find((item) => item._id === roundId);
   const finalRound = round?.order === data?.event?.rounds?.length;
@@ -135,18 +150,10 @@ export default function EventRegisteredStudents() {
     });
     return latest;
   }, [data]);
-  const candidates = useMemo(() => (data?.candidates || []).filter((candidate) => {
-    if (candidate.roundId !== roundId) return false;
-    if (statusFilter !== "all" && candidate.status !== statusFilter) return false;
-    const query = search.trim().toLowerCase();
-    return !query || [candidate, registrations.get(candidate.registrationId)].some((item) => JSON.stringify(item || {}).toLowerCase().includes(query));
-  }), [data, registrations, roundId, search, statusFilter]);
+  const candidates = data?.candidates || [];
   const chosen = candidates.filter((candidate) => selected.includes(candidate._id));
   const allVisibleSelected = candidates.length > 0 && candidates.every((candidate) => selected.includes(candidate._id));
-  const finalSelected = useMemo(() => {
-    const finalId = data?.event?.rounds?.at(-1)?._id;
-    return (data?.candidates || []).filter((candidate) => candidate.roundId === finalId && candidate.status === "advanced");
-  }, [data]);
+  const finalSelectedCount = data?.summary?.finalSelectedCount || 0;
 
   const toggle = (candidateId) => setSelected((previous) => previous.includes(candidateId) ? previous.filter((id) => id !== candidateId) : [...previous, candidateId]);
   const toggleAllVisible = () => setSelected((previous) => {
@@ -228,6 +235,30 @@ export default function EventRegisteredStudents() {
     finally { setOperation(""); }
   };
 
+  const exportRound = async () => {
+    if (!roundId) return;
+    setOperation("export");
+    try {
+      const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/club/events/${eventId}/rounds/${roundId}/export`, {
+        params: { status: statusFilter, search: debouncedSearch || undefined },
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      const disposition = response.headers["content-disposition"] || "";
+      link.href = url;
+      link.download = disposition.match(/filename="([^"]+)"/)?.[1] || "round-applications.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(error.response?.data?.msg || "Could not export this round");
+    } finally {
+      setOperation("");
+    }
+  };
+
   if (!data) return <Page><SkeletonList rows={6} /></Page>;
   const targetEvent = data.targetEvents?.find((event) => event._id === extract.targetEventId);
 
@@ -236,13 +267,13 @@ export default function EventRegisteredStudents() {
       <Link to={`/event/${eventId}`} className="link text-sm text-ink-3">← Back to event</Link>
       <header className="mt-6"><p className="eyebrow eyebrow-accent">Round workspace</p><h1 className="display mt-2 break-words text-3xl sm:text-4xl">{data.event.title}</h1><p className="mt-3 text-sm text-ink-3">Review submissions, publish exact decisions, and schedule conflict-free slots.</p></header>
 
-      {finalSelected.length > 0 && <Card className="mt-7 border-l-4 border-l-ok p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow text-ok">Final selections</p><h2 className="display mt-1 text-xl">{finalSelected.length} selected {finalSelected.length === 1 ? "entry" : "entries"}</h2></div><Button type="button" variant="secondary" size="sm" onClick={() => { setRoundId(data.event.rounds.at(-1)._id); setStatusFilter("advanced"); }}>View selected</Button></div></Card>}
+      {finalSelectedCount > 0 && <Card className="mt-7 border-l-4 border-l-ok p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow text-ok">Final selections</p><h2 className="display mt-1 text-xl">{finalSelectedCount} selected {finalSelectedCount === 1 ? "entry" : "entries"}</h2></div><Button type="button" variant="secondary" size="sm" onClick={() => { setRoundId(data.event.rounds.at(-1)._id); setStatusFilter("advanced"); setSelectedTab(true); setPage(1); }}>View selected</Button></div></Card>}
 
-      <div className="mt-8 overflow-x-auto border-b border-line" role="tablist"><div className="flex min-w-max gap-1">{data.event.rounds.map((item) => <button key={item._id} type="button" role="tab" aria-selected={item._id === roundId} className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${item._id === roundId ? "border-accent text-accent" : "border-transparent text-ink-3 hover:text-ink"}`} onClick={() => setRoundId(item._id)}>{item.order}. {item.title}</button>)}</div></div>
+      <div className="mt-8 overflow-x-auto border-b border-line" role="tablist"><div className="flex min-w-max gap-1">{data.event.rounds.map((item) => <button key={item._id} type="button" role="tab" aria-selected={!selectedTab && item._id === roundId} className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${!selectedTab && item._id === roundId ? "border-accent text-accent" : "border-transparent text-ink-3 hover:text-ink"}`} onClick={() => { setRoundId(item._id); setStatusFilter("all"); setSelectedTab(false); setPage(1); }}>{item.order}. {item.title}</button>)}<button type="button" role="tab" aria-selected={selectedTab} className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${selectedTab ? "border-ok text-ok" : "border-transparent text-ink-3 hover:text-ink"}`} onClick={() => { setRoundId(data.event.rounds.at(-1)?._id || ""); setStatusFilter("advanced"); setSelectedTab(true); setPage(1); }}>Selected students ({finalSelectedCount})</button></div></div>
 
-      {round && <Card className="mt-6 p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex flex-wrap gap-2"><Badge tone="info">{round.type.replaceAll("_", " ")}</Badge><Badge>{round.evaluationScope === "participant" ? "Per student" : "Whole team/application"}</Badge></div><h2 className="display mt-3 text-xl">{round.title}</h2><p className="mt-2 max-w-2xl text-sm text-ink-3">{round.description || "No round description added."}</p></div><div className="text-right text-sm text-ink-3"><p>{candidates.length} visible candidate record(s)</p>{round.submissionDeadlineAt && <p className="mt-1">Deadline {displayDate(round.submissionDeadlineAt)}</p>}</div></div></Card>}
+      {round && <Card className="mt-6 p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex flex-wrap gap-2"><Badge tone="info">{round.type.replaceAll("_", " ")}</Badge><Badge>{round.evaluationScope === "participant" ? "Per student" : "Whole team/application"}</Badge></div><h2 className="display mt-3 text-xl">{round.title}</h2><p className="mt-2 max-w-2xl text-sm text-ink-3">{round.description || "No round description added."}</p></div><div className="text-right text-sm text-ink-3"><p>{data.pagination?.total || 0} matching candidate record(s)</p>{round.submissionDeadlineAt && <p className="mt-1">Deadline {displayDate(round.submissionDeadlineAt)}</p>}</div></div></Card>}
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem_auto] sm:items-end"><Field label="Search applications" id="candidate-search"><Input id="candidate-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, email, team, branch…" /></Field><Field label="Status" id="candidate-status"><Select id="candidate-status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option><option value="eligible">Eligible</option><option value="scheduled">Scheduled</option><option value="submitted">Submitted</option><option value="under_review">Under review</option><option value="advanced">{finalRound ? "Selected" : "Advanced"}</option><option value="waitlisted">Waitlisted</option><option value="rejected">Rejected</option></Select></Field><div className="flex items-center gap-3 pb-1"><Button type="button" variant="secondary" size="sm" disabled={!candidates.length} onClick={toggleAllVisible}>{allVisibleSelected ? "Clear visible" : "Select all"}</Button><p className="whitespace-nowrap text-sm text-ink-3">{chosen.length} selected</p></div></div>
+      <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem_auto] sm:items-end"><Field label="Search applications" id="candidate-search"><Input id="candidate-search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Name, email, team, branch…" /></Field><Field label="Status" id="candidate-status"><Select id="candidate-status" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setSelectedTab(false); setPage(1); }}><option value="all">All statuses</option><option value="eligible">Eligible</option><option value="scheduled">Scheduled</option><option value="submitted">Submitted</option><option value="under_review">Under review</option><option value="advanced">{finalRound ? "Selected" : "Advanced"}</option><option value="waitlisted">Waitlisted</option><option value="rejected">Rejected</option></Select></Field><div className="flex flex-wrap items-center gap-2 pb-1"><Button type="button" variant="secondary" size="sm" loading={operation === "export"} disabled={!roundId || Boolean(operation)} onClick={exportRound}>Export CSV</Button><Button type="button" variant="secondary" size="sm" disabled={!candidates.length} onClick={toggleAllVisible}>{allVisibleSelected ? "Clear page" : "Select page"}</Button><p className="whitespace-nowrap text-sm text-ink-3">{chosen.length} selected</p></div></div>
 
       {!candidates.length ? <EmptyState className="mt-6" title="No matching candidates" description="Try another round, status, or search term." /> : <div className="mt-4 space-y-4">{candidates.map((candidate) => {
         const registration = registrations.get(candidate.registrationId);
@@ -250,6 +281,8 @@ export default function EventRegisteredStudents() {
         const slot = slots.get(candidate._id);
         return <Card key={candidate._id} className="overflow-hidden"><div className="grid gap-5 p-5 xl:grid-cols-[minmax(15rem,1fr)_minmax(15rem,1.2fr)_minmax(15rem,1fr)_12rem]"><label className="flex min-w-0 items-start gap-3"><input className="mt-1" type="checkbox" checked={selected.includes(candidate._id)} onChange={() => toggle(candidate._id)} /><span className="min-w-0 flex-1"><CandidateIdentity candidate={candidate} registration={registration} finalRound={finalRound} /><p className="mt-3 text-xs text-ink-4">Applied {displayDate(registration?.registeredAt)}</p></span></label><div className="min-w-0"><p className="eyebrow">Submission</p><SubmissionSummary submission={submission} /></div><div className="grid content-start gap-3"><Field label="Score (optional)" id={`score-${candidate._id}`}><Input id={`score-${candidate._id}`} type="number" min="0" value={drafts[candidate._id]?.score ?? candidate.score ?? ""} onChange={(event) => patchDraft(candidate._id, { score: event.target.value })} /></Field><Field label="Private reviewer notes" id={`notes-${candidate._id}`}><Textarea id={`notes-${candidate._id}`} rows="3" className="min-h-0" value={drafts[candidate._id]?.notes ?? candidate.notes ?? ""} onChange={(event) => patchDraft(candidate._id, { notes: event.target.value })} /></Field><Button type="button" variant="secondary" size="sm" loading={operation === `review-${candidate._id}`} onClick={() => saveReview(candidate)}>Save score and notes</Button></div><div className="min-w-0 text-sm"><p className="eyebrow">Schedule</p><p className="mt-2 font-medium text-ink-2">{slot ? displayDate(slot.startAt) : "No slot"}</p>{slot?.venue && <p className="mt-1 text-xs text-ink-3">{slot.venue}</p>}{slot?.meetingUrl && <a href={slot.meetingUrl} target="_blank" rel="noreferrer" className="link mt-1 block break-all text-xs">Meeting link ↗</a>}{round.scheduleMode === "slots" && ["eligible", "scheduled", "active", "submitted", "under_review"].includes(candidate.status) && <Button type="button" variant="secondary" size="sm" className="mt-3" onClick={() => setManual({ candidateId: candidate._id, startAt: localDateTime(slot?.startAt), endAt: localDateTime(slot?.endAt), venue: slot?.venue || round.venue || "", meetingUrl: slot?.meetingUrl || round.meetingUrl || "" })}>{slot ? "Reschedule" : "Set slot"}</Button>}</div></div></Card>;
       })}</div>}
+
+      {data.pagination?.pages > 1 && <div className="mt-6 flex items-center justify-between gap-4"><Button type="button" variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((current) => Math.max(current - 1, 1))}>Previous</Button><p className="text-sm text-ink-3">Page {data.pagination.page} of {data.pagination.pages}</p><Button type="button" variant="secondary" size="sm" disabled={page >= data.pagination.pages} onClick={() => setPage((current) => current + 1)}>Next</Button></div>}
 
       {candidates.length > 0 && <Card className="sticky bottom-4 z-20 mt-6 p-4 shadow-lg sm:p-5"><div className="flex flex-wrap items-center gap-3"><p className="mr-auto text-sm font-semibold">{chosen.length ? `${chosen.length} selected` : "Select candidates to publish a decision"}</p><Button type="button" loading={operation === "decision-advanced"} disabled={!chosen.length || Boolean(operation)} onClick={() => publish("advanced")}>{finalRound ? "Select candidates" : "Advance selected"}</Button><Button type="button" variant="secondary" loading={operation === "decision-waitlisted"} disabled={!chosen.length || Boolean(operation)} onClick={() => publish("waitlisted")}>Waitlist selected</Button><Button type="button" variant="danger" loading={operation === "decision-rejected"} disabled={!chosen.length || Boolean(operation)} onClick={() => publish("rejected")}>Reject selected</Button></div></Card>}
 

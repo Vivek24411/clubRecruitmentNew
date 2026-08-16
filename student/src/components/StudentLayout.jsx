@@ -22,17 +22,24 @@ export default function StudentLayout({ children }) {
       setUnread(0);
       return undefined;
     }
-    const loadUnread = () =>
+    const loadUnread = () => {
+      if (document.hidden) return Promise.resolve();
+      return (
       axios
-        .get(`${import.meta.env.VITE_BASE_URI}/student/notifications`)
+        .get(`${import.meta.env.VITE_BASE_URI}/student/notifications/unread-count`)
         .then(({ data }) => data.success && setUnread(data.unreadCount))
-        .catch(() => {});
+        .catch(() => {})
+      );
+    };
     loadUnread();
-    const timer = window.setInterval(loadUnread, 60000);
+    const timer = window.setInterval(loadUnread, 120000);
+    const onVisibility = () => { if (!document.hidden) loadUnread(); };
     window.addEventListener("notifications-updated", loadUnread);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.clearInterval(timer);
       window.removeEventListener("notifications-updated", loadUnread);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [loggedInStudent]);
 

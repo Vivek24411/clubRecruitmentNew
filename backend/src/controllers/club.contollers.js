@@ -9,13 +9,18 @@ const eventModel = require("../models/event.model");
 const registerationEventModel = require("../models/registerationEvent.model");
 const sessionRsvpModel = require("../models/sessionRsvp.model");
 const roundCandidateModel = require("../models/roundCandidate.model");
+const roundSubmissionModel = require("../models/roundSubmission.model");
+const scheduleSlotModel = require("../models/scheduleSlot.model");
+const scheduleReservationModel = require("../models/scheduleReservation.model");
+const eventMembershipModel = require("../models/eventMembership.model");
 const studentModel = require("../models/student.model");
 const { clearSessionCookie, setSessionCookie } = require("../utils/auth");
-const { notifyStudent, notifyTeam } = require("../services/notification.services");
+const { notifyStudent, notifyTeam, notifyRegistrations } = require("../services/notification.services");
 const { sendOtp } = require("../services/student.services");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
 const { normalizeProgrammeEligibility } = require("../services/academic.services");
+const { invalidatePrincipal } = require("../services/authPrincipalCache.services");
 const {
   ensureEventRounds,
   normalizeRounds,
@@ -125,6 +130,7 @@ module.exports.changePassword = async (req, res) => {
     club.password = await bcrypt.hash(newPassword, 12);
     club.tokenVersion = (club.tokenVersion || 0) + 1;
     await club.save();
+    invalidatePrincipal("club", club._id);
     await writeAudit({
       actorRole: "club",
       actorId: club._id,
@@ -249,6 +255,7 @@ module.exports.resetPassword = async (req, res) => {
     club.password = await bcrypt.hash(req.body.newPassword, 12);
     club.tokenVersion = (club.tokenVersion || 0) + 1;
     await club.save();
+    invalidatePrincipal("club", club._id);
     await writeAudit({
       actorRole: "club",
       actorId: club._id,
@@ -368,9 +375,14 @@ module.exports.updateProfile = async (req, res) => {
   }
 
   const oldLogoPublicId = req.club.clubLogoPublicId;
+  const oldBannerPublicId = req.club.clubBannerPublicId;
   if (req.file) {
     updateData.clubLogo = req.file.path;
     updateData.clubLogoPublicId = req.file.filename;
+  }
+  if (req.clubBannerFile) {
+    updateData.clubBanner = req.clubBannerFile.path;
+    updateData.clubBannerPublicId = req.clubBannerFile.filename;
   }
 
   try {
@@ -378,12 +390,16 @@ module.exports.updateProfile = async (req, res) => {
       .findByIdAndUpdate(req.club._id, updateData, { new: true, runValidators: true })
       .select("-password");
     if (!club) {
-      await destroyUploadedFile(req.file);
+      await Promise.all([req.file, req.clubBannerFile].filter(Boolean).map(destroyUploadedFile));
       return res.json({ success: false, msg: "Club not found" });
     }
     if (req.file && oldLogoPublicId && oldLogoPublicId !== req.file.filename) {
       await destroyCloudinaryImage(oldLogoPublicId);
     }
+    if (req.clubBannerFile && oldBannerPublicId && oldBannerPublicId !== req.clubBannerFile.filename) {
+      await destroyCloudinaryImage(oldBannerPublicId);
+    }
+    invalidatePrincipal("club", club._id);
     await writeAudit({ actorRole: "club", actorId: req.club._id, action: "profile.update", targetType: "club", targetId: req.club._id, metadata: { fields: Object.keys(updateData) } });
     return res.json({
       success: true,
@@ -391,7 +407,7 @@ module.exports.updateProfile = async (req, res) => {
       club,
     });
   } catch (err) {
-    await destroyUploadedFile(req.file);
+    await Promise.all([req.file, req.clubBannerFile].filter(Boolean).map(destroyUploadedFile));
     return res.status(400).json({ success: false, msg: err?.code === 11000 ? "Club name or username is already in use" : "Failed to update club profile" });
   }
 };
@@ -456,14 +472,17 @@ module.exports.addEvent = async (req, res) => {
   } = req.body;
   
   // Handle ContactInfo array properly
-  let ContactInfo = [];
+  let ContactInfo = parsedArray(req.body.contactInfoJSON || req.body.ContactInfo)
+    .map((item) => String(item).trim().slice(0, 200))
+    .filter(Boolean)
+    .slice(0, 10);
   
   // Check if there are any ContactInfo fields in the request
-  if (req.body['ContactInfo[0]'] !== undefined) {
+  if (!ContactInfo.length && req.body['ContactInfo[0]'] !== undefined) {
     // Collect all ContactInfo items
     let i = 0;
     while (req.body[`ContactInfo[${i}]`] !== undefined) {
-      if (i < 10) ContactInfo.push(String(req.body[`ContactInfo[${i}]`]).trim().slice(0, 200));
+      if (i < 10 && String(req.body[`ContactInfo[${i}]`]).trim()) ContactInfo.push(String(req.body[`ContactInfo[${i}]`]).trim().slice(0, 200));
       i++;
     }
   }
@@ -850,7 +869,7 @@ module.exports.updateEvent = async (req, res) => {
   const notifyDeadlineChange = req.body.notifyRegistrants === true || req.body.notifyRegistrants === "true";
   if (deadlineChanged && notifyDeadlineChange) {
     const registrations = await registerationEventModel.find({ eventId: event._id, overallStatus: { $ne: "withdrawn" } });
-    await Promise.all(registrations.map((registration) => notifyTeam(registration, {
+    await notifyRegistrations(registrations, {
       type: "event_deadline_changed",
       title: `Deadline updated for ${event.title}`,
       message: registrationDeadlineChanged
@@ -859,7 +878,7 @@ module.exports.updateEvent = async (req, res) => {
           : "The registration deadline was removed. Check the event page for current details.")
         : `${changedRoundDeadlines.map((round) => round.title).join(", ")} submission deadline was updated. Check the event page for the new timing.`,
       link: `/event/${event._id}`,
-    })));
+    });
   }
   await writeAudit({ actorRole: "club", actorId: req.club._id, action: "event.update", targetType: "event", targetId: event._id });
   return res.json({ success: true, msg: "Event updated successfully", event });
@@ -874,15 +893,43 @@ module.exports.updateEventStatus = async (req, res) => {
   await event.save();
   if (previousStatus !== "cancelled" && event.status === "cancelled") {
     const registrations = await registerationEventModel.find({ eventId: event._id });
-    await Promise.all(registrations.map((registration) => notifyTeam(registration, {
+    await notifyRegistrations(registrations, {
       type: "event_cancelled",
       title: `${event.title} was cancelled`,
       message: "The club cancelled this recruitment event. Your application history remains available.",
       link: "/applications",
-    })));
+    });
   }
   await writeAudit({ actorRole: "club", actorId: req.club._id, action: `event.${event.status}`, targetType: "event", targetId: event._id });
   return res.json({ success: true, msg: `Event ${event.status}`, event });
+};
+
+module.exports.deleteEvent = async (req, res) => {
+  const event = await ownedEvent(req.params.eventId, req.club._id);
+  if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
+
+  const [registration, candidate, submission, slot, membership] = await Promise.all([
+    registerationEventModel.exists({ eventId: event._id }),
+    roundCandidateModel.exists({ eventId: event._id }),
+    roundSubmissionModel.exists({ eventId: event._id }),
+    scheduleSlotModel.exists({ eventId: event._id }),
+    eventMembershipModel.exists({ eventId: event._id }),
+  ]);
+  if (registration || candidate || submission || slot || membership) {
+    return res.status(409).json({
+      success: false,
+      msg: "This event already has student activity and cannot be deleted. Cancel or archive it to preserve application history.",
+    });
+  }
+
+  // Empty events have no reservations, but keep this cleanup coupled to the
+  // delete so partially-created scheduling data can never be orphaned.
+  const slotIds = (await scheduleSlotModel.find({ eventId: event._id }).select("_id").lean()).map((slot) => slot._id);
+  if (slotIds.length) await scheduleReservationModel.deleteMany({ slotId: { $in: slotIds } });
+  await event.deleteOne();
+  await destroyCloudinaryImage(event.eventBannerPublicId);
+  await writeAudit({ actorRole: "club", actorId: req.club._id, action: "event.delete", targetType: "event", targetId: event._id, metadata: { title: event.title } });
+  return res.json({ success: true, msg: "Event permanently deleted" });
 };
 
 module.exports.updateSession = async (req, res) => {
@@ -894,11 +941,13 @@ module.exports.updateSession = async (req, res) => {
   const previousStatus = session.status;
   const previousSchedule = { date: session.date, time: session.time, venue: session.venue };
   const previousThumbnailPublicId = session.sessionThumbnailPublicId;
-  const confirmedCount = await sessionRsvpModel.countDocuments({
-    sessionId: session._id,
-    status: { $in: ["confirmed", "attended"] },
-  });
-  session.confirmedRsvpCount = confirmedCount;
+  const capacityRequested = req.body.capacity !== undefined && req.body.capacity !== null && req.body.capacity !== "";
+  if (session.capacity || capacityRequested) {
+    session.confirmedRsvpCount = await sessionRsvpModel.countDocuments({
+      sessionId: session._id,
+      status: { $in: ["confirmed", "attended"] },
+    });
+  }
   const allowedFields = ["title", "shortDescription", "longDescription", "date", "time", "duration", "venue", "capacity", "status"];
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) session[field] = req.body[field];

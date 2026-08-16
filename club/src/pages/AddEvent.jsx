@@ -6,6 +6,7 @@ import RoundBuilder from "../components/RoundBuilder";
 import EligibilityBuilder from "../components/EligibilityBuilder";
 import { allProgrammeRules } from "../utils/eligibility";
 import { Button, Card, DateTimeInput, Field, Input, Page, PageHeader, Select, Textarea } from "../components/ui";
+import { uploadDirect } from "../utils/directUpload";
 
 const initialForm = {
   title: "",
@@ -48,25 +49,28 @@ export default function AddEvent() {
     if (!form.rounds.length) return toast.error("Add at least one event round");
     setSubmitting(true);
     try {
-      const payload = new FormData();
       const normalized = {
         ...form,
         minTeamSize: form.registrationType === "individual" ? 1 : form.minTeamSize,
         maxTeamSize: form.registrationType === "individual" ? 1 : form.maxTeamSize,
       };
-      ["title", "eventType", "shortDescription", "longDescription", "maxParticipants", "registrationType", "minTeamSize", "maxTeamSize", "eligibility", "status", "eligibilityMode", "deadlineNotificationsEnabled"].forEach((key) => payload.append(key, normalized[key]));
-      payload.append("registrationDeadlineAt", new Date(normalized.registrationDeadlineAt).toISOString());
-      payload.append("numberOfRounds", normalized.rounds.length);
-      payload.append("roundsJSON", JSON.stringify(normalized.rounds.map((round) => ({
+      const directAsset = await uploadDirect(banner, { role: "club", kind: "eventBanner" });
+      const payload = Object.fromEntries(
+        ["title", "eventType", "shortDescription", "longDescription", "maxParticipants", "registrationType", "minTeamSize", "maxTeamSize", "eligibility", "status", "eligibilityMode", "deadlineNotificationsEnabled"]
+          .map((key) => [key, normalized[key]]),
+      );
+      payload.registrationDeadlineAt = new Date(normalized.registrationDeadlineAt).toISOString();
+      payload.numberOfRounds = normalized.rounds.length;
+      payload.roundsJSON = JSON.stringify(normalized.rounds.map((round) => ({
         ...round,
         startsAt: round.startsAt ? new Date(round.startsAt).toISOString() : null,
         endsAt: round.endsAt ? new Date(round.endsAt).toISOString() : null,
         submissionOpensAt: round.submissionOpensAt ? new Date(round.submissionOpensAt).toISOString() : null,
         submissionDeadlineAt: round.submissionDeadlineAt ? new Date(round.submissionDeadlineAt).toISOString() : null,
-      }))));
-      payload.append("programmeEligibilityJSON", JSON.stringify(normalized.programmeEligibility));
-      normalized.ContactInfo.filter(Boolean).forEach((item, index) => payload.append(`ContactInfo[${index}]`, item));
-      if (banner) payload.append("eventBanner", banner);
+      })));
+      payload.programmeEligibilityJSON = JSON.stringify(normalized.programmeEligibility);
+      payload.contactInfoJSON = JSON.stringify(normalized.ContactInfo.filter(Boolean));
+      if (directAsset) payload.directAsset = directAsset;
       const { data } = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/addEvent`, payload);
       if (!data.success) throw new Error(data.msg);
       toast.success(data.msg);
@@ -99,7 +103,7 @@ export default function AddEvent() {
             <Field label="Registration deadline" id="deadline" required className="lg:col-span-2"><DateTimeInput id="deadline" value={form.registrationDeadlineAt} onChange={(value) => set("registrationDeadlineAt", value)} required quickTimes={["17:00", "20:00", "23:00", "23:59"]} /></Field>
             <Field label="Overall participant limit (optional)" id="capacity" hint="Counts people, not teams: the captain and every accepted member count once. Pending invitations do not count."><Input id="capacity" type="number" min="1" max="10000" value={form.maxParticipants} onChange={(event) => set("maxParticipants", event.target.value)} placeholder="Unlimited" /></Field>
             <Field label="Registration type" id="registrationType"><Select id="registrationType" value={form.registrationType} onChange={(event) => set("registrationType", event.target.value)}><option value="individual">Individual</option><option value="team">Team only</option><option value="optional_team">Individual or team</option></Select></Field>
-            {form.registrationType !== "individual" && <Field label="Team size" id="minTeam"><div className="grid grid-cols-2 gap-2"><Input aria-label="Minimum team size" id="minTeam" type="number" min="1" value={form.minTeamSize} onChange={(event) => set("minTeamSize", Number(event.target.value))} /><Input aria-label="Maximum team size" type="number" min={form.minTeamSize} value={form.maxTeamSize} onChange={(event) => set("maxTeamSize", Number(event.target.value))} /></div></Field>}
+            {form.registrationType !== "individual" && <><Field label="Lower limit" id="minTeam" hint="Minimum students required in a team."><Input id="minTeam" type="number" min="1" value={form.minTeamSize} onChange={(event) => set("minTeamSize", Number(event.target.value))} /></Field><Field label="Upper limit" id="maxTeam" hint="Maximum students allowed in a team."><Input id="maxTeam" type="number" min={form.minTeamSize} value={form.maxTeamSize} onChange={(event) => set("maxTeamSize", Number(event.target.value))} /></Field></>}
           </div>
           <EligibilityBuilder
             mode={form.eligibilityMode}
@@ -117,9 +121,9 @@ export default function AddEvent() {
 
         <Card className="p-5 sm:p-6">
           <h2 className="display text-xl">Event banner</h2>
-          <p className="mt-1.5 text-sm text-ink-3">Use a 16:9 image, ideally 1600 × 900 px. Keep important text away from the edges.</p>
+          <p className="mt-1.5 text-sm text-ink-3">Use a wide image, ideally 1600 × 700 px. Keep important text away from the edges.</p>
           <Field label="JPG, PNG, or WebP under 5 MB" id="banner" className="mt-5"><input id="banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={selectBanner} className="block w-full text-sm file:mr-3 file:rounded-sm file:border file:border-line file:bg-surface file:px-4 file:py-2" /></Field>
-          {preview && <img src={preview} alt="Event banner preview" className="mt-5 aspect-video w-full rounded-sm border border-line bg-paper-2 object-contain" />}
+          {preview && <img src={preview} alt="Event banner preview" className="mt-5 aspect-[16/7] w-full rounded-sm border border-line bg-paper-2 object-cover" />}
           <label className="mt-5 flex items-center gap-3 text-sm"><input type="checkbox" checked={form.deadlineNotificationsEnabled} onChange={(event) => set("deadlineNotificationsEnabled", event.target.checked)} />Allow deadline-change email notifications for this event</label>
         </Card>
 

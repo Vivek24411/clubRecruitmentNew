@@ -3,13 +3,16 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "start": "node server.js",
+    "worker": "node worker.js",
     "test": "node --test",
     "migrate:v2": "node scripts/migrate-v2.js",
     "migrate:v3": "node scripts/migrate-v3-workflows.js",
     "migrate:v4": "node scripts/migrate-v4-discovr.js",
     "migrate:v5": "node scripts/migrate-v5-programmes.js",
+    "migrate:v6": "node scripts/migrate-v6-scale-indexes.js",
     "seed:demo": "node scripts/seed-demo.js",
-    "check": "node --check app.js && node --check server.js && node --check scripts/seed-demo.js && node --check scripts/migrate-v4-discovr.js && node --check scripts/migrate-v5-programmes.js"
+    "check": "node --check app.js && node --check server.js && node --check worker.js && node --check src/middlewares/directUpload.js && node --check src/services/jobQueue.services.js && node --check src/services/authPrincipalCache.services.js && node --check scripts/seed-demo.js && node --check scripts/migrate-v4-discovr.js && node --check scripts/migrate-v5-programmes.js && node --check scripts/migrate-v6-scale-indexes.js"
   },
   "keywords": [],
   "author": "",

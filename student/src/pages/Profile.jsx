@@ -1,5 +1,6 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import axios from "axios";
+import { uploadDirect } from "../utils/directUpload";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { StudentContextData } from "../context/StudentContext";
@@ -72,6 +73,16 @@ export default function Profile() {
   const [saving, setSaving] = useState(false);
   const [profilePicture, setProfilePicture] = useState(null);
   const [preview, setPreview] = useState("");
+  const pictureInput = useRef(null);
+
+  const chooseProfilePicture = (file) => {
+    if (file && (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024)) {
+      toast.error("Choose a JPG, PNG, or WebP image smaller than 5 MB");
+      return;
+    }
+    setProfilePicture(file || null);
+    setPreview(file ? URL.createObjectURL(file) : "");
+  };
 
   useEffect(() => {
     if (profile)
@@ -89,11 +100,13 @@ export default function Profile() {
     event.preventDefault();
     setSaving(true);
     try {
-      const payload = new FormData();
-      payload.append("name", form.name);
-      payload.append("phoneNumber", form.phoneNumber);
-      payload.append("notificationPreferencesJSON", JSON.stringify(form.notificationPreferences));
-      if (profilePicture) payload.append("profilePicture", profilePicture);
+      const directAsset = await uploadDirect(profilePicture, { role: "student", kind: "profilePicture" });
+      const payload = {
+        name: form.name,
+        phoneNumber: form.phoneNumber,
+        notificationPreferencesJSON: JSON.stringify(form.notificationPreferences),
+        ...(directAsset ? { directAsset } : {}),
+      };
       const { data } = await axios.patch(`${import.meta.env.VITE_BASE_URI}/student/profile`, payload);
       if (!data.success) throw new Error(data.msg);
       setProfile(data.student);
@@ -155,7 +168,14 @@ export default function Profile() {
               <Meta label="Branch/discipline" value={profile?.branch} />
               <Meta label="Year" value={profile?.year} />
             </dl>
-            <Field id="profilePicture" label="Profile picture" hint="Square JPG, PNG, or WebP. 512 × 512 px works best." className="mt-6"><input id="profilePicture" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files[0] || null; setProfilePicture(file); setPreview(file ? URL.createObjectURL(file) : ""); }} /></Field>
+            <Field id="profilePicture" label="Profile picture" hint="Square JPG, PNG, or WebP. 512 × 512 px works best." className="mt-6">
+              <input ref={pictureInput} id="profilePicture" type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => chooseProfilePicture(event.target.files[0] || null)} />
+              <button type="button" onClick={() => pictureInput.current?.click()} className="w-full rounded-sm border border-dashed border-line-2 bg-paper-2/50 px-4 py-4 text-left transition-colors hover:border-accent hover:bg-accent-tint/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30">
+                <span className="block text-sm font-semibold text-ink">{profilePicture ? "Change selected photo" : profile?.profilePicture ? "Replace photo" : "Upload a photo"}</span>
+                <span className="mt-1 block truncate text-xs text-ink-3">{profilePicture?.name || "Click to choose an image under 5 MB"}</span>
+              </button>
+              {profilePicture && <button type="button" className="link mt-2 text-xs font-semibold text-bad" onClick={() => { chooseProfilePicture(null); if (pictureInput.current) pictureInput.current.value = ""; }}>Remove selected photo</button>}
+            </Field>
           </Card>
         </aside>
 
