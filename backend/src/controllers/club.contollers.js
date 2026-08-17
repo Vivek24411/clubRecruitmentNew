@@ -17,6 +17,7 @@ const studentModel = require("../models/student.model");
 const { clearSessionCookie, setSessionCookie } = require("../utils/auth");
 const { notifyStudent, notifyTeam, notifyRegistrations } = require("../services/notification.services");
 const { enqueueSessionReminder, enqueueSessionReminders } = require("../services/jobQueue.services");
+const { sessionEndAt } = require("../utils/sessionSchedule");
 const { sendOtp } = require("../services/student.services");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
@@ -975,8 +976,8 @@ module.exports.updateSession = async (req, res) => {
     await destroyCloudinaryImage(previousThumbnailPublicId);
   }
 
-  const sessionAt = new Date(`${session.date}T${session.time}:00+05:30`);
-  const canPromoteWaitlist = session.status === "published" && !Number.isNaN(sessionAt.getTime()) && sessionAt > new Date();
+  const endsAt = sessionEndAt(session);
+  const canPromoteWaitlist = session.status === "published" && endsAt && endsAt > new Date();
   const waitlisted = canPromoteWaitlist
     ? await sessionRsvpModel.find({ sessionId: session._id, status: "waitlisted" }).sort({ createdAt: 1 })
     : [];

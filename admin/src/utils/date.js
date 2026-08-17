@@ -9,6 +9,14 @@ export function sessionDate(date, time = "00:00") {
   return new Date(`${date}T${time}:00+05:30`);
 }
 
+export function sessionEndDate(session) {
+  const startsAt = sessionDate(session?.date, session?.time);
+  if (!startsAt || Number.isNaN(startsAt.getTime())) return null;
+  const durationMinutes = Number(session?.duration);
+  if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) return startsAt;
+  return new Date(startsAt.getTime() + durationMinutes * 60 * 1000);
+}
+
 /**
  * Whole calendar days (in IST) between today and a deadline: 0 means it falls
  * today, 1 tomorrow, negative means it has passed. Counting calendar days

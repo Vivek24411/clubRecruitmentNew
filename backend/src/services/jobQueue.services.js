@@ -7,17 +7,10 @@ const sessionModel = require("../models/session.model");
 const sessionRsvpModel = require("../models/sessionRsvp.model");
 const { sendNotificationEmail } = require("./student.services");
 const { sendPushNotification } = require("./firebaseMessaging.services");
+const { sessionStartAt } = require("../utils/sessionSchedule");
 
 const workerId = `${os.hostname()}:${process.pid}:${crypto.randomUUID().slice(0, 8)}`;
 const SESSION_REMINDER_LEAD_MS = 60 * 60 * 1000;
-
-function sessionStartAt(session) {
-  const date = String(session?.date || "");
-  const time = String(session?.time || "");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return null;
-  const startsAt = new Date(`${date}T${time}:00+05:30`);
-  return Number.isNaN(startsAt.getTime()) ? null : startsAt;
-}
 
 function sessionReminderRunAt(session, now = new Date()) {
   const startsAt = sessionStartAt(session);

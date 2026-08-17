@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
-import { formatDateTime, sessionDate } from "../utils/date";
+import { formatDateTime, sessionDate, sessionEndDate } from "../utils/date";
 import {
   Badge,
   Button,
@@ -42,8 +42,8 @@ export default function Sessions() {
     const query = search.trim().toLowerCase();
     const now = new Date();
     return sessions.filter((session) => {
-      const startsAt = sessionDate(session.date, session.time);
-      const upcoming = startsAt && startsAt >= now;
+      const endsAt = sessionEndDate(session);
+      const upcoming = endsAt && endsAt > now;
       return (statusFilter === "all" || session.status === statusFilter)
         && (timeFilter === "all" || (timeFilter === "upcoming" ? upcoming : !upcoming))
         && (!query || `${session.title} ${session.venue || ""} ${session.shortDescription || ""}`.toLowerCase().includes(query));

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { Link } from "react-router-dom";
-import { sessionDate } from "../utils/date";
+import { sessionDate, sessionEndDate } from "../utils/date";
 import {
   Badge,
   Button,
@@ -82,8 +82,8 @@ export default function Sessions() {
     const now = new Date();
     const filtered = sessions
       .filter((session) => {
-        const startsAt = sessionDate(session.date, session.time);
-        if (!showPast && startsAt && startsAt <= now) return false;
+        const endsAt = sessionEndDate(session);
+        if (!showPast && endsAt && endsAt <= now) return false;
         if (!query) return true;
         return (
           session.title?.toLowerCase().includes(query) ||
@@ -172,7 +172,10 @@ export default function Sessions() {
 
                 <div className="stagger mt-4 space-y-3">
                   {items.map(({ session, startsAt }) => {
-                    const isPast = startsAt && startsAt <= new Date();
+                    const now = new Date();
+                    const endsAt = sessionEndDate(session);
+                    const isPast = endsAt && endsAt <= now;
+                    const isOngoing = startsAt && startsAt <= now && !isPast;
                     return (
                       <Link
                         key={session._id}
@@ -197,6 +200,8 @@ export default function Sessions() {
                         <div className="flex flex-none items-center gap-3 px-5 pb-5 sm:flex-col sm:items-end sm:justify-center sm:p-5">
                           {isPast ? (
                             <Badge tone="neutral">Past</Badge>
+                          ) : isOngoing ? (
+                            <Badge tone="ok" live>Live now</Badge>
                           ) : (
                             <Badge tone="ok">Upcoming</Badge>
                           )}

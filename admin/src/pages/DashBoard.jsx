@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { Link } from "react-router-dom";
-import { eventDeadline, formatDateTime, sessionDate } from "../utils/date";
+import { eventDeadline, formatDateTime, sessionDate, sessionEndDate } from "../utils/date";
 import {
   Badge,
   Button,
@@ -48,7 +48,7 @@ export default function DashBoard() {
 
           if (allSessions.length > 0) {
             const upcoming = allSessions
-              .filter((session) => (sessionDate(session.date, session.time) || 0) >= new Date())
+              .filter((session) => (sessionEndDate(session) || 0) > new Date())
               .sort(
                 (a, b) =>
                   (sessionDate(a.date, a.time) || 0) - (sessionDate(b.date, b.time) || 0),
@@ -69,8 +69,10 @@ export default function DashBoard() {
   }, []);
 
   const eventOpen = nextEvent && (eventDeadline(nextEvent) || 0) >= new Date();
-  const sessionUpcoming =
-    nextSession && (sessionDate(nextSession.date, nextSession.time) || 0) >= new Date();
+  const sessionStartsAt = nextSession && sessionDate(nextSession.date, nextSession.time);
+  const sessionEndsAt = nextSession && sessionEndDate(nextSession);
+  const sessionUpcoming = nextSession && sessionEndsAt > new Date();
+  const sessionOngoing = sessionUpcoming && sessionStartsAt <= new Date();
 
   return (
     <Page>
@@ -216,7 +218,9 @@ export default function DashBoard() {
                     </p>
                     <h3 className="display mt-1.5 text-xl leading-snug">{nextSession.title}</h3>
                   </div>
-                  {sessionUpcoming ? (
+                  {sessionOngoing ? (
+                    <Badge tone="ok" live>Live now</Badge>
+                  ) : sessionUpcoming ? (
                     <Badge tone="ok">Upcoming</Badge>
                   ) : (
                     <Badge tone="neutral">Past</Badge>

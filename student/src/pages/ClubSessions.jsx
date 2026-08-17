@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { formatDateTime, sessionDate } from "../utils/date";
+import { formatDateTime, sessionDate, sessionEndDate } from "../utils/date";
 import {
   Badge,
   Button,
@@ -69,7 +69,10 @@ export default function ClubSessions() {
           <div className="stagger space-y-4">
             {clubSessions.map((session) => {
               const startsAt = sessionDate(session.date, session.time);
-              const isPast = startsAt && startsAt <= new Date();
+              const now = new Date();
+              const endsAt = sessionEndDate(session);
+              const isPast = endsAt && endsAt <= now;
+              const isOngoing = startsAt && startsAt <= now && !isPast;
               return (
                 <Link
                   key={session._id}
@@ -97,6 +100,8 @@ export default function ClubSessions() {
                       <h2 className="display text-lg leading-snug">{session.title}</h2>
                       {isPast ? (
                         <Badge tone="neutral">Past</Badge>
+                      ) : isOngoing ? (
+                        <Badge tone="ok" live>Live now</Badge>
                       ) : (
                         <Badge tone="ok">Upcoming</Badge>
                       )}

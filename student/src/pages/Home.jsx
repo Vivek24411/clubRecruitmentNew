@@ -2,7 +2,7 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 import { StudentContextData } from "../context/StudentContext";
-import { daysUntil, eventDeadline, formatDateTime, sessionDate } from "../utils/date";
+import { daysUntil, eventDeadline, formatDateTime, sessionDate, sessionEndDate } from "../utils/date";
 import {
   Badge,
   Button,
@@ -71,7 +71,7 @@ export default function Home() {
   const upcomingSessions = useMemo(
     () =>
       sessions
-        .filter((session) => sessionDate(session.date, session.time) > new Date())
+        .filter((session) => sessionEndDate(session) > new Date())
         .sort((a, b) => sessionDate(a.date, a.time) - sessionDate(b.date, b.time)),
     [sessions],
   );
@@ -231,6 +231,7 @@ export default function Home() {
               <div className="stagger space-y-3">
                 {upcomingSessions.slice(0, 4).map((session) => {
                   const startsAt = sessionDate(session.date, session.time);
+                  const isOngoing = startsAt && startsAt <= new Date();
                   return (
                     <CardLink
                       key={session._id}
@@ -257,6 +258,7 @@ export default function Home() {
                       <div className="min-w-0 p-4">
                         <p className="eyebrow eyebrow-accent">{session.clubId?.name}</p>
                         <h3 className="display mt-1 text-base leading-snug">{session.title}</h3>
+                        {isOngoing && <Badge className="mt-2" tone="ok" live>Live now</Badge>}
                         <p className="mt-1.5 text-sm text-ink-3">
                           {formatDateTime(startsAt)}
                           {session.venue ? ` · ${session.venue}` : ""}

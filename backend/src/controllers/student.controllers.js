@@ -15,6 +15,7 @@ const sessionRsvpModel = require("../models/sessionRsvp.model");
 const { clearSessionCookie, setSessionCookie } = require("../utils/auth");
 const { notifyStudent } = require("../services/notification.services");
 const { enqueueSessionReminder } = require("../services/jobQueue.services");
+const { sessionEndAt } = require("../utils/sessionSchedule");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryAsset, destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
 const applicationHistoryModel = require("../models/applicationHistory.model");
@@ -1688,9 +1689,9 @@ module.exports.rsvpSession = async (req, res) => {
   const activeClub = await clubModel.exists({ _id: session.clubId, status: "active" });
   if (!activeClub) return res.status(404).json({ success: false, msg: "Session is not available" });
 
-  const sessionAt = new Date(`${session.date}T${session.time}:00+05:30`);
-  if (Number.isNaN(sessionAt.getTime())) return res.status(400).json({ success: false, msg: "Session schedule is incomplete" });
-  if (sessionAt <= new Date()) return res.status(400).json({ success: false, msg: "Session has already started" });
+  const endsAt = sessionEndAt(session);
+  if (!endsAt) return res.status(400).json({ success: false, msg: "Session schedule is incomplete" });
+  if (endsAt <= new Date()) return res.status(400).json({ success: false, msg: "Session has already ended" });
 
   const existing = await sessionRsvpModel.findOne({ sessionId: session._id, studentId: req.student._id });
   if (["confirmed", "attended"].includes(existing?.status)) {
@@ -1745,6 +1746,12 @@ module.exports.rsvpSession = async (req, res) => {
 };
 
 module.exports.cancelSessionRsvp = async (req, res) => {
+  const session = await sessionModel.findById(req.body.sessionId)
+    .select("capacity title date time duration venue status");
+  const endsAt = sessionEndAt(session);
+  if (!session || !endsAt || endsAt <= new Date()) {
+    return res.status(400).json({ success: false, msg: "Session has already ended" });
+  }
   const rsvp = await sessionRsvpModel.findOneAndUpdate(
     { sessionId: req.body.sessionId, studentId: req.student._id, status: { $in: ["confirmed", "waitlisted"] } },
     { status: "cancelled", updatedAt: new Date() },
@@ -1752,8 +1759,7 @@ module.exports.cancelSessionRsvp = async (req, res) => {
   );
   if (!rsvp) return res.status(404).json({ success: false, msg: "Active RSVP not found" });
   if (rsvp.status === "confirmed") {
-    const limitedSession = await sessionModel.findOne({ _id: rsvp.sessionId, capacity: { $ne: null } })
-      .select("capacity title date time venue status");
+    const limitedSession = session.capacity != null ? session : null;
     if (limitedSession) {
       await sessionModel.updateOne({ _id: rsvp.sessionId, confirmedRsvpCount: { $gt: 0 } }, { $inc: { confirmedRsvpCount: -1 } });
       const promoted = await sessionRsvpModel.findOneAndUpdate(

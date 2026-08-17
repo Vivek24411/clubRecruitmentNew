@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { formatDateTime, sessionDate } from "../utils/date";
+import { formatDateTime, sessionDate, sessionEndDate } from "../utils/date";
 import {
   Badge,
   Button,
@@ -62,7 +62,10 @@ export default function Session() {
   }
 
   const startsAt = sessionDate(sessionDetails.date, sessionDetails.time);
-  const isPast = startsAt && startsAt <= new Date();
+  const endsAt = sessionEndDate(sessionDetails);
+  const now = new Date();
+  const isPast = endsAt && endsAt <= now;
+  const isOngoing = startsAt && startsAt <= now && !isPast;
 
   return (
     <Page width="5xl">
@@ -83,7 +86,11 @@ export default function Session() {
               </p>
             )}
           </div>
-          {isPast ? <Badge tone="neutral">Past</Badge> : <Badge tone="ok">Upcoming</Badge>}
+          {isPast
+            ? <Badge tone="neutral">Past</Badge>
+            : isOngoing
+              ? <Badge tone="ok" live>Live now</Badge>
+              : <Badge tone="ok">Upcoming</Badge>}
         </div>
         <hr className="rule animate-draw mt-8" style={{ animationDelay: "200ms" }} />
       </header>

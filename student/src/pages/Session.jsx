@@ -2,7 +2,7 @@ import { useCallback, useContext, useEffect, useState } from "react";
 import axios from "axios";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { formatDateTime, sessionDate } from "../utils/date";
+import { formatDateTime, sessionDate, sessionEndDate } from "../utils/date";
 import { StudentContextData } from "../context/StudentContext";
 import {
   Badge,
@@ -108,7 +108,10 @@ export default function Session() {
   }
 
   const startsAt = sessionDate(session.date, session.time);
-  const isPast = startsAt <= new Date();
+  const endsAt = sessionEndDate(session);
+  const now = new Date();
+  const isPast = endsAt <= now;
+  const isOngoing = startsAt <= now && !isPast;
   const activeRsvp = ["confirmed", "waitlisted"].includes(rsvp?.status);
   const placesLeft = session.capacity
     ? Math.max(session.capacity - (session.confirmedRsvpCount || 0), 0)
@@ -131,7 +134,11 @@ export default function Session() {
               <span className="text-sm font-semibold">{session.clubId.name}</span>
             </Link>
           )}
-          {isPast ? <Badge tone="neutral">Past session</Badge> : <Badge tone="ok" live>Upcoming</Badge>}
+          {isPast
+            ? <Badge tone="neutral">Past session</Badge>
+            : isOngoing
+              ? <Badge tone="ok" live>Live now</Badge>
+              : <Badge tone="ok">Upcoming</Badge>}
         </div>
 
         <h1 className="display mt-4 max-w-3xl text-3xl sm:text-4xl lg:text-5xl">{session.title}</h1>
@@ -154,6 +161,7 @@ export default function Session() {
 
           <MetaGrid className="mt-8 border-t border-line pt-6">
             <Meta label="Starts" value={formatDateTime(startsAt)} />
+            <Meta label="Ends" value={formatDateTime(endsAt)} />
             <Meta label="Venue" value={session.venue || "To be announced"} />
             <Meta
               label="Duration"
@@ -190,7 +198,9 @@ export default function Session() {
               <>
                 <p className="mt-3.5 text-sm leading-relaxed text-ink-3">
                   {isPast
-                    ? "This session has already started. Sign in to view any RSVP linked to your account."
+                    ? "This session has ended. Sign in to view any RSVP linked to your account."
+                    : isOngoing
+                      ? "This session is currently in progress. You can still sign in and reserve a place until it ends."
                     : "Sign in with a student account to reserve a seat and receive session updates."}
                 </p>
                 <Button
@@ -230,7 +240,11 @@ export default function Session() {
 
             {loggedInStudent && <p className="mt-3.5 text-sm leading-relaxed text-ink-3">
               {isPast
-                ? "This session has already started."
+                ? "This session has ended."
+                : isOngoing
+                  ? activeRsvp
+                    ? "This session is in progress and your place is reserved."
+                    : "This session is in progress. You can still reserve a place until it ends."
                 : activeRsvp
                   ? "We'll keep your place and post any updates here."
                   : "Reserve a place. If the room is full you'll join the waitlist automatically."}

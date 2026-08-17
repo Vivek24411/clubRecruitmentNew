@@ -8,6 +8,7 @@ const {
   sessionStartAt,
 } = require("../src/services/jobQueue.services");
 const { formatNotificationDateTime } = require("../src/services/student.services");
+const { sessionEndAt, sessionHasEnded } = require("../src/utils/sessionSchedule");
 
 test("job records support scheduled session reminders", () => {
   assert.ok(jobModel.schema.path("type").enumValues.includes("session_reminder"));
@@ -20,6 +21,13 @@ test("session reminders are scheduled one hour before an IITR session", () => {
     sessionReminderRunAt(session, new Date("2026-08-20T08:00:00.000Z")).toISOString(),
     "2026-08-20T12:00:00.000Z",
   );
+});
+
+test("a session remains active until its duration has elapsed", () => {
+  const session = { date: "2026-08-20", time: "18:30", duration: "60" };
+  assert.equal(sessionEndAt(session).toISOString(), "2026-08-20T14:00:00.000Z");
+  assert.equal(sessionHasEnded(session, new Date("2026-08-20T13:59:59.000Z")), false);
+  assert.equal(sessionHasEnded(session, new Date("2026-08-20T14:00:00.000Z")), true);
 });
 
 test("an RSVP made inside the final hour queues an immediate reminder", () => {

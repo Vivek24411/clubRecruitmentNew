@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
-import { eventDeadline, formatDateTime, sessionDate } from "../utils/date";
+import { eventDeadline, formatDateTime, sessionDate, sessionEndDate } from "../utils/date";
 import {
   Badge,
   Button,
@@ -48,7 +48,7 @@ export default function Dashboard() {
   const upcomingSessions = useMemo(
     () =>
       [...sessions]
-        .filter((session) => (sessionDate(session.date, session.time) || 0) >= now)
+        .filter((session) => (sessionEndDate(session) || 0) > now)
         .sort(
           (a, b) =>
             (sessionDate(a.date, a.time) || 0) - (sessionDate(b.date, b.time) || 0),
@@ -59,6 +59,10 @@ export default function Dashboard() {
 
   const nextEvent = upcomingEvents[0] || events[0];
   const nextSession = upcomingSessions[0] || sessions[0];
+  const nextSessionStartsAt = nextSession && sessionDate(nextSession.date, nextSession.time);
+  const nextSessionEndsAt = nextSession && sessionEndDate(nextSession);
+  const nextSessionOngoing = nextSessionStartsAt && nextSessionStartsAt <= now && nextSessionEndsAt > now;
+  const nextSessionEnded = nextSessionEndsAt && nextSessionEndsAt <= now;
   const publishedEvents = events.filter((event) => event.status === "published").length;
 
   return (
@@ -200,15 +204,10 @@ export default function Dashboard() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <h3 className="display text-xl leading-snug">{nextSession.title}</h3>
                   <Badge
-                    tone={
-                      (sessionDate(nextSession.date, nextSession.time) || 0) >= now
-                        ? "ok"
-                        : "neutral"
-                    }
+                    tone={nextSessionEnded ? "neutral" : "ok"}
+                    live={nextSessionOngoing}
                   >
-                    {(sessionDate(nextSession.date, nextSession.time) || 0) >= now
-                      ? "Upcoming"
-                      : "Past"}
+                    {nextSessionEnded ? "Past" : nextSessionOngoing ? "Live now" : "Upcoming"}
                   </Badge>
                 </div>
                 {nextSession.shortDescription && (
