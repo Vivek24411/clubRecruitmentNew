@@ -951,7 +951,11 @@ module.exports.updateSession = async (req, res) => {
   }
   const allowedFields = ["title", "shortDescription", "longDescription", "date", "time", "duration", "venue", "capacity", "status"];
   for (const field of allowedFields) {
-    if (req.body[field] !== undefined) session[field] = req.body[field];
+    if (req.body[field] !== undefined) {
+      session[field] = field === "capacity" && (req.body[field] === "" || req.body[field] === null)
+        ? null
+        : req.body[field];
+    }
   }
   if (req.file) {
     session.sessionThumbnail = req.file.path;

@@ -23,6 +23,12 @@ const resetRequestRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyP
 const resetVerifyRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "club-password-reset-verify", persistent: true, keyGenerator: rateLimit.bodyIdentifier("userName", "email") });
 const passwordChangeRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyPrefix: "club-password-change", persistent: true, keyGenerator: rateLimit.sessionOrIp });
 const fitsBcrypt = (value) => Buffer.byteLength(String(value), "utf8") <= 72;
+const validOptionalCapacity = (value) => {
+  if (value === "") return true;
+  if (!["string", "number"].includes(typeof value)) return false;
+  const capacity = Number(value);
+  return Number.isInteger(capacity) && capacity >= 1;
+};
 const validProgrammeEligibility = (value) => {
   const maxYears = { undergraduate: 5, mtech: 2, msc: 2, mba: 2, phd: 5 };
   try {
@@ -94,7 +100,8 @@ router.post(
     body("time").matches(/^([01]\d|2[0-3]):[0-5]\d$/),
     body("duration").isInt({ min: 1, max: 1440 }).withMessage("Duration must be a positive integer"),
     body("venue").isString().trim().isLength({ min: 1, max: 300 }),
-    body("capacity").optional({ nullable: true }).isInt({ min: 1 }),
+    body("capacity").optional({ nullable: true }).custom(validOptionalCapacity)
+      .withMessage("Capacity must be a whole number of at least 1, or left blank for unlimited"),
     body("status").optional().isIn(["draft", "published"]),
   ], validateRequest,
   addSession
@@ -217,7 +224,8 @@ router.patch('/sessions/:sessionId', clubAuth, upload.single('sessionThumbnail')
   body('duration').optional().isInt({ min: 1, max: 1440 }),
   body('venue').optional().isString().trim().isLength({ max: 300 }),
   body('status').optional().isIn(['draft', 'published', 'cancelled', 'completed', 'archived']),
-  body('capacity').optional({ nullable: true }).isInt({ min: 1 }),
+  body('capacity').optional({ nullable: true }).custom(validOptionalCapacity)
+    .withMessage("Capacity must be a whole number of at least 1, or left blank for unlimited"),
 ], validateRequest, updateSession)
 
 router.get('/getDashBoard', clubAuth,getDashBoard)

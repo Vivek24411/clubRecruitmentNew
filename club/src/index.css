@@ -477,6 +477,12 @@
     border-color: var(--color-accent);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 16%, transparent);
   }
+  .input[aria-invalid="true"],
+  .textarea[aria-invalid="true"],
+  .select[aria-invalid="true"] {
+    border-color: var(--color-bad);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-bad) 13%, transparent);
+  }
   .textarea { min-height: 7rem; resize: vertical; line-height: 1.6; }
   .select {
     appearance: none;

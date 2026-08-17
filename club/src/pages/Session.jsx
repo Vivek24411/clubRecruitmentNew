@@ -19,6 +19,17 @@ import {
 import { uploadDirect } from "../utils/directUpload";
 
 const SESSION_STATUSES = ["draft", "published", "cancelled", "completed", "archived"];
+const FIELD_LABELS = {
+  title: "Title",
+  shortDescription: "Short description",
+  longDescription: "Full description",
+  date: "Date",
+  time: "Time",
+  duration: "Duration",
+  venue: "Venue",
+  capacity: "Capacity",
+  status: "Status",
+};
 
 const RSVP_TONE = {
   confirmed: "ok",
@@ -37,6 +48,8 @@ export default function Session() {
   const [walkInEmail, setWalkInEmail] = useState("");
   const [thumbnail, setThumbnail] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const load = useCallback(async () => {
     try {
@@ -58,10 +71,31 @@ export default function Session() {
     load();
   }, [load]);
 
-  const set = (key, value) => setSession({ ...session, [key]: value });
+  const set = (key, value) => {
+    setSession((current) => ({ ...current, [key]: value }));
+    setFieldErrors((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+    setFormError("");
+  };
+
+  const validationError = (error) => {
+    const detail = error.response?.data?.errors?.[0];
+    if (!detail) {
+      return { field: "", message: error.response?.data?.msg || error.message || "Could not save session" };
+    }
+    const field = detail.path || detail.param || "";
+    const label = FIELD_LABELS[field] || field || "Field";
+    return { field, message: `${label}: ${detail.msg || "Please enter a valid value"}` };
+  };
 
   const save = async (event) => {
     event.preventDefault();
+    setFormError("");
+    setFieldErrors({});
     setSaving(true);
     try {
       const directAsset = await uploadDirect(thumbnail, { role: "club", kind: "sessionThumbnail" });
@@ -69,6 +103,7 @@ export default function Session() {
         ["title", "shortDescription", "longDescription", "date", "time", "duration", "venue", "capacity", "status"]
           .map((key) => [key, session[key] ?? ""]),
       );
+      payload.capacity = session.capacity === "" || session.capacity == null ? null : session.capacity;
       if (directAsset) payload.directAsset = directAsset;
       const { data } = await axios.patch(
         `${import.meta.env.VITE_BASE_URI}/club/sessions/${sessionId}`,
@@ -79,7 +114,17 @@ export default function Session() {
       setThumbnail(null);
       toast.success(data.msg);
     } catch (error) {
-      toast.error(error.response?.data?.msg || error.message);
+      const { field, message } = validationError(error);
+      setFormError(message);
+      if (field) {
+        setFieldErrors({ [field]: error.response?.data?.errors?.[0]?.msg || "Please enter a valid value" });
+        window.requestAnimationFrame(() => {
+          const input = document.getElementById(field);
+          input?.scrollIntoView({ behavior: "smooth", block: "center" });
+          input?.focus({ preventScroll: true });
+        });
+      }
+      toast.error(message);
     } finally { setSaving(false); }
   };
 
@@ -180,79 +225,88 @@ export default function Session() {
         {/* --------------------------------------------------------------- */}
         <Card as="form" onSubmit={save} className="reveal h-fit p-6 lg:col-span-2">
           <h2 className="display text-xl">Session details</h2>
+          {formError && <div role="alert" className="mt-4 rounded-sm border border-bad/30 bg-bad-tint px-4 py-3 text-sm font-medium text-bad">{formError}</div>}
 
           <div className="mt-6 space-y-5">
-            <Field label="Title" id="title" required>
+            <Field label="Title" id="title" required error={fieldErrors.title}>
               <Input
                 id="title"
                 value={session.title || ""}
                 onChange={(event) => set("title", event.target.value)}
+                aria-invalid={Boolean(fieldErrors.title)}
                 required
               />
             </Field>
 
-            <Field label="Short description" id="shortDescription">
+            <Field label="Short description" id="shortDescription" error={fieldErrors.shortDescription}>
               <Textarea
                 id="shortDescription"
                 rows="2"
                 className="min-h-0"
                 value={session.shortDescription || ""}
                 onChange={(event) => set("shortDescription", event.target.value)}
+                aria-invalid={Boolean(fieldErrors.shortDescription)}
               />
             </Field>
 
-            <Field label="Full description" id="longDescription">
-              <Textarea id="longDescription" rows="4" value={session.longDescription || ""} onChange={(event) => set("longDescription", event.target.value)} />
+            <Field label="Full description" id="longDescription" error={fieldErrors.longDescription}>
+              <Textarea id="longDescription" rows="4" value={session.longDescription || ""} onChange={(event) => set("longDescription", event.target.value)} aria-invalid={Boolean(fieldErrors.longDescription)} />
             </Field>
 
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Date" id="date">
+              <Field label="Date" id="date" error={fieldErrors.date}>
                 <Input
                   id="date"
                   type="date"
                   value={session.date || ""}
                   onChange={(event) => set("date", event.target.value)}
+                  aria-invalid={Boolean(fieldErrors.date)}
                 />
               </Field>
-              <Field label="Time" id="time">
+              <Field label="Time" id="time" error={fieldErrors.time}>
                 <Input
                   id="time"
                   type="time"
                   value={session.time || ""}
                   onChange={(event) => set("time", event.target.value)}
+                  aria-invalid={Boolean(fieldErrors.time)}
                 />
                 <div className="mt-2 flex flex-wrap gap-1.5">{["09:00", "12:00", "17:00", "20:00"].map((value) => <button key={value} type="button" className={`rounded-full border px-2 py-1 text-xs font-semibold ${session.time === value ? "border-accent bg-accent text-white" : "border-line bg-surface text-ink-3"}`} onClick={() => set("time", value)}>{new Date(`2000-01-01T${value}:00`).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}</button>)}</div>
               </Field>
             </div>
 
-            <Field label="Venue" id="venue">
+            <Field label="Venue" id="venue" error={fieldErrors.venue}>
               <Input
                 id="venue"
                 value={session.venue || ""}
                 onChange={(event) => set("venue", event.target.value)}
+                aria-invalid={Boolean(fieldErrors.venue)}
               />
             </Field>
 
-            <Field label="Duration in minutes" id="duration">
-              <Input id="duration" type="number" min="1" max="1440" value={session.duration || ""} onChange={(event) => set("duration", Number(event.target.value))} />
+            <Field label="Duration in minutes" id="duration" error={fieldErrors.duration}>
+              <Input id="duration" type="number" min="1" max="1440" value={session.duration || ""} onChange={(event) => set("duration", Number(event.target.value))} aria-invalid={Boolean(fieldErrors.duration)} />
             </Field>
 
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Capacity" id="capacity" hint="Leave blank for open attendance.">
+              <Field label="Capacity" id="capacity" hint="Leave blank for open attendance." error={fieldErrors.capacity}>
                 <Input
                   id="capacity"
                   type="number"
                   min="1"
                   value={session.capacity || ""}
                   onChange={(event) => set("capacity", event.target.value || null)}
+                  aria-invalid={Boolean(fieldErrors.capacity)}
+                  placeholder="Unlimited"
                 />
               </Field>
-              <Field label="Status" id="status">
+              <Field label="Status" id="status" error={fieldErrors.status}>
                 <Select
                   id="status"
                   className="capitalize"
                   value={session.status}
                   onChange={(event) => set("status", event.target.value)}
+                  aria-invalid={Boolean(fieldErrors.status)}
                 >
                   {SESSION_STATUSES.map((status) => (
                     <option key={status} value={status}>
