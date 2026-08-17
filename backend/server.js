@@ -9,8 +9,9 @@ const { startJobWorker } = require('./src/services/jobQueue.services')
 if (require.main === module) {
     connectDB().then(() => {
         const server = http.createServer(app)
-        server.listen(process.env.PORT || 3000,()=>{
-            console.log(`Server is running on port ${process.env.PORT || 3000}`);
+        const port = Number(process.env.PORT) || 3000
+        server.listen(port, '0.0.0.0',()=>{
+            console.log(`Server is running on 0.0.0.0:${port}`);
         })
         if (process.env.RUN_JOBS_IN_API !== 'false') startJobWorker()
     }).catch((error) => {

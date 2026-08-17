@@ -11,6 +11,7 @@ const registerationEventModel = require("../models/registerationEvent.model");
 const sessionRsvpModel = require("../models/sessionRsvp.model");
 const { writeAudit } = require("../services/audit.services");
 const { notifyStudent, notifyTeam, notifyRegistrations } = require("../services/notification.services");
+const { enqueueSessionReminders } = require("../services/jobQueue.services");
 const { destroyUploadedFile } = require("../utils/uploads");
 const {
   YEAR_LABELS,
@@ -385,6 +386,14 @@ module.exports.moderateSession = async (req, res) => {
       message: "An administrator cancelled this session.",
       link: "/sessions",
     })));
+  }
+  if (previous?.status !== "published" && session.status === "published") {
+    const confirmedRsvps = await sessionRsvpModel.find({
+      sessionId: session._id,
+      status: "confirmed",
+      source: { $ne: "walk_in" },
+    }).select("studentId");
+    await enqueueSessionReminders(confirmedRsvps.map((rsvp) => rsvp.studentId), session);
   }
   await writeAudit({ actorRole: "admin", actorId: req.admin.email, action: `session.${session.status}`, targetType: "session", targetId: session._id });
   return res.json({ success: true, msg: `Session ${session.status}`, session });

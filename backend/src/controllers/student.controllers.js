@@ -14,6 +14,7 @@ const notificationModel = require("../models/notification.model");
 const sessionRsvpModel = require("../models/sessionRsvp.model");
 const { clearSessionCookie, setSessionCookie } = require("../utils/auth");
 const { notifyStudent } = require("../services/notification.services");
+const { enqueueSessionReminder } = require("../services/jobQueue.services");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryAsset, destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
 const applicationHistoryModel = require("../models/applicationHistory.model");
@@ -1693,6 +1694,9 @@ module.exports.rsvpSession = async (req, res) => {
 
   const existing = await sessionRsvpModel.findOne({ sessionId: session._id, studentId: req.student._id });
   if (["confirmed", "attended"].includes(existing?.status)) {
+    if (existing.status === "confirmed" && existing.source !== "walk_in") {
+      await enqueueSessionReminder(req.student._id, session);
+    }
     return res.json({ success: true, msg: "RSVP already confirmed", rsvp: existing });
   }
 
@@ -1735,6 +1739,7 @@ module.exports.rsvpSession = async (req, res) => {
     }
     throw error;
   }
+  if (status === "confirmed") await enqueueSessionReminder(req.student._id, session);
   await writeAudit({ actorRole: "student", actorId: req.student._id, action: `session.rsvp_${status}`, targetType: "session", targetId: session._id });
   return res.json({ success: true, msg: status === "confirmed" ? "RSVP confirmed" : "Added to waitlist", rsvp });
 };
@@ -1747,7 +1752,8 @@ module.exports.cancelSessionRsvp = async (req, res) => {
   );
   if (!rsvp) return res.status(404).json({ success: false, msg: "Active RSVP not found" });
   if (rsvp.status === "confirmed") {
-    const limitedSession = await sessionModel.findOne({ _id: rsvp.sessionId, capacity: { $ne: null } }).select("capacity");
+    const limitedSession = await sessionModel.findOne({ _id: rsvp.sessionId, capacity: { $ne: null } })
+      .select("capacity title date time venue status");
     if (limitedSession) {
       await sessionModel.updateOne({ _id: rsvp.sessionId, confirmedRsvpCount: { $gt: 0 } }, { $inc: { confirmedRsvpCount: -1 } });
       const promoted = await sessionRsvpModel.findOneAndUpdate(
@@ -1757,12 +1763,15 @@ module.exports.cancelSessionRsvp = async (req, res) => {
       );
       if (promoted) {
         await sessionModel.updateOne({ _id: rsvp.sessionId }, { $inc: { confirmedRsvpCount: 1 } });
-        await notifyStudent(promoted.studentId, {
-          type: "session_rsvp_promoted",
-          title: "Your RSVP is confirmed",
-          message: "A place opened up and you have been moved from the waitlist.",
-          link: `/session/${rsvp.sessionId}`,
-        });
+        await Promise.all([
+          notifyStudent(promoted.studentId, {
+            type: "session_rsvp_promoted",
+            title: "Your RSVP is confirmed",
+            message: "A place opened up and you have been moved from the waitlist.",
+            link: `/session/${rsvp.sessionId}`,
+          }),
+          enqueueSessionReminder(promoted.studentId, limitedSession),
+        ]);
       }
     }
   }

@@ -16,6 +16,7 @@ const eventMembershipModel = require("../models/eventMembership.model");
 const studentModel = require("../models/student.model");
 const { clearSessionCookie, setSessionCookie } = require("../utils/auth");
 const { notifyStudent, notifyTeam, notifyRegistrations } = require("../services/notification.services");
+const { enqueueSessionReminder, enqueueSessionReminders } = require("../services/jobQueue.services");
 const { sendOtp } = require("../services/student.services");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
@@ -1003,12 +1004,15 @@ module.exports.updateSession = async (req, res) => {
     }
     promotedStudents.push(promoted.studentId);
   }
-  await Promise.all(promotedStudents.map((studentId) => notifyStudent(studentId, {
-    type: "session_rsvp_promoted",
-    title: `Your RSVP for ${session.title} is confirmed`,
-    message: "The session capacity changed and a place is now available for you.",
-    link: `/session/${session._id}`,
-  })));
+  await Promise.all(promotedStudents.flatMap((studentId) => [
+    notifyStudent(studentId, {
+      type: "session_rsvp_promoted",
+      title: `Your RSVP for ${session.title} is confirmed`,
+      message: "The session capacity changed and a place is now available for you.",
+      link: `/session/${session._id}`,
+    }),
+    enqueueSessionReminder(studentId, session),
+  ]));
   if (previousStatus !== "cancelled" && session.status === "cancelled") {
     const activeRsvps = await sessionRsvpModel.find({ sessionId: session._id, status: { $in: ["confirmed", "waitlisted"] } });
     await Promise.all(activeRsvps.map((rsvp) => notifyStudent(rsvp.studentId, {
@@ -1019,14 +1023,21 @@ module.exports.updateSession = async (req, res) => {
     })));
   }
   const scheduleChanged = ["date", "time", "venue"].some((field) => String(previousSchedule[field] || "") !== String(session[field] || ""));
-  if (scheduleChanged && session.status !== "cancelled") {
+  const becamePublished = previousStatus !== "published" && session.status === "published";
+  if ((scheduleChanged && session.status !== "cancelled") || becamePublished) {
     const activeRsvps = await sessionRsvpModel.find({ sessionId: session._id, status: { $in: ["confirmed", "waitlisted"] } });
-    await Promise.all(activeRsvps.map((rsvp) => notifyStudent(rsvp.studentId, {
-      type: "session_schedule_changed",
-      title: `${session.title} schedule updated`,
-      message: `The session is now scheduled for ${session.date} at ${session.time}${session.venue ? ` in ${session.venue}` : ""}.`,
-      link: `/session/${session._id}`,
-    })));
+    if (scheduleChanged) {
+      await Promise.all(activeRsvps.map((rsvp) => notifyStudent(rsvp.studentId, {
+        type: "session_schedule_changed",
+        title: `${session.title} schedule updated`,
+        message: `The session is now scheduled for ${session.date} at ${session.time}${session.venue ? ` in ${session.venue}` : ""}.`,
+        link: `/session/${session._id}`,
+      })));
+    }
+    await enqueueSessionReminders(
+      activeRsvps.filter((rsvp) => rsvp.status === "confirmed" && rsvp.source !== "walk_in").map((rsvp) => rsvp.studentId),
+      session,
+    );
   }
   await writeAudit({ actorRole: "club", actorId: req.club._id, action: "session.update", targetType: "session", targetId: session._id });
   const updatedSession = await sessionModel.findById(session._id);

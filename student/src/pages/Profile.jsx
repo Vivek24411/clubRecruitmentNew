@@ -84,8 +84,15 @@ export default function Profile() {
 
   useEffect(() => {
     refreshPushState();
-    window.addEventListener("push-state-changed", refreshPushState);
-    return () => window.removeEventListener("push-state-changed", refreshPushState);
+    const onPushStateChanged = (event) => {
+      if (event.detail?.status === "error") {
+        setPushState({ status: "error", configured: true, message: event.detail.message });
+      } else {
+        refreshPushState();
+      }
+    };
+    window.addEventListener("push-state-changed", onPushStateChanged);
+    return () => window.removeEventListener("push-state-changed", onPushStateChanged);
   }, [refreshPushState]);
 
   const changePushState = async (enable) => {
@@ -95,8 +102,9 @@ export default function Profile() {
       setPushState(state);
       toast.success(enable ? "Browser notifications enabled" : "Browser notifications disabled on this device");
     } catch (error) {
-      toast.error(error.message || "Could not update browser notifications");
-      refreshPushState();
+      const message = error.message || "Could not update browser notifications";
+      setPushState({ status: "error", configured: true, message });
+      toast.error(message, { autoClose: 10000 });
     } finally {
       setPushWorking(false);
     }
@@ -252,6 +260,7 @@ export default function Profile() {
                     {pushState.status === "blocked" && "Blocked by your browser. Allow notifications in the site settings to enable them."}
                     {pushState.status === "unsupported" && "This browser does not support web push notifications."}
                     {pushState.status === "unconfigured" && "Firebase push notifications have not been configured for this deployment yet."}
+                    {pushState.status === "error" && pushState.message}
                     {["disabled", "loading"].includes(pushState.status) && "Enable this once per browser to receive recruitment updates while the site is closed."}
                   </p>
                 </div>

@@ -27,12 +27,45 @@ function announce(status, detail = {}) {
 }
 
 async function uploadInstallation(installationId) {
+  await axios.put(`${import.meta.env.VITE_BASE_URI}/student/push/registration`, { installationId });
   currentInstallationId = installationId;
   localStorage.setItem(INSTALLATION_KEY, installationId);
-  await axios.put(`${import.meta.env.VITE_BASE_URI}/student/push/registration`, { installationId });
-  registrationWaiters.forEach((resolve) => resolve(installationId));
+  registrationWaiters.forEach((waiter) => {
+    window.clearTimeout(waiter.timeout);
+    waiter.resolve(installationId);
+  });
   registrationWaiters.clear();
   announce("enabled", { installationId });
+}
+
+function rejectRegistration(error) {
+  registrationWaiters.forEach((waiter) => {
+    window.clearTimeout(waiter.timeout);
+    waiter.reject(error);
+  });
+  registrationWaiters.clear();
+}
+
+async function readablePushError(error) {
+  const originalMessage = String(error?.response?.data?.msg || error?.message || "Browser notification setup failed");
+  const pushServiceFailed = error?.name === "AbortError"
+    || /registration failed\s*-?\s*push service error/i.test(originalMessage);
+  if (pushServiceFailed) {
+    let brave = false;
+    try {
+      brave = Boolean(await navigator.brave?.isBrave?.());
+    } catch {
+      brave = false;
+    }
+    if (brave) {
+      return new Error("Brave push messaging is disabled. Open brave://settings/privacy, enable ‘Use Google Services for Push Messaging’, restart Brave, and try again.");
+    }
+    return new Error("The browser could not connect to its push service. Check the browser’s push-messaging setting and network, restart it, and try again.");
+  }
+  if (/service.?worker/i.test(originalMessage)) {
+    return new Error("The notification service worker could not start. Reload the page and try again.");
+  }
+  return error instanceof Error ? error : new Error(originalMessage);
 }
 
 async function removeInstallation(installationId) {
@@ -70,7 +103,11 @@ async function messagingClient() {
       const serviceWorkerRegistration = await navigator.serviceWorker.register(serviceWorkerUrl(), { scope: "/" });
       const messaging = messagingApi.getMessaging(app);
       messagingApi.onRegistered(messaging, (installationId) => {
-        void uploadInstallation(installationId).catch(() => announce("error"));
+        void uploadInstallation(installationId).catch(async (error) => {
+          const readable = await readablePushError(error);
+          rejectRegistration(readable);
+          announce("error", { message: readable.message });
+        });
       });
       messagingApi.onUnregistered(messaging, (installationId) => {
         void removeInstallation(installationId)
@@ -87,23 +124,22 @@ async function messagingClient() {
 }
 
 function waitForRegistration(timeoutMs = 15000) {
-  let cancel;
+  let waiter;
   const promise = new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
-      registrationWaiters.delete(done);
+      registrationWaiters.delete(waiter);
       reject(new Error("Firebase registration timed out. Please try again."));
     }, timeoutMs);
-    const done = (installationId) => {
-      window.clearTimeout(timeout);
-      resolve(installationId);
-    };
-    registrationWaiters.add(done);
-    cancel = () => {
-      window.clearTimeout(timeout);
-      registrationWaiters.delete(done);
-    };
+    waiter = { resolve, reject, timeout };
+    registrationWaiters.add(waiter);
   });
-  return { promise, cancel };
+  return {
+    promise,
+    cancel: () => {
+      window.clearTimeout(waiter.timeout);
+      registrationWaiters.delete(waiter);
+    },
+  };
 }
 
 export async function enablePushNotifications() {
@@ -130,7 +166,7 @@ export async function enablePushNotifications() {
     await registration.promise;
   } catch (error) {
     registration.cancel();
-    throw error;
+    throw await readablePushError(error);
   }
   return getPushNotificationState();
 }

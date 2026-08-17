@@ -115,6 +115,16 @@ function escapeHtml(value) {
         .replace(/'/g, "&#039;");
 }
 
+function formatNotificationDateTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleString("en-IN", {
+        dateStyle: "full",
+        timeStyle: "short",
+        timeZone: "Asia/Kolkata",
+    });
+}
+
 function buildNotificationEmailHtml({ title, message, detailsUrl, type, emailDetails }) {
     const safeTitle = escapeHtml(title || "Discovr update");
     const safeMessage = escapeHtml(message || "You have a new application update.");
@@ -125,10 +135,11 @@ function buildNotificationEmailHtml({ title, message, detailsUrl, type, emailDet
         round_waitlisted: "View application",
         event_deadline_changed: "View updated event",
         event_extracted: "Open event",
+        session_reminder: "View session",
     };
     const actionLabel = escapeHtml(actionLabels[type] || "View details");
     const detailRows = [
-        emailDetails?.startsAt ? ["Date and time", new Date(emailDetails.startsAt).toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short", timeZone: "Asia/Kolkata" })] : null,
+        emailDetails?.startsAt ? ["Date and time", formatNotificationDateTime(emailDetails.startsAt)] : null,
         emailDetails?.venue ? ["Venue", emailDetails.venue] : null,
     ].filter(Boolean);
     const detailCard = detailRows.length || emailDetails?.meetingUrl
@@ -151,7 +162,7 @@ function buildNotificationEmailHtml({ title, message, detailsUrl, type, emailDet
                 <tr><td style="padding:30px 34px 0;">
                     <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
                         <td style="width:42px;height:42px;text-align:center;background:#111612;color:#fbfaf6;border-radius:10px;font-size:18px;font-weight:700;">D</td>
-                        <td style="padding-left:12px;"><div style="font-size:16px;font-weight:700;">Discovr</div><div style="padding-top:3px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#697169;">Application update</div></td>
+                        <td style="padding-left:12px;"><div style="font-size:16px;font-weight:700;">Discovr</div><div style="padding-top:3px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#697169;">${type === "session_reminder" ? "Session reminder" : "Application update"}</div></td>
                     </tr></table>
                 </td></tr>
                 <tr><td style="padding:32px 34px 12px;">
@@ -186,7 +197,7 @@ module.exports.sendNotificationEmail = async (email, { title, message, link, typ
     await sendEmail({
         to: email,
         subject: String(title || "Discovr update").replace(/[\r\n]/g, " "),
-        text: `${message || "You have a new application update."}${emailDetails?.venue ? `\nVenue: ${emailDetails.venue}` : ""}${emailDetails?.meetingUrl ? `\nMeeting link: ${emailDetails.meetingUrl}` : ""}${detailsUrl ? `\n\nView details: ${detailsUrl}` : ""}`,
+        text: `${message || "You have a new application update."}${emailDetails?.startsAt ? `\nDate and time: ${formatNotificationDateTime(emailDetails.startsAt)}` : ""}${emailDetails?.venue ? `\nVenue: ${emailDetails.venue}` : ""}${emailDetails?.meetingUrl ? `\nMeeting link: ${emailDetails.meetingUrl}` : ""}${detailsUrl ? `\n\nView details: ${detailsUrl}` : ""}`,
         html: buildNotificationEmailHtml({ title, message, detailsUrl, type, emailDetails }),
         idempotencyKey,
     });
@@ -202,3 +213,4 @@ module.exports.checkEmailDomain = (email) => {
 }
 
 module.exports.brandedFromEmail = brandedFromEmail;
+module.exports.formatNotificationDateTime = formatNotificationDateTime;

@@ -3,10 +3,94 @@ const os = require("os");
 const jobModel = require("../models/job.model");
 const notificationModel = require("../models/notification.model");
 const studentModel = require("../models/student.model");
+const sessionModel = require("../models/session.model");
+const sessionRsvpModel = require("../models/sessionRsvp.model");
 const { sendNotificationEmail } = require("./student.services");
 const { sendPushNotification } = require("./firebaseMessaging.services");
 
 const workerId = `${os.hostname()}:${process.pid}:${crypto.randomUUID().slice(0, 8)}`;
+const SESSION_REMINDER_LEAD_MS = 60 * 60 * 1000;
+
+function sessionStartAt(session) {
+  const date = String(session?.date || "");
+  const time = String(session?.time || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return null;
+  const startsAt = new Date(`${date}T${time}:00+05:30`);
+  return Number.isNaN(startsAt.getTime()) ? null : startsAt;
+}
+
+function sessionReminderRunAt(session, now = new Date()) {
+  const startsAt = sessionStartAt(session);
+  if (!startsAt || startsAt <= now) return null;
+  return new Date(Math.max(now.getTime(), startsAt.getTime() - SESSION_REMINDER_LEAD_MS));
+}
+
+function sessionReminderJobId(studentId, sessionId, startsAt) {
+  const digest = crypto
+    .createHash("sha256")
+    .update(`session-reminder:${sessionId}:${studentId}:${startsAt.toISOString()}`)
+    .digest("hex")
+    .slice(0, 24);
+  return digest;
+}
+
+function buildSessionReminderNotification(session) {
+  return {
+    type: "session_reminder",
+    title: `Reminder: ${session.title} is coming up`,
+    message: "The session you RSVP'd for starts soon.",
+    link: `/session/${session._id}`,
+    emailDetails: { startsAt: sessionStartAt(session), venue: session.venue },
+  };
+}
+
+async function enqueueSessionReminder(studentId, session, options = {}) {
+  const now = options.now || new Date();
+  const startsAt = sessionStartAt(session);
+  const runAt = sessionReminderRunAt(session, now);
+  if (!studentId || !session?._id || session.status !== "published" || !startsAt || !runAt) return null;
+
+  const jobId = sessionReminderJobId(studentId, session._id, startsAt);
+  const job = await jobModel.findOneAndUpdate(
+    { _id: jobId },
+    {
+      $setOnInsert: {
+        type: "session_reminder",
+        payload: {
+          studentId: String(studentId),
+          sessionId: String(session._id),
+          expectedStartsAt: startsAt.toISOString(),
+        },
+        status: "queued",
+        runAt,
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
+  if (["completed", "failed"].includes(job.status) && !job.delivery?.emailAt) {
+    return jobModel.findOneAndUpdate(
+      { _id: jobId, status: job.status, "delivery.emailAt": null },
+      {
+        $set: {
+          status: "queued",
+          attempts: 0,
+          runAt,
+          completedAt: null,
+          lastError: "",
+          updatedAt: new Date(),
+        },
+        $unset: { lockedAt: 1, lockedBy: 1 },
+      },
+      { new: true },
+    );
+  }
+  return job;
+}
+
+async function enqueueSessionReminders(studentIds, session, options = {}) {
+  const recipients = [...new Set((studentIds || []).filter(Boolean).map(String))];
+  return Promise.all(recipients.map((studentId) => enqueueSessionReminder(studentId, session, options)));
+}
 
 async function enqueueNotifications(studentIds, notification) {
   const recipients = [...new Set((studentIds || []).filter(Boolean).map(String))];
@@ -72,9 +156,45 @@ async function deliverNotification(job) {
   }
 }
 
+async function deliverSessionReminder(job) {
+  const { studentId, sessionId, expectedStartsAt } = job.payload || {};
+  if (!studentId || !sessionId || !expectedStartsAt) return;
+
+  const [session, rsvp, student] = await Promise.all([
+    sessionModel.findById(sessionId).select("title date time venue status").lean(),
+    sessionRsvpModel.findOne({ sessionId, studentId, status: "confirmed", source: { $ne: "walk_in" } }).select("_id").lean(),
+    studentModel.findById(studentId).select("email notificationPreferences").lean(),
+  ]);
+  const startsAt = sessionStartAt(session);
+  if (
+    !session
+    || session.status !== "published"
+    || !rsvp
+    || !student
+    || !startsAt
+    || startsAt <= new Date()
+    || startsAt.toISOString() !== expectedStartsAt
+  ) return;
+
+  if (!job.delivery?.emailAt) {
+    if (student.notificationPreferences?.email !== false) {
+      await sendNotificationEmail(
+        student.email,
+        buildSessionReminderNotification(session),
+        { idempotencyKey: `job:${job._id}` },
+      );
+    }
+    await jobModel.updateOne(
+      { _id: job._id, lockedBy: workerId },
+      { $set: { "delivery.emailAt": new Date(), updatedAt: new Date() } },
+    );
+  }
+}
+
 async function processJob(job) {
   try {
     if (job.type === "notification") await deliverNotification(job);
+    if (job.type === "session_reminder") await deliverSessionReminder(job);
     await jobModel.updateOne(
       { _id: job._id, lockedBy: workerId },
       { $set: { status: "completed", completedAt: new Date(), updatedAt: new Date() }, $unset: { lockedAt: 1, lockedBy: 1 } },
@@ -95,6 +215,33 @@ async function processJob(job) {
       },
     );
     if (terminal) console.error("Notification job permanently failed:", job._id, error?.message || error);
+  }
+}
+
+function dateInKolkata(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+async function backfillSessionReminders() {
+  const sessions = await sessionModel
+    .find({ status: "published", date: { $gte: dateInKolkata() } })
+    .select("title date time venue status")
+    .lean();
+
+  for (const session of sessions) {
+    if (!sessionReminderRunAt(session)) continue;
+    const rsvps = await sessionRsvpModel
+      .find({ sessionId: session._id, status: "confirmed", source: { $ne: "walk_in" } })
+      .select("studentId")
+      .lean();
+    await enqueueSessionReminders(rsvps.map((rsvp) => rsvp.studentId), session);
   }
 }
 
@@ -121,8 +268,22 @@ function startJobWorker(options = {}) {
   };
   const timer = setInterval(tick, intervalMs);
   timer.unref();
+  backfillSessionReminders().catch((error) => {
+    console.error("Session reminder backfill failed:", error?.message || error);
+  });
   tick();
   return () => clearInterval(timer);
 }
 
-module.exports = { enqueueNotification, enqueueNotifications, startJobWorker };
+module.exports = {
+  backfillSessionReminders,
+  buildSessionReminderNotification,
+  dateInKolkata,
+  enqueueNotification,
+  enqueueNotifications,
+  enqueueSessionReminder,
+  enqueueSessionReminders,
+  sessionReminderRunAt,
+  sessionStartAt,
+  startJobWorker,
+};

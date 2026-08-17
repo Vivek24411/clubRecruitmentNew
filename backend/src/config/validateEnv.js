@@ -44,6 +44,22 @@ function validateEnv() {
       || process.env.GOOGLE_APPLICATION_CREDENTIALS;
     if (!hasFirebaseCredential) throw new Error("Firebase service-account credentials are required when push notifications are enabled");
     if (!process.env.STUDENT_APP_ORIGIN) throw new Error("STUDENT_APP_ORIGIN is required when push notifications are enabled");
+
+    let serviceAccountProjectId = "";
+    try {
+      if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+        const account = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf8"));
+        serviceAccountProjectId = account.project_id || account.projectId || "";
+      } else if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+        const account = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+        serviceAccountProjectId = account.project_id || account.projectId || "";
+      }
+    } catch {
+      throw new Error("Firebase service-account credentials are not valid JSON");
+    }
+    if (serviceAccountProjectId && serviceAccountProjectId !== process.env.FIREBASE_PROJECT_ID) {
+      throw new Error("FIREBASE_PROJECT_ID must match the Firebase service-account project");
+    }
   }
 }
 

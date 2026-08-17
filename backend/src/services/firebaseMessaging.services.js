@@ -53,7 +53,6 @@ function notificationLink(link) {
 const INVALID_REGISTRATION_CODES = new Set([
   "messaging/registration-token-not-registered",
   "messaging/invalid-registration-token",
-  "messaging/invalid-argument",
   "messaging/registration-not-found",
 ]);
 
@@ -74,6 +73,7 @@ async function sendPushNotification(studentId, notification) {
   let failed = 0;
   const invalidIds = [];
   const deliveredIds = [];
+  const deliveryErrors = [];
 
   for (let offset = 0; offset < registrations.length; offset += 500) {
     const batch = registrations.slice(offset, offset + 500);
@@ -95,6 +95,7 @@ async function sendPushNotification(studentId, notification) {
     response.responses.forEach((result, index) => {
       if (result.success) deliveredIds.push(batch[index]._id);
       else if (INVALID_REGISTRATION_CODES.has(result.error?.code)) invalidIds.push(batch[index]._id);
+      else deliveryErrors.push(result.error);
     });
   }
 
@@ -105,6 +106,12 @@ async function sendPushNotification(studentId, notification) {
       { $set: { lastDeliveredAt: new Date() } },
     ) : Promise.resolve(),
   ]);
+  if (!sent && deliveryErrors.length) {
+    const failure = deliveryErrors[0];
+    const error = new Error(`Firebase push delivery failed: ${failure?.message || failure?.code || "unknown error"}`);
+    error.code = failure?.code || "messaging/delivery-failed";
+    throw error;
+  }
   return { configured: true, sent, failed };
 }
 

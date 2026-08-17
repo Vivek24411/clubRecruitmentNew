@@ -75,3 +75,10 @@ For production, set `RUN_JOBS_IN_API=false` on the API process when a separate w
 6. Clicking the browser notification should open the relevant Discovr event, session, application, or notifications page.
 
 Explicit sign-out detaches the browser installation from that student account. Signing in again automatically refreshes the installation mapping when browser permission is already granted.
+
+## Troubleshooting
+
+- `FIREBASE_PROJECT_ID` must exactly match `project_id` in the backend service-account JSON. The API now refuses to start when these values differ.
+- In Brave, enable **Settings → Privacy and security → Use Google Services for Push Messaging**, restart Brave, and then enable notifications again. Site permission showing **Allowed** is not sufficient when Brave's push service is disabled.
+- A failed FCM response is not recorded as delivered. The job remains retryable and its `lastError` contains the Firebase failure instead.
+- After changing backend environment variables, restart both the API and the separate worker process.
