@@ -1,6 +1,8 @@
 const crypto = require("crypto");
 const cloudinary = require("../config/cloudinary");
 
+const DEFAULT_CLOUDINARY_IMAGE_LIMIT = 10 * 1024 * 1024;
+
 const UPLOAD_KINDS = Object.freeze({
   profilePicture: {
     folder: "discovr/profile-pictures",
@@ -19,21 +21,21 @@ const UPLOAD_KINDS = Object.freeze({
   clubBanner: {
     folder: "discovr/club-banners",
     resourceType: "image",
-    maxBytes: 5 * 1024 * 1024,
+    maxBytes: 20 * 1024 * 1024,
     mimeTypes: ["image/jpeg", "image/png", "image/webp"],
     allowedFormats: ["jpg", "jpeg", "png", "webp"],
   },
   eventBanner: {
     folder: "discovr/event-banners",
     resourceType: "image",
-    maxBytes: 5 * 1024 * 1024,
+    maxBytes: 20 * 1024 * 1024,
     mimeTypes: ["image/jpeg", "image/png", "image/webp"],
     allowedFormats: ["jpg", "jpeg", "png", "webp"],
   },
   sessionThumbnail: {
     folder: "discovr/session-thumbnails",
     resourceType: "image",
-    maxBytes: 5 * 1024 * 1024,
+    maxBytes: 20 * 1024 * 1024,
     mimeTypes: ["image/jpeg", "image/png", "image/webp"],
     allowedFormats: ["jpg", "jpeg", "png", "webp"],
   },
@@ -94,6 +96,15 @@ function uploadError(message) {
   return error;
 }
 
+function providerMaxBytes(config) {
+  if (config.resourceType !== "image") return config.maxBytes;
+  const configured = Number(process.env.CLOUDINARY_MAX_IMAGE_BYTES);
+  const accountLimit = Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_CLOUDINARY_IMAGE_LIMIT;
+  return Math.min(config.maxBytes, accountLimit);
+}
+
 function signDirectUpload(allowedKinds) {
   const allowed = new Set(allowedKinds);
   return (req, res, next) => {
@@ -132,6 +143,7 @@ function signDirectUpload(allowedKinds) {
           resourceType: config.resourceType,
           uploadUrl: `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/${config.resourceType}/upload`,
           maxBytes: config.maxBytes,
+          providerMaxBytes: providerMaxBytes(config),
           mimeTypes: config.mimeTypes,
           allowedFormats: config.allowedFormats,
           uploadToken,

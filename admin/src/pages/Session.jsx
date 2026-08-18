@@ -113,6 +113,12 @@ export default function Session() {
                 value={sessionDetails.duration ? `${sessionDetails.duration} min` : "—"}
               />
               <Meta label="Venue" value={sessionDetails.venue || "TBA"} />
+              {sessionDetails.meetingUrl && (
+                <Meta
+                  label="Meeting link"
+                  value={<a href={sessionDetails.meetingUrl} target="_blank" rel="noreferrer" className="link break-all">Open link ↗</a>}
+                />
+              )}
               <Meta
                 label="Capacity"
                 value={sessionDetails.capacity || "Open attendance"}

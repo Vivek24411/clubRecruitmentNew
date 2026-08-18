@@ -290,6 +290,7 @@ module.exports.addSession = async (req, res) => {
     duration,
     longDescription,
     venue,
+    meetingUrl,
   } = req.body;
 
   try {
@@ -302,6 +303,7 @@ module.exports.addSession = async (req, res) => {
       duration,
       longDescription,
       venue,
+      meetingUrl,
       status: req.body.status || "published",
       capacity: req.body.capacity || null,
       sessionThumbnail: req.file?.path || "",
@@ -941,7 +943,7 @@ module.exports.updateSession = async (req, res) => {
     return res.status(404).json({ success: false, msg: "Session not found" });
   }
   const previousStatus = session.status;
-  const previousSchedule = { date: session.date, time: session.time, venue: session.venue };
+  const previousSchedule = { date: session.date, time: session.time, venue: session.venue, meetingUrl: session.meetingUrl };
   const previousThumbnailPublicId = session.sessionThumbnailPublicId;
   const capacityRequested = req.body.capacity !== undefined && req.body.capacity !== null && req.body.capacity !== "";
   if (session.capacity || capacityRequested) {
@@ -950,7 +952,7 @@ module.exports.updateSession = async (req, res) => {
       status: { $in: ["confirmed", "attended"] },
     });
   }
-  const allowedFields = ["title", "shortDescription", "longDescription", "date", "time", "duration", "venue", "capacity", "status"];
+  const allowedFields = ["title", "shortDescription", "longDescription", "date", "time", "duration", "venue", "meetingUrl", "capacity", "status"];
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) {
       session[field] = field === "capacity" && (req.body[field] === "" || req.body[field] === null)
@@ -1027,7 +1029,7 @@ module.exports.updateSession = async (req, res) => {
       link: "/sessions",
     })));
   }
-  const scheduleChanged = ["date", "time", "venue"].some((field) => String(previousSchedule[field] || "") !== String(session[field] || ""));
+  const scheduleChanged = ["date", "time", "venue", "meetingUrl"].some((field) => String(previousSchedule[field] || "") !== String(session[field] || ""));
   const becamePublished = previousStatus !== "published" && session.status === "published";
   if ((scheduleChanged && session.status !== "cancelled") || becamePublished) {
     const activeRsvps = await sessionRsvpModel.find({ sessionId: session._id, status: { $in: ["confirmed", "waitlisted"] } });
@@ -1047,6 +1049,31 @@ module.exports.updateSession = async (req, res) => {
   await writeAudit({ actorRole: "club", actorId: req.club._id, action: "session.update", targetType: "session", targetId: session._id });
   const updatedSession = await sessionModel.findById(session._id);
   return res.json({ success: true, msg: promotedStudents.length ? `Session updated and ${promotedStudents.length} waitlisted RSVP(s) confirmed` : "Session updated successfully", session: updatedSession });
+};
+
+module.exports.deleteSession = async (req, res) => {
+  const session = await sessionModel.findOne({ _id: req.params.sessionId, clubId: req.club._id });
+  if (!session) return res.status(404).json({ success: false, msg: "Session not found" });
+
+  const hasStudentActivity = await sessionRsvpModel.exists({ sessionId: session._id });
+  if (hasStudentActivity) {
+    return res.status(409).json({
+      success: false,
+      msg: "This session already has RSVP or attendance history and cannot be deleted. Cancel or archive it to preserve student records.",
+    });
+  }
+
+  await session.deleteOne();
+  await destroyCloudinaryImage(session.sessionThumbnailPublicId);
+  await writeAudit({
+    actorRole: "club",
+    actorId: req.club._id,
+    action: "session.delete",
+    targetType: "session",
+    targetId: session._id,
+    metadata: { title: session.title },
+  });
+  return res.json({ success: true, msg: "Session permanently deleted" });
 };
 
 module.exports.updateApplication = async (req, res) => {

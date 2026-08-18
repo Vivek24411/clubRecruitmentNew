@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { body, param, query } = require("express-validator");
-const { clubLogin, logout, changePassword, sendPasswordResetOtp, verifyPasswordResetOtp, resetPassword, addSession, getProfile, updateProfile, getSessions, getSession, addEvent, getEvents, getEvent, getDashBoard, getEventsRegisteredStudents, finalizeStudent, scheduleInterview, selectStudentForRound, updateEvent, updateEventStatus, deleteEvent, updateSession, updateApplication, bulkUpdateApplications, exportApplications, getSessionAttendees, markAttendance } = require("../controllers/club.contollers");
+const { clubLogin, logout, changePassword, sendPasswordResetOtp, verifyPasswordResetOtp, resetPassword, addSession, getProfile, updateProfile, getSessions, getSession, addEvent, getEvents, getEvent, getDashBoard, getEventsRegisteredStudents, finalizeStudent, scheduleInterview, selectStudentForRound, updateEvent, updateEventStatus, deleteEvent, updateSession, deleteSession, updateApplication, bulkUpdateApplications, exportApplications, getSessionAttendees, markAttendance } = require("../controllers/club.contollers");
 const { clubAuth } = require("../middlewares/auth.middlewares");
 const upload = require("../middlewares/upload");
 const { attachDirectAsset, signDirectUpload } = require("../middlewares/directUpload");
@@ -90,7 +90,7 @@ router.post('/password-reset/complete', resetVerifyRateLimit, [
 router.post(
   "/addSession",
   clubAuth,
-  upload.single('sessionThumbnail'),
+  upload.bannerUpload.single('sessionThumbnail'),
   attachDirectAsset('sessionThumbnail'),
   [
     body("title").isString().trim().isLength({ min: 2, max: 150 }),
@@ -99,7 +99,8 @@ router.post(
     body("date").isISO8601({ strict: true }),
     body("time").matches(/^([01]\d|2[0-3]):[0-5]\d$/),
     body("duration").isInt({ min: 1, max: 1440 }).withMessage("Duration must be a positive integer"),
-    body("venue").isString().trim().isLength({ min: 1, max: 300 }),
+    body("venue").optional({ checkFalsy: true }).isString().trim().isLength({ max: 300 }),
+    body("meetingUrl").optional({ checkFalsy: true }).isURL({ protocols: ['http', 'https'], require_protocol: true }).isLength({ max: 2048 }),
     body("capacity").optional({ nullable: true }).custom(validOptionalCapacity)
       .withMessage("Capacity must be a whole number of at least 1, or left blank for unlimited"),
     body("status").optional().isIn(["draft", "published"]),
@@ -134,7 +135,7 @@ router.get('/getSession', clubAuth, [
 ], validateRequest, getSession)
 
 router.post('/addEvent',clubAuth,
-  upload.single('eventBanner'),attachDirectAsset('eventBanner'),[
+  upload.bannerUpload.single('eventBanner'),attachDirectAsset('eventBanner'),[
   body("title").isString().trim().isLength({ min: 2, max: 150 }),
   body("shortDescription").isString().trim().isLength({ min: 2, max: 500 }),
   body("longDescription").isString().isLength({ min: 2, max: 10000 }),
@@ -182,7 +183,7 @@ router.get('/getEvent', clubAuth, [
   query('eventId').isMongoId().withMessage('eventId is required')
 ], validateRequest, getEvent)
 
-router.patch('/events/:eventId', clubAuth, upload.single('eventBanner'), attachDirectAsset('eventBanner'), [
+router.patch('/events/:eventId', clubAuth, upload.bannerUpload.single('eventBanner'), attachDirectAsset('eventBanner'), [
   param('eventId').isMongoId(),
   body('title').optional().isString().trim().isLength({ min: 2, max: 150 }),
   body('shortDescription').optional().isString().isLength({ max: 500 }),
@@ -214,7 +215,7 @@ router.delete('/events/:eventId', clubAuth, [
   param('eventId').isMongoId(),
 ], validateRequest, deleteEvent)
 
-router.patch('/sessions/:sessionId', clubAuth, upload.single('sessionThumbnail'), attachDirectAsset('sessionThumbnail'), [
+router.patch('/sessions/:sessionId', clubAuth, upload.bannerUpload.single('sessionThumbnail'), attachDirectAsset('sessionThumbnail'), [
   param('sessionId').isMongoId(),
   body('title').optional().isString().trim().isLength({ min: 2, max: 150 }),
   body('shortDescription').optional().isString().isLength({ max: 500 }),
@@ -223,10 +224,15 @@ router.patch('/sessions/:sessionId', clubAuth, upload.single('sessionThumbnail')
   body('time').optional().matches(/^([01]\d|2[0-3]):[0-5]\d$/),
   body('duration').optional().isInt({ min: 1, max: 1440 }),
   body('venue').optional().isString().trim().isLength({ max: 300 }),
+  body('meetingUrl').optional({ checkFalsy: true }).isURL({ protocols: ['http', 'https'], require_protocol: true }).isLength({ max: 2048 }),
   body('status').optional().isIn(['draft', 'published', 'cancelled', 'completed', 'archived']),
   body('capacity').optional({ nullable: true }).custom(validOptionalCapacity)
     .withMessage("Capacity must be a whole number of at least 1, or left blank for unlimited"),
 ], validateRequest, updateSession)
+
+router.delete('/sessions/:sessionId', clubAuth, [
+  param('sessionId').isMongoId(),
+], validateRequest, deleteSession)
 
 router.get('/getDashBoard', clubAuth,getDashBoard)
 

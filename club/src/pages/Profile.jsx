@@ -385,7 +385,7 @@ export default function Profile() {
         toast.error(response.data.msg || "Failed to update profile");
       }
     } catch (error) {
-      toast.error(error.response?.data?.msg || "An error occurred while updating profile");
+      toast.error(error.response?.data?.msg || error.message || "An error occurred while updating profile");
     } finally {
       setIsSubmitting(false);
     }
@@ -485,7 +485,7 @@ export default function Profile() {
                 </label>
                 <input id="clubLogo" type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files[0] || null; setLogo(file); setLogoPreview(file ? URL.createObjectURL(file) : ""); }} />
               </Field>
-              <Field label="Club page banner" id="clubBanner" hint="Wide image, ideally 1600 × 600 px. It appears behind the logo on student pages.">
+              <Field label="Club page banner" id="clubBanner" hint="Wide image, ideally 1600 × 600 px. Up to 20 MB; files above 10 MB are optimized automatically.">
                 <label htmlFor="clubBanner" className="block cursor-pointer overflow-hidden rounded-sm border border-dashed border-line-2 bg-paper-2/50 transition-colors hover:border-accent">
                   {(bannerPreview || clubProfile?.clubBanner) ? <img src={bannerPreview || clubProfile.clubBanner} alt="Banner preview" className="aspect-[8/3] w-full object-cover" /> : <span className="grid aspect-[8/3] place-items-center px-4 text-center text-sm font-semibold text-ink-3">Choose a wide banner</span>}
                 </label>

@@ -33,7 +33,7 @@ function buildSessionReminderNotification(session) {
     title: `Reminder: ${session.title} is coming up`,
     message: "The session you RSVP'd for starts soon.",
     link: `/session/${session._id}`,
-    emailDetails: { startsAt: sessionStartAt(session), venue: session.venue },
+    emailDetails: { startsAt: sessionStartAt(session), venue: session.venue, meetingUrl: session.meetingUrl },
   };
 }
 
@@ -154,7 +154,7 @@ async function deliverSessionReminder(job) {
   if (!studentId || !sessionId || !expectedStartsAt) return;
 
   const [session, rsvp, student] = await Promise.all([
-    sessionModel.findById(sessionId).select("title date time venue status").lean(),
+    sessionModel.findById(sessionId).select("title date time venue meetingUrl status").lean(),
     sessionRsvpModel.findOne({ sessionId, studentId, status: "confirmed", source: { $ne: "walk_in" } }).select("_id").lean(),
     studentModel.findById(studentId).select("email notificationPreferences").lean(),
   ]);

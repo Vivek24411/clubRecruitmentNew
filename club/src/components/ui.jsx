@@ -135,11 +135,11 @@ export function PageHeader({ eyebrow, title, description, actions, className }) 
 export function SectionHeader({ title, description, action, className }) {
   return (
     <div className={cx("flex items-end justify-between gap-4", className)}>
-      <div>
+      <div className="min-w-0">
         <h2 className="display text-xl sm:text-2xl">{title}</h2>
         {description && <p className="mt-1.5 text-sm text-ink-3">{description}</p>}
       </div>
-      {action}
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }

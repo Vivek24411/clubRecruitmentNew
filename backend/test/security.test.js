@@ -98,6 +98,12 @@ test("club router exposes the complete password recovery flow", () => {
   assert.ok(routePaths.includes("/changePassword"));
 });
 
+test("club router exposes permanent deletion for sessions", () => {
+  const route = clubRouter.stack.find((layer) => layer.route?.path === "/sessions/:sessionId" && layer.route.methods.delete);
+  assert.ok(route);
+  assert.equal(route.route.methods.delete, true);
+});
+
 test("student catalogue reads are public while account data and actions stay protected", () => {
   const routeUsesStudentAuth = (path, method) => {
     const layer = studentRouter.stack.find((item) => item.route?.path === path && item.route?.methods?.[method]);

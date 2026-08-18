@@ -22,7 +22,7 @@ const initialForm = {
   eligibilityMode: "undergraduate",
   programmeEligibility: [{ programme: "undergraduate", years: [] }],
   ContactInfo: [],
-  status: "draft",
+  status: "published",
   deadlineNotificationsEnabled: true,
   rounds: [],
 };
@@ -43,8 +43,8 @@ export default function AddEvent() {
 
   const submit = async (event) => {
     event.preventDefault();
-    if (banner && (!['image/jpeg', 'image/png', 'image/webp'].includes(banner.type) || banner.size > 5 * 1024 * 1024)) {
-      return toast.error("Choose a JPG, PNG, or WebP banner smaller than 5 MB");
+    if (banner && (!['image/jpeg', 'image/png', 'image/webp'].includes(banner.type) || banner.size > 20 * 1024 * 1024)) {
+      return toast.error("Choose a JPG, PNG, or WebP banner no larger than 20 MB");
     }
     if (!form.rounds.length) return toast.error("Add at least one event round");
     setSubmitting(true);
@@ -91,7 +91,7 @@ export default function AddEvent() {
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
             <Field label="Event title" id="title" className="sm:col-span-2" required><Input id="title" value={form.title} onChange={(event) => set("title", event.target.value)} required /></Field>
             <Field label="Event type" id="eventType"><Select id="eventType" value={form.eventType} onChange={(event) => set("eventType", event.target.value)}><option value="recruitment">Recruitment</option><option value="hackathon">Hackathon</option><option value="competition">Competition</option><option value="workshop">Workshop</option><option value="other">Other</option></Select></Field>
-            <Field label="Visibility" id="status"><Select id="status" value={form.status} onChange={(event) => set("status", event.target.value)}><option value="draft">Draft</option><option value="published">Published</option></Select></Field>
+            <Field label="Visibility" id="status"><Select id="status" value={form.status} onChange={(event) => set("status", event.target.value)}><option value="published">Published</option><option value="draft">Draft</option></Select></Field>
             <Field label="Short description" id="shortDescription" className="sm:col-span-2" required><Input id="shortDescription" maxLength="500" value={form.shortDescription} onChange={(event) => set("shortDescription", event.target.value)} required /></Field>
             <Field label="Full description" id="longDescription" className="sm:col-span-2" required><Textarea id="longDescription" rows="6" value={form.longDescription} onChange={(event) => set("longDescription", event.target.value)} required /></Field>
           </div>
@@ -121,8 +121,8 @@ export default function AddEvent() {
 
         <Card className="p-5 sm:p-6">
           <h2 className="display text-xl">Event banner</h2>
-          <p className="mt-1.5 text-sm text-ink-3">Use a wide image, ideally 1600 × 700 px. Keep important text away from the edges.</p>
-          <Field label="JPG, PNG, or WebP under 5 MB" id="banner" className="mt-5"><input id="banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={selectBanner} className="block w-full text-sm file:mr-3 file:rounded-sm file:border file:border-line file:bg-surface file:px-4 file:py-2" /></Field>
+          <p className="mt-1.5 text-sm text-ink-3">Use a wide image, ideally 1600 × 700 px. Images above the provider&rsquo;s 10 MB limit are optimized automatically.</p>
+          <Field label="JPG, PNG, or WebP up to 20 MB" id="banner" className="mt-5"><input id="banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={selectBanner} className="block w-full text-sm file:mr-3 file:rounded-sm file:border file:border-line file:bg-surface file:px-4 file:py-2" /></Field>
           {preview && <img src={preview} alt="Event banner preview" className="mt-5 aspect-[16/7] w-full rounded-sm border border-line bg-paper-2 object-cover" />}
           <label className="mt-5 flex items-center gap-3 text-sm"><input type="checkbox" checked={form.deadlineNotificationsEnabled} onChange={(event) => set("deadlineNotificationsEnabled", event.target.checked)} />Allow deadline-change email notifications for this event</label>
         </Card>

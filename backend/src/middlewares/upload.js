@@ -37,22 +37,34 @@ function cloudinaryStorage({ folder, resourceType = "image", transformImages = f
 }
 
 const imageMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const imageStorage = cloudinaryStorage({
+  folder: (file) => ({
+    clubLogo: "discovr/club-logos",
+    eventBanner: "discovr/event-banners",
+    sessionThumbnail: "discovr/session-thumbnails",
+    profilePicture: "discovr/profile-pictures",
+  }[file.fieldname] || "discovr/images"),
+  resourceType: "image",
+  transformImages: true,
+});
+
+const imageFileFilter = (req, file, callback) => {
+  const allowed = imageMimeTypes.has(file.mimetype);
+  callback(allowed ? null : new Error("Only JPG, PNG, and WebP images are allowed"), allowed);
+};
+
 const upload = multer({
-  storage: cloudinaryStorage({
-    folder: (file) => ({
-      clubLogo: "discovr/club-logos",
-      eventBanner: "discovr/event-banners",
-      sessionThumbnail: "discovr/session-thumbnails",
-      profilePicture: "discovr/profile-pictures",
-    }[file.fieldname] || "discovr/images"),
-    resourceType: "image",
-    transformImages: true,
-  }),
+  storage: imageStorage,
   limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 80 },
-  fileFilter: (req, file, callback) => {
-    const allowed = imageMimeTypes.has(file.mimetype);
-    callback(allowed ? null : new Error("Only JPG, PNG, and WebP images are allowed"), allowed);
-  },
+  fileFilter: imageFileFilter,
+});
+
+// Event banners and session thumbnails may contain print-quality artwork, so
+// they get a larger limit without also increasing profile-picture/logo limits.
+const bannerUpload = multer({
+  storage: imageStorage,
+  limits: { fileSize: 20 * 1024 * 1024, files: 1, fields: 80 },
+  fileFilter: imageFileFilter,
 });
 
 const submissionMimeTypes = new Set([
@@ -77,4 +89,5 @@ const submissionUpload = multer({
 });
 
 upload.submissionUpload = submissionUpload;
+upload.bannerUpload = bannerUpload;
 module.exports = upload;

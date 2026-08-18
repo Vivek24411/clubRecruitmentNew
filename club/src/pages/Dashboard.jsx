@@ -111,9 +111,9 @@ export default function Dashboard() {
       {/* ------------------------------------------------------------------ */}
       {/* Next up                                                             */}
       {/* ------------------------------------------------------------------ */}
-      <div className="mt-12 grid gap-12 lg:grid-cols-2 lg:gap-10">
+      <div className="mt-12 grid items-stretch gap-12 lg:grid-cols-2 lg:gap-10">
         {/* Events ------------------------------------------------------- */}
-        <section>
+        <section className="flex h-full flex-col">
           <SectionHeader
             title="Next event"
             description="The closest deadline you're running."
@@ -123,7 +123,7 @@ export default function Dashboard() {
               </Link>
             }
           />
-          <div className="mt-5">
+          <div className="mt-5 flex flex-1">
             {loading ? (
               <SkeletonList rows={1} />
             ) : !nextEvent ? (
@@ -133,7 +133,7 @@ export default function Dashboard() {
                 action={<Button to="/addEvent">Create an event</Button>}
               />
             ) : (
-              <Card className="reveal p-6">
+              <Card className="reveal flex w-full flex-col p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <h3 className="display text-xl leading-snug">{nextEvent.title}</h3>
                   <Badge
@@ -143,11 +143,13 @@ export default function Dashboard() {
                     {nextEvent.status || "draft"}
                   </Badge>
                 </div>
-                {nextEvent.shortDescription && (
-                  <p className="mt-2.5 text-sm leading-relaxed text-ink-3">
-                    {nextEvent.shortDescription}
-                  </p>
-                )}
+                <div className="mt-2.5 lg:min-h-[4.5rem]">
+                  {nextEvent.shortDescription && (
+                    <p className="line-clamp-3 text-sm leading-relaxed text-ink-3">
+                      {nextEvent.shortDescription}
+                    </p>
+                  )}
+                </div>
 
                 <MetaGrid className="mt-6 border-t border-line pt-5">
                   <Meta
@@ -159,7 +161,7 @@ export default function Dashboard() {
                   <Meta label="Eligibility" value={nextEvent.eligibility || "Open to all"} />
                 </MetaGrid>
 
-                <div className="mt-6 flex flex-wrap gap-2.5">
+                <div className="mt-auto flex flex-wrap gap-2.5 pt-6">
                   <Button to={`/event/${nextEvent._id}`} size="sm">
                     Overview
                   </Button>
@@ -180,7 +182,7 @@ export default function Dashboard() {
         </section>
 
         {/* Sessions ----------------------------------------------------- */}
-        <section>
+        <section className="flex h-full flex-col">
           <SectionHeader
             title="Next session"
             description="Your soonest scheduled information session."
@@ -190,7 +192,7 @@ export default function Dashboard() {
               </Link>
             }
           />
-          <div className="mt-5">
+          <div className="mt-5 flex flex-1">
             {loading ? (
               <SkeletonList rows={1} />
             ) : !nextSession ? (
@@ -200,7 +202,7 @@ export default function Dashboard() {
                 action={<Button to="/addSession">Create a session</Button>}
               />
             ) : (
-              <Card className="reveal p-6">
+              <Card className="reveal flex w-full flex-col p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <h3 className="display text-xl leading-snug">{nextSession.title}</h3>
                   <Badge
@@ -210,18 +212,20 @@ export default function Dashboard() {
                     {nextSessionEnded ? "Past" : nextSessionOngoing ? "Live now" : "Upcoming"}
                   </Badge>
                 </div>
-                {nextSession.shortDescription && (
-                  <p className="mt-2.5 text-sm leading-relaxed text-ink-3">
-                    {nextSession.shortDescription}
-                  </p>
-                )}
+                <div className="mt-2.5 lg:min-h-[4.5rem]">
+                  {nextSession.shortDescription && (
+                    <p className="line-clamp-3 text-sm leading-relaxed text-ink-3">
+                      {nextSession.shortDescription}
+                    </p>
+                  )}
+                </div>
 
                 <MetaGrid className="mt-6 border-t border-line pt-5">
                   <Meta
                     label="Starts"
                     value={formatDateTime(sessionDate(nextSession.date, nextSession.time))}
                   />
-                  <Meta label="Venue" value={nextSession.venue || "TBA"} />
+                  <Meta label="Location" value={nextSession.venue || (nextSession.meetingUrl ? "Online" : "TBA")} />
                   <Meta
                     label="Duration"
                     value={nextSession.duration ? `${nextSession.duration} min` : "—"}
@@ -234,7 +238,7 @@ export default function Dashboard() {
                   />
                 </MetaGrid>
 
-                <div className="mt-6">
+                <div className="mt-auto pt-6">
                   <Button to={`/session/${nextSession._id}`} size="sm">
                     Manage session
                   </Button>

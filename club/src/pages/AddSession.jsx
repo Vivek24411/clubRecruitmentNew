@@ -23,9 +23,10 @@ export default function AddSession() {
   const [duration, setDuration] = useState("");
   const [longDescription, setLongDescription] = useState("");
   const [venue, setVenue] = useState("");
+  const [meetingUrl, setMeetingUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [capacity, setCapacity] = useState("");
-  const [status, setStatus] = useState("draft");
+  const [status, setStatus] = useState("published");
   const [thumbnail, setThumbnail] = useState(null);
   const [preview, setPreview] = useState("");
   const [formError, setFormError] = useState("");
@@ -39,12 +40,13 @@ export default function AddSession() {
     time: "Start time",
     duration: "Duration",
     venue: "Venue",
+    meetingUrl: "Meeting link",
     capacity: "Capacity",
   }[name] || name || "Field");
 
   const validationError = (error) => {
     const detail = error.response?.data?.errors?.[0];
-    if (!detail) return error.response?.data?.msg || "Failed to create session";
+    if (!detail) return error.response?.data?.msg || error.message || "Failed to create session";
     const field = detail.path || detail.param;
     return `${fieldLabel(field)}: ${detail.msg || "Please enter a valid value"}`;
   };
@@ -69,7 +71,7 @@ export default function AddSession() {
     try {
       const directAsset = await uploadDirect(thumbnail, { role: "club", kind: "sessionThumbnail" });
       const payload = {
-        title, shortDescription, date, time, duration, longDescription, venue,
+        title, shortDescription, date, time, duration, longDescription, venue, meetingUrl,
         capacity: capacity || null,
         status,
         ...(directAsset ? { directAsset } : {}),
@@ -138,8 +140,7 @@ export default function AddSession() {
             <Field
               label="Detailed description"
               id="longDescription"
-              required
-              hint="Include any special instructions, requirements, or what attendees should expect."
+              hint="Optional. Include special instructions, requirements, or what attendees should expect."
             >
               <Textarea
                 id="longDescription"
@@ -147,7 +148,6 @@ export default function AddSession() {
                 rows={6}
                 value={longDescription}
                 onChange={(event) => setLongDescription(event.target.value)}
-                required
                 placeholder="Provide detailed information about this session"
               />
             </Field>
@@ -156,7 +156,7 @@ export default function AddSession() {
 
         {/* Schedule ------------------------------------------------------- */}
         <Card className="reveal p-6" style={{ "--d": "80ms" }}>
-          <h2 className="display text-xl">Schedule and venue</h2>
+          <h2 className="display text-xl">Schedule and access</h2>
           <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Date" id="date" required>
               <Input
@@ -208,14 +208,24 @@ export default function AddSession() {
               />
             </Field>
 
-            <Field label="Venue" id="venue" required className="sm:col-span-2">
+            <Field label="Venue" id="venue" hint="Optional for online sessions." className="sm:col-span-2">
               <Input
                 id="venue"
                 name="venue"
                 value={venue}
                 onChange={(event) => setVenue(event.target.value)}
-                required
                 placeholder="e.g. LHC 101"
+              />
+            </Field>
+
+            <Field label="Meeting link" id="meetingUrl" hint="Optional. Use a full https:// link for online or hybrid sessions." className="sm:col-span-2">
+              <Input
+                id="meetingUrl"
+                name="meetingUrl"
+                type="url"
+                value={meetingUrl}
+                onChange={(event) => setMeetingUrl(event.target.value)}
+                placeholder="https://meet.google.com/..."
               />
             </Field>
           </div>
@@ -223,9 +233,15 @@ export default function AddSession() {
 
         <Card className="reveal p-6" style={{ "--d": "120ms" }}>
           <h2 className="display text-xl">Session thumbnail</h2>
-          <p className="mt-1.5 text-sm text-ink-3">Recommended: 1600 × 900 px (16:9), JPG, PNG, or WebP under 5 MB.</p>
-          <Field label="Choose image" id="sessionThumbnail" className="mt-5"><input id="sessionThumbnail" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files[0] || null; setThumbnail(file); setPreview(file ? URL.createObjectURL(file) : ""); }} /></Field>
-          {preview && <img src={preview} alt="Session thumbnail preview" className="mt-5 aspect-video w-full rounded-sm border border-line bg-paper-2 object-cover" />}
+          <p className="mt-1.5 text-sm text-ink-3">Recommended: 1600 × 900 px (16:9), JPG, PNG, or WebP up to 20 MB. Images above the provider&rsquo;s 10 MB limit are optimized automatically.</p>
+          <Field label="Choose image" id="sessionThumbnail" className="mt-5"><input id="sessionThumbnail" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files[0] || null; if (file && (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 20 * 1024 * 1024)) { event.target.value = ""; setThumbnail(null); setPreview(""); toast.error("Choose a JPG, PNG, or WebP image no larger than 20 MB"); return; } setThumbnail(file); setPreview(file ? URL.createObjectURL(file) : ""); }} /></Field>
+          {preview && (
+            <div className="relative mt-5 aspect-video w-full overflow-hidden rounded-sm border border-line bg-ink/90">
+              <img src={preview} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" />
+              <div className="absolute inset-0 bg-ink/15" aria-hidden="true" />
+              <img src={preview} alt="Session thumbnail preview" className="relative h-full w-full object-contain" />
+            </div>
+          )}
         </Card>
 
         {/* Publish -------------------------------------------------------- */}
@@ -242,8 +258,8 @@ export default function AddSession() {
                 value={status}
                 onChange={(event) => setStatus(event.target.value)}
               >
-                <option value="draft">Save as draft</option>
                 <option value="published">Publish now</option>
+                <option value="draft">Save as draft</option>
               </Select>
             </Field>
 

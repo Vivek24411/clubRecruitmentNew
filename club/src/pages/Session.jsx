@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { formatDateTime, sessionDate } from "../utils/date";
 import {
@@ -27,6 +27,7 @@ const FIELD_LABELS = {
   time: "Time",
   duration: "Duration",
   venue: "Venue",
+  meetingUrl: "Meeting link",
   capacity: "Capacity",
   status: "Status",
 };
@@ -41,6 +42,7 @@ const RSVP_TONE = {
 
 export default function Session() {
   const { sessionId } = useParams();
+  const navigate = useNavigate();
   const [session, setSession] = useState(null);
   const [attendees, setAttendees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +50,7 @@ export default function Session() {
   const [walkInEmail, setWalkInEmail] = useState("");
   const [thumbnail, setThumbnail] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [formError, setFormError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
 
@@ -100,7 +103,7 @@ export default function Session() {
     try {
       const directAsset = await uploadDirect(thumbnail, { role: "club", kind: "sessionThumbnail" });
       const payload = Object.fromEntries(
-        ["title", "shortDescription", "longDescription", "date", "time", "duration", "venue", "capacity", "status"]
+        ["title", "shortDescription", "longDescription", "date", "time", "duration", "venue", "meetingUrl", "capacity", "status"]
           .map((key) => [key, session[key] ?? ""]),
       );
       payload.capacity = session.capacity === "" || session.capacity == null ? null : session.capacity;
@@ -143,6 +146,21 @@ export default function Session() {
       toast.success(data.msg);
     } catch (error) {
       toast.error(error.response?.data?.msg || error.message);
+    }
+  };
+
+  const removeSession = async () => {
+    if (!window.confirm(`Permanently delete “${session.title}”? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      const { data } = await axios.delete(`${import.meta.env.VITE_BASE_URI}/club/sessions/${sessionId}`);
+      if (!data.success) throw new Error(data.msg);
+      toast.success(data.msg);
+      navigate("/sessions", { replace: true });
+    } catch (error) {
+      toast.error(error.response?.data?.msg || error.message || "Could not delete session");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -207,7 +225,7 @@ export default function Session() {
             <h1 className="display mt-2 text-3xl sm:text-4xl">{session.title}</h1>
             <p className="mt-3 text-sm text-ink-3">
               {formatDateTime(sessionDate(session.date, session.time))}
-              {session.venue ? ` · ${session.venue}` : ""}
+              {session.venue ? ` · ${session.venue}` : session.meetingUrl ? " · Online" : ""}
             </p>
           </div>
           <Badge tone={session.status === "published" ? "ok" : "neutral"} className="capitalize">
@@ -217,7 +235,13 @@ export default function Session() {
         <hr className="rule animate-draw mt-8" style={{ animationDelay: "200ms" }} />
       </header>
 
-      {session.sessionThumbnail && <img src={session.sessionThumbnail} alt="" className="mt-8 aspect-video w-full rounded-md border border-line bg-paper-2 object-contain" />}
+      {session.sessionThumbnail && (
+        <div className="relative mt-8 aspect-video w-full overflow-hidden rounded-md border border-line bg-ink/90">
+          <img src={session.sessionThumbnail} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" />
+          <div className="absolute inset-0 bg-ink/15" aria-hidden="true" />
+          <img src={session.sessionThumbnail} alt={`${session.title} banner`} className="relative h-full w-full object-contain" />
+        </div>
+      )}
 
       <div className="mt-10 grid gap-8 lg:grid-cols-5">
         {/* --------------------------------------------------------------- */}
@@ -249,7 +273,7 @@ export default function Session() {
               />
             </Field>
 
-            <Field label="Full description" id="longDescription" error={fieldErrors.longDescription}>
+            <Field label="Full description" id="longDescription" hint="Optional." error={fieldErrors.longDescription}>
               <Textarea id="longDescription" rows="4" value={session.longDescription || ""} onChange={(event) => set("longDescription", event.target.value)} aria-invalid={Boolean(fieldErrors.longDescription)} />
             </Field>
 
@@ -275,12 +299,24 @@ export default function Session() {
               </Field>
             </div>
 
-            <Field label="Venue" id="venue" error={fieldErrors.venue}>
+            <Field label="Venue" id="venue" hint="Optional for online sessions." error={fieldErrors.venue}>
               <Input
                 id="venue"
                 value={session.venue || ""}
                 onChange={(event) => set("venue", event.target.value)}
                 aria-invalid={Boolean(fieldErrors.venue)}
+                placeholder="e.g. LHC 101"
+              />
+            </Field>
+
+            <Field label="Meeting link" id="meetingUrl" hint="Optional. Use a full https:// link." error={fieldErrors.meetingUrl}>
+              <Input
+                id="meetingUrl"
+                type="url"
+                value={session.meetingUrl || ""}
+                onChange={(event) => set("meetingUrl", event.target.value)}
+                aria-invalid={Boolean(fieldErrors.meetingUrl)}
+                placeholder="https://meet.google.com/..."
               />
             </Field>
 
@@ -316,7 +352,7 @@ export default function Session() {
                 </Select>
               </Field>
             </div>
-            <Field label="Replace thumbnail" id="sessionThumbnail" hint="1600 × 900 px (16:9) works best."><input id="sessionThumbnail" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setThumbnail(event.target.files[0] || null)} /></Field>
+            <Field label="Replace thumbnail" id="sessionThumbnail" hint="1600 × 900 px (16:9) works best. Up to 20 MB; files above 10 MB are optimized automatically."><input id="sessionThumbnail" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files[0] || null; if (file && file.size > 20 * 1024 * 1024) { event.target.value = ""; setThumbnail(null); toast.error("Choose an image no larger than 20 MB"); return; } setThumbnail(file); }} /></Field>
           </div>
 
           <Button className="mt-7" loading={saving}>Save session</Button>
@@ -401,6 +437,18 @@ export default function Session() {
           </div>
         </Card>
       </div>
+
+      <Card className="mt-8 flex flex-col gap-5 border-bad/30 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="display text-lg">Delete session</h2>
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink-3">
+            Permanent deletion is available only before students have RSVP or attendance history. Otherwise, set the status to cancelled or archived.
+          </p>
+        </div>
+        <Button type="button" variant="danger" loading={deleting} disabled={saving} className="shrink-0" onClick={removeSession}>
+          Delete permanently
+        </Button>
+      </Card>
     </Page>
   );
 }

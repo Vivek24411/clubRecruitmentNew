@@ -32,6 +32,11 @@ const sessionSchema = new mongoose.Schema({
     type: String,
     maxlength: 300,
   },
+  meetingUrl: {
+    type: String,
+    trim: true,
+    maxlength: 2048,
+  },
   sessionThumbnail: {
     type: String,
     default: "",

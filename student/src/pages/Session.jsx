@@ -150,7 +150,13 @@ export default function Session() {
         <hr className="rule animate-draw mt-8" style={{ animationDelay: "200ms" }} />
       </header>
 
-      {session.sessionThumbnail && <img src={session.sessionThumbnail} alt="" className="reveal mt-8 aspect-video w-full rounded-md border border-line bg-paper-2 object-contain" />}
+      {session.sessionThumbnail && (
+        <div className="reveal relative mt-8 aspect-video w-full overflow-hidden rounded-md border border-line bg-ink/90">
+          <img src={session.sessionThumbnail} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" />
+          <div className="absolute inset-0 bg-ink/15" aria-hidden="true" />
+          <img src={session.sessionThumbnail} alt={`${session.title} banner`} className="relative h-full w-full object-contain" />
+        </div>
+      )}
 
       <div className="mt-10 grid gap-8 lg:grid-cols-3 lg:gap-10">
         <section className="reveal lg:col-span-2" style={{ "--d": "100ms" }}>
@@ -162,7 +168,13 @@ export default function Session() {
           <MetaGrid className="mt-8 border-t border-line pt-6">
             <Meta label="Starts" value={formatDateTime(startsAt)} />
             <Meta label="Ends" value={formatDateTime(endsAt)} />
-            <Meta label="Venue" value={session.venue || "To be announced"} />
+            <Meta label="Location" value={session.venue || (session.meetingUrl ? "Online" : "To be announced")} />
+            {session.meetingUrl && (
+              <Meta
+                label="Meeting link"
+                value={<a href={session.meetingUrl} target="_blank" rel="noreferrer" className="link link-accent break-all">Join online ↗</a>}
+              />
+            )}
             <Meta
               label="Duration"
               value={session.duration ? `${session.duration} minutes` : "Not set"}
