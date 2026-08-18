@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { Button, Card, Field, Input, Page, PageHeader, Select } from "../components/ui";
+import { Button, Card, Field, Input, Page, PageHeader, PasswordInput, Select } from "../components/ui";
 import { uploadDirect } from "../utils/directUpload";
 
 export default function AddClub() {
@@ -142,9 +142,8 @@ export default function AddClub() {
               required
               hint="At least 10 characters. Share it with the club securely."
             >
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Enter a secure password"

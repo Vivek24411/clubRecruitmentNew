@@ -4,7 +4,7 @@ import { uploadDirect } from "../utils/directUpload";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { StudentContextData } from "../context/StudentContext";
-import { Button, Card, Field, Input, Meta, Monogram, Page, PageHeader } from "../components/ui";
+import { Button, Card, Field, Input, Meta, Monogram, Page, PageHeader, PasswordInput } from "../components/ui";
 import { disablePushNotifications, enablePushNotifications, getPushNotificationState } from "../utils/pushNotifications";
 
 const PROGRAMME_LABELS = {
@@ -292,9 +292,8 @@ export default function Profile() {
             <div className="mt-6 grid gap-5 sm:grid-cols-3">
               {PASSWORD_FIELDS.map(([key, label, autoComplete]) => (
                 <Field key={key} id={key} label={label} required>
-                  <Input
+                  <PasswordInput
                     id={key}
-                    type="password"
                     minLength={key === "currentPassword" ? 1 : 10}
                     maxLength={key === "currentPassword" ? 128 : 72}
                     autoComplete={autoComplete}

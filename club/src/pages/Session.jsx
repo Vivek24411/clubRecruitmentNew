@@ -150,10 +150,20 @@ export default function Session() {
   };
 
   const removeSession = async () => {
-    if (!window.confirm(`Permanently delete “${session.title}”? This cannot be undone.`)) return;
+    const confirmation = window.prompt(
+      `Permanently delete “${session.title}” and ALL associated RSVPs, attendance history, notifications, and reminders?\n\nThis cannot be undone. Type the exact session title to continue:`,
+    );
+    if (confirmation === null) return;
+    if (confirmation !== session.title) {
+      toast.error("The session title did not match. Nothing was deleted.");
+      return;
+    }
     setDeleting(true);
     try {
-      const { data } = await axios.delete(`${import.meta.env.VITE_BASE_URI}/club/sessions/${sessionId}`);
+      const { data } = await axios.delete(
+        `${import.meta.env.VITE_BASE_URI}/club/sessions/${sessionId}`,
+        { data: { confirmation } },
+      );
       if (!data.success) throw new Error(data.msg);
       toast.success(data.msg);
       navigate("/sessions", { replace: true });
@@ -442,11 +452,11 @@ export default function Session() {
         <div>
           <h2 className="display text-lg">Delete session</h2>
           <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink-3">
-            Permanent deletion is available only before students have RSVP or attendance history. Otherwise, set the status to cancelled or archived.
+            Permanently removes this session and all associated RSVPs, waitlist entries, attendance history, notifications, and reminders. This cannot be undone.
           </p>
         </div>
         <Button type="button" variant="danger" loading={deleting} disabled={saving} className="shrink-0" onClick={removeSession}>
-          Delete permanently
+          Delete all data
         </Button>
       </Card>
     </Page>

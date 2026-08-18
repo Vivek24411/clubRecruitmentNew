@@ -15,6 +15,7 @@ const sessionRsvpModel = require("../models/sessionRsvp.model");
 const { clearSessionCookie, setSessionCookie } = require("../utils/auth");
 const { notifyStudent } = require("../services/notification.services");
 const { enqueueSessionReminder } = require("../services/jobQueue.services");
+const { sessionsWithConfirmedRsvpCounts } = require("../services/sessionRsvp.services");
 const { sessionEndAt } = require("../utils/sessionSchedule");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryAsset, destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
@@ -544,7 +545,8 @@ module.exports.changePassword = async (req, res) => {
 module.exports.getAllSessions = async (req, res) => {
   try {
     const sessions = await sessionModel.find({ status: "published" }).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS });
-    return res.json({ success: true, sessions: sessions.filter((session) => session.clubId) });
+    const visibleSessions = sessions.filter((session) => session.clubId);
+    return res.json({ success: true, sessions: await sessionsWithConfirmedRsvpCounts(visibleSessions) });
   } catch (error) {
     console.error("Error fetching sessions:", error);
     return res.status(500).json({ success: false, msg: "Server error" });
@@ -566,7 +568,8 @@ module.exports.getSession = async (req, res) => {
     if (!session || !session.clubId) {
       return res.json({ success: false, msg: "Session not found" });
     }
-    return res.json({ success: true, session });
+    const [sessionWithCount] = await sessionsWithConfirmedRsvpCounts([session]);
+    return res.json({ success: true, session: sessionWithCount });
   } catch (error) {
     console.error("Error fetching session:", error);
     return res.status(500).json({ success: false, msg: "Server error" });
@@ -703,7 +706,8 @@ module.exports.getClubSessions = async (req, res) => {
     const sessions = await sessionModel
       .find({ clubId, status: "published" })
       .populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS });
-    return res.json({ success: true, sessions: sessions.filter((session) => session.clubId) });
+    const visibleSessions = sessions.filter((session) => session.clubId);
+    return res.json({ success: true, sessions: await sessionsWithConfirmedRsvpCounts(visibleSessions) });
   } catch (error) {
     
     return res.status(500).json({ success: false, msg: "Server error" });
@@ -724,10 +728,11 @@ module.exports.getDashBoard = async (req, res, next) => {
     })
     : [];
   const applicationEventIds = new Set(memberships.map((membership) => String(membership.eventId)));
+  const visibleSessions = sessions.filter((session) => session.clubId);
   return res.json({
     success: true,
     events: openEvents.map((event) => ({ ...event.toObject(), hasApplied: applicationEventIds.has(String(event._id)) })),
-    sessions: sessions.filter((session) => session.clubId),
+    sessions: await sessionsWithConfirmedRsvpCounts(visibleSessions),
     settings,
   });
 };

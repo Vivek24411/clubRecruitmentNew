@@ -213,6 +213,7 @@ router.patch('/events/:eventId/status', clubAuth, [
 
 router.delete('/events/:eventId', clubAuth, [
   param('eventId').isMongoId(),
+  body('confirmation').isString().isLength({ min: 1, max: 150 }),
 ], validateRequest, deleteEvent)
 
 router.patch('/sessions/:sessionId', clubAuth, upload.bannerUpload.single('sessionThumbnail'), attachDirectAsset('sessionThumbnail'), [
@@ -232,6 +233,7 @@ router.patch('/sessions/:sessionId', clubAuth, upload.bannerUpload.single('sessi
 
 router.delete('/sessions/:sessionId', clubAuth, [
   param('sessionId').isMongoId(),
+  body('confirmation').isString().isLength({ min: 1, max: 150 }),
 ], validateRequest, deleteSession)
 
 router.get('/getDashBoard', clubAuth,getDashBoard)

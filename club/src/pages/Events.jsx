@@ -58,10 +58,19 @@ export default function Events() {
   };
 
   const deleteEvent = async (event) => {
-    if (!window.confirm(`Permanently delete “${event.title}”? This is only allowed when no student activity exists and cannot be undone.`)) return;
+    const confirmation = window.prompt(
+      `Permanently delete “${event.title}” and ALL associated applications, teams, submissions, schedules, and student history?\n\nThis cannot be undone. Type the exact event title to continue:`,
+    );
+    if (confirmation === null) return;
+    if (confirmation !== event.title) {
+      toast.error("The event title did not match. Nothing was deleted.");
+      return;
+    }
     setDeleting(event._id);
     try {
-      const { data } = await axios.delete(`${import.meta.env.VITE_BASE_URI}/club/events/${event._id}`);
+      const { data } = await axios.delete(`${import.meta.env.VITE_BASE_URI}/club/events/${event._id}`, {
+        data: { confirmation },
+      });
       if (!data.success) throw new Error(data.msg);
       setEvents((items) => items.filter((item) => item._id !== event._id));
       toast.success(data.msg);
@@ -184,7 +193,7 @@ export default function Events() {
                         Edit
                       </Link>
                       <button type="button" disabled={deleting === event._id} onClick={() => deleteEvent(event)} className="link text-bad disabled:opacity-50">
-                        {deleting === event._id ? "Deleting…" : "Delete"}
+                        {deleting === event._id ? "Deleting…" : "Delete all data"}
                       </button>
                       <Link className="link ml-auto" to={`/event-applications/${event._id}`}>
                         Applications →

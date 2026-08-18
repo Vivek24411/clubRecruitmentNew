@@ -1,4 +1,5 @@
 const { validationResult } = require("express-validator");
+const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const clubModel = require("../models/club.model");
@@ -13,14 +14,18 @@ const roundSubmissionModel = require("../models/roundSubmission.model");
 const scheduleSlotModel = require("../models/scheduleSlot.model");
 const scheduleReservationModel = require("../models/scheduleReservation.model");
 const eventMembershipModel = require("../models/eventMembership.model");
+const applicationHistoryModel = require("../models/applicationHistory.model");
+const notificationModel = require("../models/notification.model");
+const jobModel = require("../models/job.model");
 const studentModel = require("../models/student.model");
 const { clearSessionCookie, setSessionCookie } = require("../utils/auth");
 const { notifyStudent, notifyTeam, notifyRegistrations } = require("../services/notification.services");
 const { enqueueSessionReminder, enqueueSessionReminders } = require("../services/jobQueue.services");
+const { sessionsWithConfirmedRsvpCounts } = require("../services/sessionRsvp.services");
 const { sessionEndAt } = require("../utils/sessionSchedule");
 const { sendOtp } = require("../services/student.services");
 const { writeAudit } = require("../services/audit.services");
-const { destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
+const { destroyCloudinaryAsset, destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
 const { normalizeProgrammeEligibility } = require("../services/academic.services");
 const { invalidatePrincipal } = require("../services/authPrincipalCache.services");
 const {
@@ -419,7 +424,7 @@ module.exports.updateProfile = async (req, res) => {
 module.exports.getSessions = async (req, res) => {
   try {
     const sessions = await sessionModel.find({ clubId: req.club._id });
-    return res.json({ success: true, sessions });
+    return res.json({ success: true, sessions: await sessionsWithConfirmedRsvpCounts(sessions) });
   } catch (err) {
    
     return res.json({ success: false, msg: "Failed to fetch sessions" });
@@ -443,7 +448,8 @@ module.exports.getSession = async (req, res) => {
     if (!session) {
       return res.json({ success: false, msg: "Session not found" });
     }
-    return res.json({ success: true, session });
+    const [sessionWithCount] = await sessionsWithConfirmedRsvpCounts([session]);
+    return res.json({ success: true, session: sessionWithCount });
   } catch (err) {
    
     return res.json({ success: false, msg: "Failed to fetch session details" });
@@ -605,7 +611,7 @@ module.exports.getDashBoard = async (req, res) => {
   try {
     const events = await eventModel.find({ clubId: req.club._id });
     const sessions = await sessionModel.find({ clubId: req.club._id });
-    return res.json({ success: true, events, sessions });
+    return res.json({ success: true, events, sessions: await sessionsWithConfirmedRsvpCounts(sessions) });
   } catch (err) {
     console.error("Error fetching dashboard data:", err);
     return res.json({ success: false, msg: "Failed to fetch dashboard data" });
@@ -911,29 +917,101 @@ module.exports.updateEventStatus = async (req, res) => {
 module.exports.deleteEvent = async (req, res) => {
   const event = await ownedEvent(req.params.eventId, req.club._id);
   if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
-
-  const [registration, candidate, submission, slot, membership] = await Promise.all([
-    registerationEventModel.exists({ eventId: event._id }),
-    roundCandidateModel.exists({ eventId: event._id }),
-    roundSubmissionModel.exists({ eventId: event._id }),
-    scheduleSlotModel.exists({ eventId: event._id }),
-    eventMembershipModel.exists({ eventId: event._id }),
-  ]);
-  if (registration || candidate || submission || slot || membership) {
-    return res.status(409).json({
-      success: false,
-      msg: "This event already has student activity and cannot be deleted. Cancel or archive it to preserve application history.",
-    });
+  if (String(req.body.confirmation || "") !== event.title) {
+    return res.status(400).json({ success: false, msg: "Type the exact event title to confirm permanent deletion" });
   }
 
-  // Empty events have no reservations, but keep this cleanup coupled to the
-  // delete so partially-created scheduling data can never be orphaned.
-  const slotIds = (await scheduleSlotModel.find({ eventId: event._id }).select("_id").lean()).map((slot) => slot._id);
-  if (slotIds.length) await scheduleReservationModel.deleteMany({ slotId: { $in: slotIds } });
-  await event.deleteOne();
-  await destroyCloudinaryImage(event.eventBannerPublicId);
-  await writeAudit({ actorRole: "club", actorId: req.club._id, action: "event.delete", targetType: "event", targetId: event._id, metadata: { title: event.title } });
-  return res.json({ success: true, msg: "Event permanently deleted" });
+  // Stop new registrations before collecting and deleting the event graph. If
+  // any later cleanup fails, the archived event remains available for retry.
+  event.status = "archived";
+  await event.save();
+
+  const [submissions, slots, candidates] = await Promise.all([
+    roundSubmissionModel.find({ eventId: event._id }).select("files").lean(),
+    scheduleSlotModel.find({ eventId: event._id }).select("_id").lean(),
+    roundCandidateModel.find({ eventId: event._id }).select("_id").lean(),
+  ]);
+  const slotIds = slots.map((slot) => slot._id);
+  const candidateIds = candidates.map((candidate) => candidate._id);
+  const eventLink = `/event/${event._id}`;
+  let deleted = {};
+
+  const dbSession = await mongoose.startSession();
+  try {
+    await dbSession.withTransaction(async () => {
+      // Imported candidates in other events remain valid; only their origin
+      // references are detached before source candidates are removed.
+      if (candidateIds.length) {
+        await roundCandidateModel.updateMany(
+          { eventId: { $ne: event._id }, sourceCandidateId: { $in: candidateIds } },
+          { $set: { sourceCandidateId: null } },
+          { session: dbSession },
+        );
+        await roundCandidateModel.updateMany(
+          { eventId: { $ne: event._id }, sourceCandidateIds: { $in: candidateIds } },
+          { $pull: { sourceCandidateIds: { $in: candidateIds } } },
+          { session: dbSession },
+        );
+      }
+      await registerationEventModel.updateMany(
+        { eventId: { $ne: event._id }, "source.eventId": event._id },
+        { $set: { source: { type: "direct", eventId: null, roundId: null, registrationId: null } } },
+        { session: dbSession },
+      );
+
+      // MongoDB transactions do not support parallel operations on one
+      // session, so each collection is deliberately cleaned in sequence.
+      const results = [];
+      results.push(slotIds.length
+        ? await scheduleReservationModel.deleteMany({ slotId: { $in: slotIds } }, { session: dbSession })
+        : { deletedCount: 0 });
+      results.push(await roundSubmissionModel.deleteMany({ eventId: event._id }, { session: dbSession }));
+      results.push(await scheduleSlotModel.deleteMany({ eventId: event._id }, { session: dbSession }));
+      results.push(await roundCandidateModel.deleteMany({ eventId: event._id }, { session: dbSession }));
+      results.push(await eventMembershipModel.deleteMany({ eventId: event._id }, { session: dbSession }));
+      results.push(await applicationHistoryModel.deleteMany({ eventId: event._id }, { session: dbSession }));
+      results.push(await registerationEventModel.deleteMany({ eventId: event._id }, { session: dbSession }));
+      results.push(await notificationModel.deleteMany({ link: eventLink }, { session: dbSession }));
+      results.push(await jobModel.deleteMany({ "payload.notification.link": eventLink }, { session: dbSession }));
+      deleted = {
+        reservations: results[0].deletedCount,
+        submissions: results[1].deletedCount,
+        slots: results[2].deletedCount,
+        candidates: results[3].deletedCount,
+        memberships: results[4].deletedCount,
+        histories: results[5].deletedCount,
+        registrations: results[6].deletedCount,
+        notifications: results[7].deletedCount,
+        jobs: results[8].deletedCount,
+      };
+      const eventResult = await eventModel.deleteOne(
+        { _id: event._id, clubId: req.club._id },
+        { session: dbSession },
+      );
+      if (eventResult.deletedCount !== 1) throw new Error("Event disappeared during deletion");
+    });
+  } finally {
+    await dbSession.endSession();
+  }
+
+  const submissionFiles = submissions.flatMap((submission) => submission.files || []);
+  await Promise.all([
+    destroyCloudinaryImage(event.eventBannerPublicId),
+    ...submissionFiles.map((file) => destroyCloudinaryAsset(file.publicId, file.resourceType)),
+  ]);
+  await writeAudit({
+    actorRole: "club",
+    actorId: req.club._id,
+    action: "event.delete_with_activity",
+    targetType: "event",
+    targetId: event._id,
+    metadata: { title: event.title, deleted, uploadedFiles: submissionFiles.length },
+  });
+  return res.json({
+    success: true,
+    msg: "Event and all associated activity permanently deleted",
+    deleted,
+  });
 };
 
 module.exports.updateSession = async (req, res) => {
@@ -1054,26 +1132,68 @@ module.exports.updateSession = async (req, res) => {
 module.exports.deleteSession = async (req, res) => {
   const session = await sessionModel.findOne({ _id: req.params.sessionId, clubId: req.club._id });
   if (!session) return res.status(404).json({ success: false, msg: "Session not found" });
-
-  const hasStudentActivity = await sessionRsvpModel.exists({ sessionId: session._id });
-  if (hasStudentActivity) {
-    return res.status(409).json({
-      success: false,
-      msg: "This session already has RSVP or attendance history and cannot be deleted. Cancel or archive it to preserve student records.",
-    });
+  if (String(req.body.confirmation || "") !== session.title) {
+    return res.status(400).json({ success: false, msg: "Type the exact session title to confirm permanent deletion" });
   }
 
-  await session.deleteOne();
+  // Stop new RSVPs before deleting the session graph. If a later cleanup
+  // fails, the archived session remains available for another attempt.
+  session.status = "archived";
+  await session.save();
+
+  const sessionLink = `/session/${session._id}`;
+  let deleted = {};
+  const dbSession = await mongoose.startSession();
+  try {
+    await dbSession.withTransaction(async () => {
+      // Keep these operations sequential: MongoDB transactions do not support
+      // parallel operations on one session.
+      const rsvps = await sessionRsvpModel.deleteMany(
+        { sessionId: session._id },
+        { session: dbSession },
+      );
+      const notifications = await notificationModel.deleteMany(
+        { link: sessionLink },
+        { session: dbSession },
+      );
+      const jobs = await jobModel.deleteMany(
+        {
+          $or: [
+            { type: "session_reminder", "payload.sessionId": { $in: [String(session._id), session._id] } },
+            { "payload.notification.link": sessionLink },
+          ],
+        },
+        { session: dbSession },
+      );
+      deleted = {
+        rsvps: rsvps.deletedCount,
+        notifications: notifications.deletedCount,
+        jobs: jobs.deletedCount,
+      };
+      const sessionResult = await sessionModel.deleteOne(
+        { _id: session._id, clubId: req.club._id },
+        { session: dbSession },
+      );
+      if (sessionResult.deletedCount !== 1) throw new Error("Session disappeared during deletion");
+    });
+  } finally {
+    await dbSession.endSession();
+  }
+
   await destroyCloudinaryImage(session.sessionThumbnailPublicId);
   await writeAudit({
     actorRole: "club",
     actorId: req.club._id,
-    action: "session.delete",
+    action: "session.delete_with_activity",
     targetType: "session",
     targetId: session._id,
-    metadata: { title: session.title },
+    metadata: { title: session.title, deleted },
   });
-  return res.json({ success: true, msg: "Session permanently deleted" });
+  return res.json({
+    success: true,
+    msg: "Session and all associated activity permanently deleted",
+    deleted,
+  });
 };
 
 module.exports.updateApplication = async (req, res) => {

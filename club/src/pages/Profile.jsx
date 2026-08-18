@@ -15,6 +15,7 @@ import {
   Monogram,
   Page,
   PageHeader,
+  PasswordInput,
   Select,
   Skeleton,
   Textarea,
@@ -178,9 +179,8 @@ function PasswordSecurity({ club, onPasswordChanged }) {
   const passwordFields = (
     <>
       <Field label="New password" id={`${method}-new-password`} hint="At least 10 characters.">
-        <Input
+        <PasswordInput
           id={`${method}-new-password`}
-          type="password"
           minLength={10}
           maxLength={72}
           autoComplete="new-password"
@@ -198,9 +198,8 @@ function PasswordSecurity({ club, onPasswordChanged }) {
             : undefined
         }
       >
-        <Input
+        <PasswordInput
           id={`${method}-confirm-password`}
-          type="password"
           minLength={10}
           maxLength={72}
           autoComplete="new-password"
@@ -258,9 +257,8 @@ function PasswordSecurity({ club, onPasswordChanged }) {
         {method === "current" ? (
           <form className="mt-5 space-y-4" onSubmit={changeWithCurrentPassword}>
             <Field label="Current password" id="current-password" required>
-              <Input
+              <PasswordInput
                 id="current-password"
-                type="password"
                 maxLength={128}
                 autoComplete="current-password"
                 required

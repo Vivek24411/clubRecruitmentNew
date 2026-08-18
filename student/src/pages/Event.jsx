@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { daysUntil, eventDeadline, formatDateTime } from "../utils/date";
 import EventWorkflow from "../components/EventWorkflow";
 import { StudentContextData } from "../context/StudentContext";
+import ClubLogo from "../components/ClubLogo";
 import {
   Badge,
   Button,
@@ -220,7 +221,7 @@ export default function Event() {
               to={event.clubId._id ? `/club/${event.clubId._id}` : "/clubs"}
               className="flex items-center gap-2.5"
             >
-              {event.clubId.clubLogo ? <img src={event.clubId.clubLogo} alt="" className="h-10 w-10 rounded-md border border-line bg-white object-contain p-1" /> : <Monogram name={event.clubId.name} size="sm" />}
+              <ClubLogo club={event.clubId} />
               <span className="text-sm font-semibold">{event.clubId.name}</span>
             </Link>
           )}

@@ -9,6 +9,7 @@ import {
   EmptyState,
   Input,
   Meter,
+  Monogram,
   Page,
   PageHeader,
   Select,
@@ -82,8 +83,36 @@ export default function Sessions() {
               const startsAt = sessionDate(session.date, session.time);
               const confirmed = session.confirmedRsvpCount || 0;
               return (
-                <article key={session._id} className="card flex flex-col p-5">
-                  <div className="flex items-start justify-between gap-3">
+                <article key={session._id} className="card flex flex-col overflow-hidden">
+                  <div className="relative aspect-video overflow-hidden bg-paper-2">
+                    {session.sessionThumbnail ? (
+                      <>
+                        <img
+                          src={session.sessionThumbnail}
+                          alt=""
+                          aria-hidden="true"
+                          className="absolute inset-0 h-full w-full scale-110 object-cover opacity-40 blur-xl"
+                        />
+                        <img
+                          src={session.sessionThumbnail}
+                          alt={`${session.title} thumbnail`}
+                          loading="lazy"
+                          className="relative h-full w-full object-contain"
+                        />
+                      </>
+                    ) : (
+                      <div className="grid h-full place-items-center">
+                        <Monogram name={session.title} size="lg" />
+                      </div>
+                    )}
+                    <span className="absolute right-3 top-3">
+                      <Badge tone={STATUS_TONE[session.status] || "neutral"} className="capitalize">
+                        {session.status}
+                      </Badge>
+                    </span>
+                  </div>
+
+                  <div className="flex flex-1 flex-col p-5">
                     <div className="flex h-12 w-12 flex-none flex-col items-center justify-center rounded-sm border border-line bg-paper-2">
                       <span className="display tabular text-base leading-none">
                         {startsAt?.toLocaleDateString("en-IN", {
@@ -98,39 +127,36 @@ export default function Sessions() {
                         })}
                       </span>
                     </div>
-                    <Badge tone={STATUS_TONE[session.status] || "neutral"} className="capitalize">
-                      {session.status}
-                    </Badge>
-                  </div>
 
-                  <h2 className="display mt-4 text-lg leading-snug">{session.title}</h2>
-                  <p className="mt-2 text-sm text-ink-3">{formatDateTime(startsAt)}</p>
-                  <p className="mt-0.5 text-sm text-ink-3">
-                    {session.venue || "Venue TBA"}
-                    {session.duration ? ` · ${session.duration} min` : ""}
-                  </p>
-
-                  {session.capacity ? (
-                    <Meter
-                      className="mt-5"
-                      label="Confirmed"
-                      value={confirmed}
-                      max={session.capacity}
-                      tone={confirmed >= session.capacity ? "warn" : "accent"}
-                    />
-                  ) : (
-                    <p className="mt-5 text-sm">
-                      <span className="tabular font-semibold">{confirmed}</span>{" "}
-                      <span className="text-ink-3">confirmed · open attendance</span>
+                    <h2 className="display mt-4 text-lg leading-snug">{session.title}</h2>
+                    <p className="mt-2 text-sm text-ink-3">{formatDateTime(startsAt)}</p>
+                    <p className="mt-0.5 text-sm text-ink-3">
+                      {session.venue || "Venue TBA"}
+                      {session.duration ? ` · ${session.duration} min` : ""}
                     </p>
-                  )}
 
-                  <Link
-                    to={`/session/${session._id}`}
-                    className="link link-accent mt-5 inline-flex text-sm font-semibold"
-                  >
-                    Manage session →
-                  </Link>
+                    {session.capacity ? (
+                      <Meter
+                        className="mt-5"
+                        label="Confirmed"
+                        value={confirmed}
+                        max={session.capacity}
+                        tone={confirmed >= session.capacity ? "warn" : "accent"}
+                      />
+                    ) : (
+                      <p className="mt-5 text-sm">
+                        <span className="tabular font-semibold">{confirmed}</span>{" "}
+                        <span className="text-ink-3">confirmed · open attendance</span>
+                      </p>
+                    )}
+
+                    <Link
+                      to={`/session/${session._id}`}
+                      className="link link-accent mt-auto inline-flex pt-5 text-sm font-semibold"
+                    >
+                      Manage session →
+                    </Link>
+                  </div>
                 </article>
               );
             })}

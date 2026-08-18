@@ -4,7 +4,7 @@ import { toast } from "react-toastify";
 import { Link, useNavigate } from "react-router-dom";
 import { ClubContextData } from "../context/ClubContext.jsx";
 import AuthShell from "../components/AuthShell";
-import { Button, Field, Input } from "../components/ui";
+import { Button, Field, Input, PasswordInput } from "../components/ui";
 
 export default function Login() {
   const [userName, setUserName] = useState("");
@@ -68,9 +68,8 @@ export default function Login() {
         </Field>
 
         <Field label="Password" id="password" required>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
             autoComplete="current-password"
             placeholder="Enter your password"
             required

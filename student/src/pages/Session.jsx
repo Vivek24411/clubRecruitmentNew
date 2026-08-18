@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { formatDateTime, sessionDate, sessionEndDate } from "../utils/date";
 import { StudentContextData } from "../context/StudentContext";
+import ClubLogo from "../components/ClubLogo";
 import {
   Badge,
   Button,
@@ -12,7 +13,6 @@ import {
   Meta,
   MetaGrid,
   Meter,
-  Monogram,
   Page,
   Skeleton,
 } from "../components/ui";
@@ -130,7 +130,7 @@ export default function Session() {
               to={session.clubId._id ? `/club/${session.clubId._id}` : "/clubs"}
               className="flex items-center gap-2.5"
             >
-              <Monogram name={session.clubId.name} size="sm" />
+              <ClubLogo club={session.clubId} />
               <span className="text-sm font-semibold">{session.clubId.name}</span>
             </Link>
           )}

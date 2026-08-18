@@ -263,6 +263,28 @@ export function Input({ className, ...rest }) {
   return <input className={cx("input", className)} {...rest} />;
 }
 
+export function PasswordInput({ className, ...rest }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <input
+        className={cx("input pr-16", className)}
+        {...rest}
+        type={visible ? "text" : "password"}
+      />
+      <button
+        type="button"
+        className="absolute right-1 top-1/2 -translate-y-1/2 rounded-sm px-2.5 py-1.5 text-xs font-semibold text-ink-3 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+        aria-label={visible ? "Hide password" : "Show password"}
+        aria-pressed={visible}
+        onClick={() => setVisible((value) => !value)}
+      >
+        {visible ? "Hide" : "Show"}
+      </button>
+    </div>
+  );
+}
+
 export function DateTimeInput({ id, value = "", onChange, required = false, quickTimes = ["09:00", "12:00", "17:00", "20:00"], className }) {
   const normalized = value && !Number.isNaN(new Date(value).getTime())
     ? (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)

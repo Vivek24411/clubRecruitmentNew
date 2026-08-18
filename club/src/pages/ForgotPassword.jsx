@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { Link, useNavigate } from "react-router-dom";
 import AuthShell from "../components/AuthShell";
-import { Button, Field, Input } from "../components/ui";
+import { Button, Field, Input, PasswordInput } from "../components/ui";
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -146,9 +146,8 @@ export default function ForgotPassword() {
             />
           </Field>
           <Field label="New password" id="newPassword" hint="At least 10 characters.">
-            <Input
+            <PasswordInput
               id="newPassword"
-              type="password"
               minLength={10}
               maxLength={72}
               autoComplete="new-password"
@@ -166,9 +165,8 @@ export default function ForgotPassword() {
                 : undefined
             }
           >
-            <Input
+            <PasswordInput
               id="confirmPassword"
-              type="password"
               minLength={10}
               maxLength={72}
               autoComplete="new-password"

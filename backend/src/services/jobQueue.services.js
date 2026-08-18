@@ -3,6 +3,7 @@ const os = require("os");
 const jobModel = require("../models/job.model");
 const notificationModel = require("../models/notification.model");
 const studentModel = require("../models/student.model");
+const eventModel = require("../models/event.model");
 const sessionModel = require("../models/session.model");
 const sessionRsvpModel = require("../models/sessionRsvp.model");
 const { sendNotificationEmail } = require("./student.services");
@@ -120,6 +121,16 @@ async function claimJob() {
 async function deliverNotification(job) {
   const { studentId, notification } = job.payload || {};
   if (!studentId || !notification) return;
+  const eventLink = String(notification.link || "").match(/^\/event\/([a-f\d]{24})$/i);
+  if (eventLink && !await eventModel.exists({
+    _id: eventLink[1],
+    status: { $in: ["published", "closed", "cancelled"] },
+  })) return;
+  const sessionLink = String(notification.link || "").match(/^\/session\/([a-f\d]{24})$/i);
+  if (sessionLink && !await sessionModel.exists({
+    _id: sessionLink[1],
+    status: { $in: ["published", "cancelled", "completed"] },
+  })) return;
   const student = await studentModel.findById(studentId).select("email notificationPreferences").lean();
   if (!student) return;
   const deliveryKey = `job:${job._id}`;

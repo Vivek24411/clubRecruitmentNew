@@ -4,7 +4,7 @@ import { toast } from "react-toastify";
 import { useNavigate, Link } from "react-router-dom";
 import { StudentContextData } from "../context/StudentContext";
 import AuthShell from "../components/AuthShell";
-import { Button, Field, Input, Select } from "../components/ui";
+import { Button, Field, Input, PasswordInput, Select } from "../components/ui";
 import { isIitrInstituteEmail } from "../utils/email";
 
 /** Two-dot progress rail; the fill slides as the step advances. */
@@ -57,7 +57,7 @@ function StepRail({ step, labels }) {
 const DETAIL_FIELDS = [
   { key: "name", label: "Full name", type: "text", placeholder: "Ada Lovelace", autoComplete: "name" },
   { key: "email", label: "IITR email", type: "email", placeholder: "you@iitr.ac.in", autoComplete: "email" },
-  { key: "password", label: "Password", type: "password", placeholder: "At least 10 characters", autoComplete: "new-password", minLength: 10, maxLength: 72 },
+  { key: "password", label: "Password", placeholder: "At least 10 characters", autoComplete: "new-password", minLength: 10, maxLength: 72 },
   { key: "enrollmentNumber", label: "Enrollment number", type: "text", placeholder: "22114001" },
   { key: "phoneNumber", label: "Phone number", type: "tel", placeholder: "98765 43210", autoComplete: "tel" },
 ];
@@ -246,13 +246,23 @@ export default function Register() {
                 required
                 className={key === "name" || key === "email" ? "sm:col-span-2" : undefined}
               >
-                <Input
-                  id={key}
-                  required
-                  value={form[key]}
-                  onChange={set(key)}
-                  {...inputProps}
-                />
+                {key === "password" ? (
+                  <PasswordInput
+                    id={key}
+                    required
+                    value={form[key]}
+                    onChange={set(key)}
+                    {...inputProps}
+                  />
+                ) : (
+                  <Input
+                    id={key}
+                    required
+                    value={form[key]}
+                    onChange={set(key)}
+                    {...inputProps}
+                  />
+                )}
               </Field>
             ))}
             <Field id="programme" label="Programme" required>

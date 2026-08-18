@@ -4,7 +4,7 @@ import { toast } from "react-toastify";
 import { useNavigate, Link } from "react-router-dom";
 import { StudentContextData } from "../context/StudentContext";
 import AuthShell from "../components/AuthShell";
-import { Button, Field, Input } from "../components/ui";
+import { Button, Field, Input, PasswordInput } from "../components/ui";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -67,9 +67,8 @@ export default function Login() {
         </Field>
 
         <Field label="Password" id="password" required>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
             placeholder="Enter your password"
             autoComplete="current-password"
             required

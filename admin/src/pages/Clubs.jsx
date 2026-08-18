@@ -12,6 +12,7 @@ import {
   Monogram,
   Page,
   PageHeader,
+  PasswordInput,
   Skeleton,
 } from "../components/ui";
 
@@ -200,10 +201,9 @@ export default function Clubs() {
       >
         <form onSubmit={resetPassword} className="space-y-5">
           <Field label="New password" id="new-password" required hint="At least 10 characters.">
-            <Input
+            <PasswordInput
               id="new-password"
               autoFocus
-              type="password"
               autoComplete="new-password"
               minLength={10}
               maxLength={72}
@@ -223,9 +223,8 @@ export default function Clubs() {
                 : undefined
             }
           >
-            <Input
+            <PasswordInput
               id="confirm-password"
-              type="password"
               autoComplete="new-password"
               minLength={10}
               maxLength={72}

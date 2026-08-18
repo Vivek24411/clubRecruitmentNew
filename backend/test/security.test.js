@@ -98,8 +98,14 @@ test("club router exposes the complete password recovery flow", () => {
   assert.ok(routePaths.includes("/changePassword"));
 });
 
-test("club router exposes permanent deletion for sessions", () => {
+test("club router exposes confirmed cascading deletion for sessions", () => {
   const route = clubRouter.stack.find((layer) => layer.route?.path === "/sessions/:sessionId" && layer.route.methods.delete);
+  assert.ok(route);
+  assert.equal(route.route.methods.delete, true);
+});
+
+test("club router exposes confirmed cascading deletion for events", () => {
+  const route = clubRouter.stack.find((layer) => layer.route?.path === "/events/:eventId" && layer.route.methods.delete);
   assert.ok(route);
   assert.equal(route.route.methods.delete, true);
 });
