@@ -1,0 +1,144 @@
+# Discovr — nginx site config (template) for the SHARED E-Cell server
+#
+# Install ADDITIVELY — this box already serves ~20 other sites.
+# Never remove sites-enabled/default or another team's file.
+#
+# Render with:
+#   sed -e 's/__STUDENT_HOST__/discovr.iitr.ac.in/g' \
+#       -e 's/__CLUB_HOST__/club.discovr.iitr.ac.in/g' \
+#       -e 's/__ADMIN_HOST__/admin.discovr.iitr.ac.in/g' \
+#       -e 's/__API_HOST__/api.discovr.iitr.ac.in/g' \
+#       deploy/nginx/discovr.conf.template | sudo tee /etc/nginx/sites-available/discovr.conf
+#
+# Certbot rewrites these blocks in place to add TLS + the :80 -> :443 redirect.
+
+upstream discovr_api {
+    server 127.0.0.1:3001;
+    keepalive 16;
+}
+
+# ---------------------------------------------------------------- student app
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __STUDENT_HOST__;
+
+    root /var/www/discovr/student;
+    index index.html;
+
+    access_log /var/log/nginx/discovr-student.access.log;
+    error_log  /var/log/nginx/discovr-student.error.log;
+
+    # Vite emits content-hashed filenames into /assets, so they can be cached hard.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    # Mirrors the header student/vercel.json set: the push service worker must
+    # revalidate on every load or devices keep running an old FCM handler.
+    location = /firebase-messaging-sw.js {
+        add_header Cache-Control "public, max-age=0, must-revalidate";
+        try_files $uri =404;
+    }
+
+    location = /site.webmanifest {
+        add_header Cache-Control "public, max-age=0, must-revalidate";
+        try_files $uri =404;
+    }
+
+    # Replaces the Vercel rewrite: every unknown path is handled by the SPA router.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+
+# ------------------------------------------------------------------- club app
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __CLUB_HOST__;
+
+    root /var/www/discovr/club;
+    index index.html;
+
+    access_log /var/log/nginx/discovr-club.access.log;
+    error_log  /var/log/nginx/discovr-club.error.log;
+
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+
+# ------------------------------------------------------------------ admin app
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __ADMIN_HOST__;
+
+    root /var/www/discovr/admin;
+    index index.html;
+
+    access_log /var/log/nginx/discovr-admin.access.log;
+    error_log  /var/log/nginx/discovr-admin.error.log;
+
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+
+# ---------------------------------------------------------------- express api
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __API_HOST__;
+
+    access_log /var/log/nginx/discovr-api.access.log;
+    error_log  /var/log/nginx/discovr-api.error.log;
+
+    # upload.js allows 5 files x 50MB on the media route; leave headroom for the
+    # multipart envelope. Too low here surfaces as a 413 before Express sees it.
+    client_max_body_size 60m;
+
+    # CORS is answered by app.js against ALLOWED_ORIGINS. Do not add
+    # Access-Control-* headers here or browsers will see duplicates and block.
+    location / {
+        proxy_pass http://discovr_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection        "";
+
+        # Stream uploads straight to multer instead of spooling them to disk.
+        proxy_request_buffering off;
+
+        proxy_connect_timeout 10s;
+        proxy_send_timeout    120s;
+        proxy_read_timeout    120s;
+    }
+
+    location = /ping {
+        access_log off;
+        proxy_pass http://discovr_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection        "";
+    }
+}

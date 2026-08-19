@@ -1,0 +1,44 @@
+# Discovr on the shared E-Cell server.
+#
+#   cd /home/ubuntu/discovr
+#   docker compose -f deploy/docker/docker-compose.yml up -d --build
+#
+# Both services share one image and one env file. The split mirrors the old
+# Render setup: the API serves HTTP, the worker drains the Mongo-backed job
+# queue (reminder emails + push). backend/.env must set RUN_JOBS_IN_API=false
+# so the queue is drained in exactly one place.
+name: discovr
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/backend.Dockerfile
+    image: discovr-backend:latest
+    container_name: discovr-api
+    restart: unless-stopped
+    env_file: ../../backend/.env
+    ports:
+      # Bound to loopback ONLY. Docker writes its own iptables rules that
+      # bypass ufw, so 0.0.0.0 here would publish the API to the internet
+      # regardless of the host firewall. nginx is the only public entrance.
+      - "127.0.0.1:3001:3001"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  worker:
+    image: discovr-backend:latest
+    container_name: discovr-worker
+    restart: unless-stopped
+    env_file: ../../backend/.env
+    command: ["node", "worker.js"]
+    depends_on:
+      - api
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"

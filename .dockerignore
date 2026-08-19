@@ -1,0 +1,18 @@
+**/node_modules
+**/dist
+**/build
+.git
+.github
+.agents
+.codex
+
+# Runtime secrets are mounted via env_file, never copied into an image.
+# NOTE: .env.production is deliberately NOT ignored — Vite needs it at build time
+# and its values (API URL, Firebase web config) are public by design.
+**/.env
+**/.env.local
+*.pem
+*.key
+
+**/npm-debug.log*
+**/.DS_Store
