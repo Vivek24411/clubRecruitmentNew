@@ -6,6 +6,51 @@ Moving the three React apps, the Express API, and the mail/push worker off Rende
 
 ---
 
+## Current status — updated 2026-08-19
+
+The stack is **built, running and verified on the server**. Only DNS and TLS remain.
+
+| Phase | State |
+|---|---|
+| 0 — SSH access | Done (`ssh ecell`) |
+| 1 — Network check | Done — 80/443 open, nothing changed |
+| 2 — DNS from IITR IT | **Pending — this is the only blocker** |
+| 3 — Code on server | Done (`/home/ubuntu/discovr`) |
+| 4 — Environment | Done and verified inside the container |
+| 5 — Build + run | Done — `discovr-api` and `discovr-worker` Up, Atlas connected |
+| 6 — nginx | Done — installed additively, `nginx -t` passed, graceful reload |
+| 7 — HTTPS | Blocked on Phase 2 |
+| 8 — Atlas allowlist | **Verify** — see note below |
+| 9–10 — Verify + cutover | Blocked on Phase 2 |
+
+Verified by Host-header test (no DNS needed):
+
+```
+api  /ping          → Service is active
+api  /ping/db-health→ {"success":true,"status":"ready"}
+discovr.iitr.ac.in       → 200, deep links 200, <title>Discovr</title>
+club.discovr.iitr.ac.in  → 200, deep links 200
+admin.discovr.iitr.ac.in → 200, deep links 200
+CORS trusted origin      → 204 + allow-origin + allow-credentials
+CORS foreign origin      → "Origin is not allowed"
+assets                   → Cache-Control: public, max-age=31536000, immutable
+firebase-messaging-sw.js → Cache-Control: public, max-age=0, must-revalidate
+existing 20 sites        → still 301/serving, all 6 pre-existing containers Up
+```
+
+### Two bugs found during the real deploy, now fixed in the configs
+
+Both would have been silent failures in production:
+
+1. **Compose blanked the admin password hash.** With `env_file`, Compose interpolates `$VAR` inside values — a bcrypt hash (`$2b$12$ANze5…`) lost everything after the last `$`, arriving in the container as 6 characters. Every admin login would have failed with a correct password. Fixed by mounting `backend/.env` read-only and letting the app's own `dotenv` parse it; no interpolation happens. Verified: the hash is 60 chars, cost 12, inside the container.
+2. **All three SPAs returned 403.** `mktemp -d` creates the staging directory as `0700` and `rsync -a` copied that mode onto the web root, so nginx's `www-data` could not traverse it. Fixed with `--chmod=D755,F644` in [deploy.sh](deploy/scripts/deploy.sh).
+
+### Atlas — worth checking
+
+The API connected to MongoDB immediately, without anyone adding `3.6.91.54` to the allowlist. That strongly suggests **Network Access contains `0.0.0.0/0`** — anyone on the internet holding your connection string can reach the database. Add `3.6.91.54/32` explicitly, then remove the open entry once Render is decommissioned.
+
+---
+
 ## The server you are deploying onto
 
 Verified on 2026-08-19 by SSH inspection.

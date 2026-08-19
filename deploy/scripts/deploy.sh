@@ -55,7 +55,13 @@ if [[ "${SKIP_WEB:-0}" != "1" ]]; then
     mkdir -p "$WEB_ROOT/$app"
     # --delete clears stale hashed assets; the check above means we never
     # wipe a working site with an empty build.
-    rsync -a --delete "$staging"/ "$WEB_ROOT/$app"/
+    #
+    # --chmod is not optional: mktemp -d creates the staging dir as 0700, and
+    # plain `rsync -a` would copy that onto the web root, leaving nginx's
+    # www-data unable to traverse it (every request 403s). Force web-safe
+    # modes instead of inheriting whatever the build produced.
+    rsync -a --chmod=D755,F644 --delete "$staging"/ "$WEB_ROOT/$app"/
+    chmod 755 "$WEB_ROOT/$app"
     rm -rf "$staging"; trap - EXIT
     echo "    published to $WEB_ROOT/$app"
   done
