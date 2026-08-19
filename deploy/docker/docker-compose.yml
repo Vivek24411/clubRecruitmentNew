@@ -47,3 +47,8 @@ services:
     command: ["node", "worker.js"]
     depends_on:
       - api
+    # worker.js runs no HTTP server, so the image's /ping healthcheck can never
+    # pass and the container sits permanently "unhealthy". Docker already
+    # restarts it if the process exits, which is the real liveness signal here.
+    healthcheck:
+      disable: true
