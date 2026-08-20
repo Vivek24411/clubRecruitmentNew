@@ -285,7 +285,7 @@ export function PasswordInput({ className, ...rest }) {
   );
 }
 
-export function DateTimeInput({ id, value = "", onChange, required = false, quickTimes = ["09:00", "12:00", "17:00", "20:00"], className }) {
+export function DateTimeInput({ id, value = "", onChange, required = false, invalid = false, quickTimes = ["09:00", "12:00", "17:00", "20:00"], className }) {
   const normalized = value && !Number.isNaN(new Date(value).getTime())
     ? (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)
       ? value
@@ -300,11 +300,11 @@ export function DateTimeInput({ id, value = "", onChange, required = false, quic
       <div className="grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] gap-2">
         <div>
           <span className="eyebrow mb-1.5 block">Date</span>
-          <Input id={id} type="date" value={date} required={required} onChange={(event) => emit(event.target.value, time)} />
+          <Input id={id} type="date" value={date} required={required} aria-invalid={invalid || undefined} onChange={(event) => emit(event.target.value, time)} />
         </div>
         <div>
           <span className="eyebrow mb-1.5 block">Time</span>
-          <Input id={`${id}-time`} type="time" step="300" value={time} required={required} onChange={(event) => emit(date, event.target.value)} />
+          <Input id={`${id}-time`} type="time" step="300" value={time} required={required} aria-invalid={invalid || undefined} onChange={(event) => emit(date, event.target.value)} />
         </div>
       </div>
       {quickTimes.length > 0 && (
