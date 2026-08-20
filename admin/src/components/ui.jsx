@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, NavLink } from "react-router-dom";
 
 export function cx(...parts) {
@@ -574,9 +575,9 @@ export function Modal({ open, onClose, title, description, children, labelledBy 
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 grid place-items-center p-4"
+      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby={labelledBy}
@@ -586,14 +587,15 @@ export function Modal({ open, onClose, title, description, children, labelledBy 
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="animate-scale-in relative w-full max-w-md rounded-lg border border-line bg-surface p-6 shadow-pop">
+      <div className="animate-scale-in relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border border-line bg-surface p-6 shadow-pop">
         <h2 id={labelledBy} className="display text-xl">
           {title}
         </h2>
         {description && <p className="mt-2 text-sm leading-relaxed text-ink-3">{description}</p>}
         <div className="mt-5">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

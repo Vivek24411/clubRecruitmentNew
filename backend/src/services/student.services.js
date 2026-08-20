@@ -1,7 +1,7 @@
 const { Resend } = require('resend');
 const { buildPublicAppUrl } = require('../utils/appOrigin');
 
-const DEFAULT_FROM_EMAIL = 'Discovr <noreply@devx6.live>';
+const DEFAULT_FROM_EMAIL = 'Discovr <noreply@expediva.in>';
 let resendClient;
 
 function brandedFromEmail(configuredValue) {

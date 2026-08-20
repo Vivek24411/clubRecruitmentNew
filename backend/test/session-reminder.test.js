@@ -134,6 +134,12 @@ test("club, event, and session banners allow files up to 20 MB", () => {
   assert.equal(upload.limits.fileSize, 5 * 1024 * 1024);
 });
 
+test("submission limits match Cloudinary Free media limits", () => {
+  assert.equal(UPLOAD_KINDS.submission.maxBytesByMimeType["image/jpeg"], 10 * 1024 * 1024);
+  assert.equal(UPLOAD_KINDS.submission.maxBytesByMimeType["application/pdf"], 10 * 1024 * 1024);
+  assert.equal(UPLOAD_KINDS.submission.maxBytesByMimeType["video/mp4"], 100 * 1024 * 1024);
+});
+
 test("upload signing reports the provider's lower image limit for client optimization", () => {
   const keys = ["JWT_SECRET", "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET", "CLOUDINARY_MAX_IMAGE_BYTES"];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));

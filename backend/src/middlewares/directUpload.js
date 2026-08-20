@@ -2,6 +2,8 @@ const crypto = require("crypto");
 const cloudinary = require("../config/cloudinary");
 
 const DEFAULT_CLOUDINARY_IMAGE_LIMIT = 10 * 1024 * 1024;
+const CLOUDINARY_FREE_RAW_LIMIT = 10 * 1024 * 1024;
+const CLOUDINARY_FREE_VIDEO_LIMIT = 100 * 1024 * 1024;
 
 const UPLOAD_KINDS = Object.freeze({
   profilePicture: {
@@ -42,7 +44,16 @@ const UPLOAD_KINDS = Object.freeze({
   submission: {
     folder: "discovr/submissions",
     resourceType: "auto",
-    maxBytes: 50 * 1024 * 1024,
+    maxBytes: CLOUDINARY_FREE_VIDEO_LIMIT,
+    maxBytesByMimeType: {
+      "image/jpeg": DEFAULT_CLOUDINARY_IMAGE_LIMIT,
+      "image/png": DEFAULT_CLOUDINARY_IMAGE_LIMIT,
+      "image/webp": DEFAULT_CLOUDINARY_IMAGE_LIMIT,
+      "application/pdf": CLOUDINARY_FREE_RAW_LIMIT,
+      "video/mp4": CLOUDINARY_FREE_VIDEO_LIMIT,
+      "video/webm": CLOUDINARY_FREE_VIDEO_LIMIT,
+      "video/quicktime": CLOUDINARY_FREE_VIDEO_LIMIT,
+    },
     mimeTypes: [
       "image/jpeg",
       "image/png",
@@ -143,6 +154,7 @@ function signDirectUpload(allowedKinds) {
           resourceType: config.resourceType,
           uploadUrl: `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/${config.resourceType}/upload`,
           maxBytes: config.maxBytes,
+          maxBytesByMimeType: config.maxBytesByMimeType,
           providerMaxBytes: providerMaxBytes(config),
           mimeTypes: config.mimeTypes,
           allowedFormats: config.allowedFormats,
@@ -165,12 +177,13 @@ function normalizeAsset(req, asset, expectedKind) {
   const resourceType = String(asset.resourceType || "");
   const url = String(asset.url || "");
   const version = Number(asset.version);
+  const mimeMaxBytes = config.maxBytesByMimeType?.[mimeType] || config.maxBytes;
 
   if (token.actor !== actorKey(req) || token.kind !== expectedKind || token.folder !== config.folder
     || String(asset.publicId || "") !== expectedPublicId) {
     throw uploadError("Uploaded file authorization does not match this request");
   }
-  if (!Number.isFinite(bytes) || bytes < 1 || bytes > config.maxBytes || !config.mimeTypes.includes(mimeType)) {
+  if (!Number.isFinite(bytes) || bytes < 1 || bytes > mimeMaxBytes || !config.mimeTypes.includes(mimeType)) {
     throw uploadError("Uploaded file type or size is not allowed");
   }
   if (!Number.isInteger(version) || !cloudinary.utils.verify_api_response_signature(

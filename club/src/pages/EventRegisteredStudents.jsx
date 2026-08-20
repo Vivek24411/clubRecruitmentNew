@@ -17,6 +17,12 @@ const localDateTime = (value) => {
   return Number.isNaN(date.getTime()) ? "" : new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 };
 const isUrl = (value) => /^https?:\/\//i.test(String(value || ""));
+const formatBytes = (bytes) => {
+  const value = Number(bytes) || 0;
+  if (!value) return "";
+  if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(value >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  return `${Math.max(1, Math.round(value / 1024))} KB`;
+};
 
 function StudentAvatar({ student, className = "h-10 w-10" }) {
   if (student?.profilePicture) {
@@ -101,24 +107,65 @@ function CandidateIdentity({ candidate, registration, finalRound }) {
   );
 }
 
-function SubmissionSummary({ submission }) {
-  if (!submission) return <p className="mt-2 text-sm text-ink-3">No submission yet</p>;
+function SubmissionSummary({ submission, fields = [] }) {
+  if (!submission) {
+    return (
+      <div className="mt-3 rounded-md border border-dashed border-line-2 bg-surface/50 px-5 py-8 text-center">
+        <p className="text-sm font-semibold text-ink-2">No work submitted yet</p>
+        <p className="mt-1 text-xs text-ink-4">Answers and attachments will appear here when the candidate submits.</p>
+      </div>
+    );
+  }
+  const labels = new Map(fields.map((field) => [field.key, field.label]));
   return (
-    <div className="mt-2 rounded-sm border border-line bg-paper-2/45 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold">Revision {submission.revision}</p>
-        <span className="text-xs text-ink-3">{displayDate(submission.submittedAt)}</span>
+    <div className="mt-3 overflow-hidden rounded-md border border-line bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-paper-2/55 px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold">Submitted work</p>
+          <p className="mt-0.5 text-xs text-ink-3">Revision {submission.revision} · {displayDate(submission.submittedAt)}</p>
+        </div>
+        <Badge tone={submission.status === "accepted" ? "ok" : submission.status === "rejected" ? "bad" : submission.status === "under_review" ? "warn" : "info"} className="capitalize">
+          {String(submission.status || "submitted").replaceAll("_", " ")}
+        </Badge>
       </div>
-      <div className="mt-3 space-y-2">
-        {submission.answers?.map((answer) => (
-          <div key={answer.key} className="rounded-sm bg-surface px-3 py-2 text-xs">
-            <p className="eyebrow">{answer.key.replaceAll("_", " ")}</p>
-            {isUrl(answer.value) ? <a href={answer.value} target="_blank" rel="noreferrer" className="link mt-1 block break-all">Open submitted link ↗</a> : <p className="mt-1 whitespace-pre-wrap break-words text-ink-2">{answer.value}</p>}
+      <div className="space-y-5 p-4">
+        {submission.answers?.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {submission.answers.map((answer) => (
+              <div key={answer.key} className="min-w-0 rounded-sm bg-paper-2/45 px-3.5 py-3 text-xs">
+                <p className="eyebrow">{labels.get(answer.key) || answer.key.replaceAll("_", " ")}</p>
+                {isUrl(answer.value)
+                  ? <a href={answer.value} target="_blank" rel="noreferrer" className="link mt-2 block break-all font-semibold">Open submitted link ↗</a>
+                  : <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap break-words leading-relaxed text-ink-2">{answer.value || "—"}</p>}
+              </div>
+            ))}
           </div>
-        ))}
-        {submission.files?.map((file) => <a key={file.publicId} href={file.url} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-sm border border-line bg-surface px-3 py-2 text-xs font-semibold text-accent"><span className="truncate">{file.originalName || file.fieldKey}</span><span>Open ↗</span></a>)}
+        )}
+        {submission.files?.length > 0 && (
+          <div>
+            <p className="eyebrow">Attachments</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {submission.files.map((file) => {
+                const kind = file.resourceType === "video" || file.mimeType?.startsWith("video/")
+                  ? "Video"
+                  : file.mimeType === "application/pdf" || file.format === "pdf" ? "PDF" : "Image";
+                return (
+                  <a key={file.publicId} href={file.url} target="_blank" rel="noreferrer" className="group flex min-w-0 items-center gap-3 rounded-sm border border-line bg-white px-3 py-3 transition-colors hover:border-accent/40 hover:bg-accent-tint/30">
+                    <span className="grid h-10 w-10 flex-none place-items-center rounded-sm bg-ink text-[0.62rem] font-bold tracking-wider text-white">{kind.toUpperCase().slice(0, 3)}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-semibold text-ink">{file.originalName || labels.get(file.fieldKey) || "Attachment"}</span>
+                      <span className="mt-0.5 block text-[0.68rem] text-ink-4">{kind}{file.bytes ? ` · ${formatBytes(file.bytes)}` : ""}</span>
+                    </span>
+                    <span className="flex-none text-sm font-semibold text-accent" aria-hidden="true">↗</span>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {!submission.answers?.length && !submission.files?.length && <p className="text-sm text-ink-3">The candidate submitted without any answer or attachment.</p>}
       </div>
-      {submission.submittedBy?.name && <p className="mt-2 text-xs text-ink-4">Submitted by {submission.submittedBy.name}</p>}
+      {submission.submittedBy?.name && <p className="border-t border-line px-4 py-2.5 text-xs text-ink-4">Submitted by <span className="font-semibold text-ink-3">{submission.submittedBy.name}</span></p>}
     </div>
   );
 }
@@ -344,12 +391,105 @@ export default function EventRegisteredStudents() {
 
       <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem_auto] sm:items-end"><Field label="Search applications" id="candidate-search"><Input id="candidate-search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Name, email, team, branch…" /></Field><Field label="Status" id="candidate-status"><Select id="candidate-status" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setSelectedTab(false); setPage(1); }}><option value="all">All statuses</option><option value="eligible">Eligible</option><option value="scheduled">Scheduled</option><option value="submitted">Submitted</option><option value="under_review">Under review</option><option value="advanced">{finalRound ? "Selected" : "Advanced"}</option><option value="waitlisted">Waitlisted</option><option value="rejected">Rejected</option></Select></Field><div className="flex flex-wrap items-center gap-2 pb-1"><Button type="button" variant="secondary" size="sm" loading={operation === "export"} disabled={!roundId || Boolean(operation)} onClick={exportRound}>Export CSV</Button><Button type="button" variant="secondary" size="sm" disabled={!candidates.length} onClick={toggleAllVisible}>{allVisibleSelected ? "Clear page" : "Select page"}</Button><p className="whitespace-nowrap text-sm text-ink-3">{chosen.length} selected</p></div></div>
 
-      {!candidates.length ? <EmptyState className="mt-6" title="No matching candidates" description="Try another round, status, or search term." /> : <div className="mt-4 space-y-4">{candidates.map((candidate) => {
-        const registration = registrations.get(candidate.registrationId);
-        const submission = submissions.get(candidate._id);
-        const slot = slots.get(candidate._id);
-        return <Card key={candidate._id} className="overflow-hidden"><div className="grid gap-5 p-5 xl:grid-cols-[minmax(15rem,1fr)_minmax(15rem,1.2fr)_minmax(15rem,1fr)_12rem]"><label className="flex min-w-0 items-start gap-3"><input className="mt-1" type="checkbox" checked={selected.includes(candidate._id)} onChange={() => toggle(candidate._id)} /><span className="min-w-0 flex-1"><CandidateIdentity candidate={candidate} registration={registration} finalRound={finalRound} /><p className="mt-3 text-xs text-ink-4">Applied {displayDate(registration?.registeredAt)}</p><CrossVerticalStatus candidate={candidate} crossVertical={crossVertical} /></span></label><div className="min-w-0"><p className="eyebrow">Submission</p><SubmissionSummary submission={submission} /></div><div className="grid content-start gap-3"><Field label="Score (optional)" id={`score-${candidate._id}`}><Input id={`score-${candidate._id}`} type="number" min="0" value={drafts[candidate._id]?.score ?? candidate.score ?? ""} onChange={(event) => patchDraft(candidate._id, { score: event.target.value })} /></Field><Field label="Private reviewer notes" id={`notes-${candidate._id}`}><Textarea id={`notes-${candidate._id}`} rows="3" className="min-h-0" value={drafts[candidate._id]?.notes ?? candidate.notes ?? ""} onChange={(event) => patchDraft(candidate._id, { notes: event.target.value })} /></Field><Button type="button" variant="secondary" size="sm" loading={operation === `review-${candidate._id}`} onClick={() => saveReview(candidate)}>Save score and notes</Button></div><div className="min-w-0 text-sm"><p className="eyebrow">Schedule</p><p className="mt-2 font-medium text-ink-2">{slot ? displayDate(slot.startAt) : "No slot"}</p>{slot?.venue && <p className="mt-1 text-xs text-ink-3">{slot.venue}</p>}{slot?.meetingUrl && <a href={slot.meetingUrl} target="_blank" rel="noreferrer" className="link mt-1 block break-all text-xs">Meeting link ↗</a>}{round.scheduleMode === "slots" && ["eligible", "scheduled", "active", "submitted", "under_review"].includes(candidate.status) && <Button type="button" variant="secondary" size="sm" className="mt-3" onClick={() => setManual({ candidateId: candidate._id, startAt: localDateTime(slot?.startAt), endAt: localDateTime(slot?.endAt), venue: slot?.venue || round.venue || "", meetingUrl: slot?.meetingUrl || round.meetingUrl || "" })}>{slot ? "Reschedule" : "Set slot"}</Button>}</div></div></Card>;
-      })}</div>}
+      {!candidates.length ? (
+        <EmptyState className="mt-6" title="No matching candidates" description="Try another round, status, or search term." />
+      ) : (
+        <div className="mt-4 space-y-5">
+          {candidates.map((candidate) => {
+            const registration = registrations.get(candidate.registrationId);
+            const submission = submissions.get(candidate._id);
+            const slot = slots.get(candidate._id);
+            const schedulable = round.scheduleMode === "slots"
+              && ["eligible", "scheduled", "active", "submitted", "under_review"].includes(candidate.status);
+            return (
+              <Card key={candidate._id} className="overflow-hidden">
+                <div className="p-5 sm:p-6">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <input
+                      className="mt-1 h-4 w-4 flex-none accent-[var(--color-accent)]"
+                      type="checkbox"
+                      checked={selected.includes(candidate._id)}
+                      onChange={() => toggle(candidate._id)}
+                      aria-label={`Select ${registration?.teamName || candidate.studentId?.name || "candidate"}`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <CandidateIdentity candidate={candidate} registration={registration} finalRound={finalRound} />
+                      <p className="mt-3 text-xs text-ink-4">Applied {displayDate(registration?.registeredAt)}</p>
+                      <CrossVerticalStatus candidate={candidate} crossVertical={crossVertical} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid border-t border-line bg-paper-2/20 lg:grid-cols-[minmax(0,1.35fr)_minmax(19rem,.65fr)]">
+                  <section className="min-w-0 p-5 sm:p-6">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="eyebrow">Submission</p>
+                        <h3 className="mt-1 text-sm font-semibold">Candidate response</h3>
+                      </div>
+                      {submission && <span className="text-xs text-ink-4">{(submission.answers?.length || 0) + (submission.files?.length || 0)} item(s)</span>}
+                    </div>
+                    <SubmissionSummary submission={submission} fields={round.submissionFields || []} />
+                  </section>
+
+                  <aside className="border-t border-line bg-surface p-5 sm:p-6 lg:border-l lg:border-t-0">
+                    <div>
+                      <p className="eyebrow">Private review</p>
+                      <div className="mt-4 grid gap-4">
+                        <Field label="Score (optional)" id={`score-${candidate._id}`}>
+                          <Input
+                            id={`score-${candidate._id}`}
+                            type="number"
+                            min="0"
+                            value={drafts[candidate._id]?.score ?? candidate.score ?? ""}
+                            onChange={(event) => patchDraft(candidate._id, { score: event.target.value })}
+                          />
+                        </Field>
+                        <Field label="Reviewer notes" id={`notes-${candidate._id}`} hint="Visible only to club reviewers.">
+                          <Textarea
+                            id={`notes-${candidate._id}`}
+                            rows="4"
+                            className="min-h-0"
+                            value={drafts[candidate._id]?.notes ?? candidate.notes ?? ""}
+                            onChange={(event) => patchDraft(candidate._id, { notes: event.target.value })}
+                          />
+                        </Field>
+                        <Button type="button" variant="secondary" size="sm" loading={operation === `review-${candidate._id}`} onClick={() => saveReview(candidate)}>
+                          Save review
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 border-t border-line pt-5 text-sm">
+                      <p className="eyebrow">Schedule</p>
+                      <p className="mt-2 font-semibold text-ink-2">{slot ? displayDate(slot.startAt) : "No slot assigned"}</p>
+                      {slot?.venue && <p className="mt-1 text-xs text-ink-3">{slot.venue}</p>}
+                      {slot?.meetingUrl && <a href={slot.meetingUrl} target="_blank" rel="noreferrer" className="link mt-1 block break-all text-xs">Meeting link ↗</a>}
+                      {schedulable && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="mt-3"
+                          onClick={() => setManual({
+                            candidateId: candidate._id,
+                            startAt: localDateTime(slot?.startAt),
+                            endAt: localDateTime(slot?.endAt),
+                            venue: slot?.venue || round.venue || "",
+                            meetingUrl: slot?.meetingUrl || round.meetingUrl || "",
+                          })}
+                        >
+                          {slot ? "Reschedule" : "Set slot"}
+                        </Button>
+                      )}
+                    </div>
+                  </aside>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {data.pagination?.pages > 1 && <div className="mt-6 flex items-center justify-between gap-4"><Button type="button" variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((current) => Math.max(current - 1, 1))}>Previous</Button><p className="text-sm text-ink-3">Page {data.pagination.page} of {data.pagination.pages}</p><Button type="button" variant="secondary" size="sm" disabled={page >= data.pagination.pages} onClick={() => setPage((current) => current + 1)}>Next</Button></div>}
 

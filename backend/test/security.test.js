@@ -57,7 +57,7 @@ test("college email validation accepts any email on the IITR domain", () => {
 });
 
 test("outgoing email always uses the Discovr sender name", () => {
-  assert.equal(brandedFromEmail(), "Discovr <noreply@devx6.live>");
+  assert.equal(brandedFromEmail(), "Discovr <noreply@expediva.in>");
   assert.equal(brandedFromEmail("noreply@example.com"), "Discovr <noreply@example.com>");
   assert.equal(brandedFromEmail("Recruit IITR <clubs@example.com>"), "Discovr <clubs@example.com>");
 });

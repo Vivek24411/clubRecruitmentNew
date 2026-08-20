@@ -35,6 +35,10 @@ if [[ "${SKIP_WEB:-0}" != "1" ]]; then
       echo "!! $app/.env.production is missing — VITE_BASE_URI would be undefined. Aborting." >&2
       exit 1
     fi
+    if [[ "$app" == "club" ]] && ! grep -Eq '^VITE_STUDENT_APP_ORIGIN=https://[^/]+$' "$APP_ROOT/$app/.env.production"; then
+      echo "!! club/.env.production needs VITE_STUDENT_APP_ORIGIN as a bare HTTPS origin for QR codes. Aborting." >&2
+      exit 1
+    fi
 
     staging="$(mktemp -d /tmp/discovr-"$app"-XXXX)"
     trap 'rm -rf "$staging"' EXIT

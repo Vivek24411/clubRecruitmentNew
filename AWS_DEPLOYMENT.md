@@ -275,7 +275,7 @@ nano /home/ubuntu/discovr/backend/.env
 chmod 600 /home/ubuntu/discovr/backend/.env
 ```
 
-Paste the Render values, then change these five:
+Paste the current values, then set these seven deployment-specific values:
 
 | Variable | Value here | Why |
 |---|---|---|
@@ -284,8 +284,10 @@ Paste the Render values, then change these five:
 | `RUN_JOBS_IN_API` | `false` | The worker container drains the queue; `true` makes both containers poll the same jobs |
 | `TRUST_PROXY_HOPS` | `1` | nginx is one hop in front. Without it every request looks like `127.0.0.1` and [rateLimit.js](backend/src/middlewares/rateLimit.js) throttles all users as a single bucket |
 | `PORT` | `3001` | Matches the compose port mapping and the nginx upstream |
+| `RESEND_API_KEY` | New account's domain-scoped sending key | The API and worker must authenticate against the Resend account where `expediva.in` is verified |
+| `RESEND_FROM_EMAIL` | `Discovr <noreply@expediva.in>` | The From domain must exactly match the domain verified in that Resend account |
 
-Everything else — `MONGODB_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, `CLOUDINARY_*`, `RESEND_*`, `FIREBASE_*` — copies across unchanged. Keep `JWT_SECRET` identical to Render's so currently-logged-in users stay logged in through the cutover.
+Everything else — `MONGODB_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, `CLOUDINARY_*`, and `FIREBASE_*` — copies across unchanged. Keep `JWT_SECRET` identical to Render's so currently-logged-in users stay logged in through the cutover. Never commit or paste the Resend key into this document or chat.
 
 Template: [deploy/env/backend.env.example](deploy/env/backend.env.example).
 
@@ -306,7 +308,7 @@ Vite inlines these at **build time** — changing one requires a rebuild, not a 
 
 ```bash
 nano /home/ubuntu/discovr/student/.env.production   # API base + 7 Firebase keys
-nano /home/ubuntu/discovr/club/.env.production      # API base only
+nano /home/ubuntu/discovr/club/.env.production      # API base + student public origin
 nano /home/ubuntu/discovr/admin/.env.production     # API base only
 ```
 
@@ -314,6 +316,12 @@ All three:
 
 ```
 VITE_BASE_URI=https://api.discovr.iitr.ac.in
+```
+
+Club app only (used for event/session QR codes):
+
+```
+VITE_STUDENT_APP_ORIGIN=https://discovr.iitr.ac.in
 ```
 
 No trailing slash — URLs are built as `${VITE_BASE_URI}/student/login`. The student app also needs the seven `VITE_FIREBASE_*` values from Vercel. Templates in [deploy/env/](deploy/env/).

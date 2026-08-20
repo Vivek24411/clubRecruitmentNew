@@ -67,6 +67,11 @@ fi
 for app in student club admin; do
   [[ -f "$APP_ROOT/$app/.env.production" ]] && ok "$app/.env.production present" || bad "$app/.env.production missing (build would bake in an undefined API URL)"
 done
+if [[ -f "$APP_ROOT/club/.env.production" ]]; then
+  grep -Eq '^VITE_STUDENT_APP_ORIGIN=https://[^/]+$' "$APP_ROOT/club/.env.production" \
+    && ok "club public student origin present for QR codes" \
+    || bad "club/.env.production needs VITE_STUDENT_APP_ORIGIN as a bare HTTPS origin"
+fi
 
 echo "== Web root =="
 if [[ -d "$WEB_ROOT" && -w "$WEB_ROOT" ]]; then

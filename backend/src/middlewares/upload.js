@@ -81,6 +81,9 @@ const submissionUpload = multer({
     resourceType: "auto",
     transformImages: true,
   }),
+  // Compatibility path for older clients that send files through the API.
+  // Current clients upload directly to Cloudinary and can use its 100 MB
+  // video limit without passing a large request through Express/nginx.
   limits: { fileSize: 50 * 1024 * 1024, files: 5, fields: 30 },
   fileFilter: (req, file, callback) => {
     const allowed = submissionMimeTypes.has(file.mimetype);

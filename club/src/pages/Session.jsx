@@ -17,6 +17,7 @@ import {
   Textarea,
 } from "../components/ui";
 import { uploadDirect } from "../utils/directUpload";
+import ShareQrModal from "../components/ShareQrModal";
 
 const SESSION_STATUSES = ["draft", "published", "cancelled", "completed", "archived"];
 const FIELD_LABELS = {
@@ -53,6 +54,7 @@ export default function Session() {
   const [deleting, setDeleting] = useState(false);
   const [formError, setFormError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
+  const [showQr, setShowQr] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -241,6 +243,11 @@ export default function Session() {
           <Badge tone={session.status === "published" ? "ok" : "neutral"} className="capitalize">
             {session.status}
           </Badge>
+        </div>
+        <div className="mt-6 flex flex-wrap gap-2.5">
+          <Button type="button" variant="secondary" onClick={() => setShowQr(true)}>
+            Share QR
+          </Button>
         </div>
         <hr className="rule animate-draw mt-8" style={{ animationDelay: "200ms" }} />
       </header>
@@ -459,6 +466,14 @@ export default function Session() {
           Delete all data
         </Button>
       </Card>
+      <ShareQrModal
+        open={showQr}
+        onClose={() => setShowQr(false)}
+        kind="session"
+        itemId={session._id}
+        title={session.title}
+        published={session.status === "published"}
+      />
     </Page>
   );
 }

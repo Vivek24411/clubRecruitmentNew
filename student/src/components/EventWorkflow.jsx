@@ -6,6 +6,20 @@ import { uploadDirect } from "../utils/directUpload";
 
 const tone = { advanced: "ok", rejected: "bad", waitlisted: "warn", submitted: "info", under_review: "warn", scheduled: "info", eligible: "neutral", active: "accent", withdrawn: "neutral", revoked: "neutral", missed: "bad" };
 const format = (value) => value ? new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : null;
+const MEGABYTE = 1024 * 1024;
+const fileSize = (bytes) => bytes ? `${(bytes / MEGABYTE).toFixed(bytes >= 10 * MEGABYTE ? 0 : 1)} MB` : "";
+const uploadHint = (type) => type === "video"
+  ? "MP4, WebM, or MOV up to 100 MB."
+  : type === "pdf"
+    ? "PDF up to 10 MB."
+    : "JPG, PNG, or WebP up to 25 MB (large images are optimized before upload), or PDF up to 10 MB.";
+
+function pickedFileError(file) {
+  if (file.type.startsWith("image/") && file.size > 25 * MEGABYTE) return "Choose an image no larger than 25 MB";
+  if (file.type === "application/pdf" && file.size > 10 * MEGABYTE) return "Choose a PDF no larger than 10 MB";
+  if (file.type.startsWith("video/") && file.size > 100 * MEGABYTE) return "Choose a video no larger than 100 MB";
+  return "";
+}
 
 function SubmissionForm({ eventId, round, candidate, existing, onSaved }) {
   const initialAnswers = Object.fromEntries((existing?.answers || []).map((answer) => [answer.key, answer.value]));
@@ -14,6 +28,18 @@ function SubmissionForm({ eventId, round, candidate, existing, onSaved }) {
   const [saving, setSaving] = useState(false);
   const canSubmit = !round.submissionOpensAt || new Date(round.submissionOpensAt) <= new Date();
   const beforeDeadline = !round.submissionDeadlineAt || new Date(round.submissionDeadlineAt) >= new Date();
+
+  const chooseFile = (fieldKey, event) => {
+    const file = event.target.files[0] || null;
+    const error = file && pickedFileError(file);
+    if (error) {
+      event.target.value = "";
+      toast.error(error);
+      setFiles((current) => ({ ...current, [fieldKey]: null }));
+      return;
+    }
+    setFiles((current) => ({ ...current, [fieldKey]: file }));
+  };
 
   const submit = async (event) => {
     event.preventDefault();
@@ -43,7 +69,7 @@ function SubmissionForm({ eventId, round, candidate, existing, onSaved }) {
   return (
     <form onSubmit={submit} className="mt-5 space-y-4 border-t border-line pt-5">
       {(round.submissionFields || []).map((field) => (
-        <Field key={field.key} label={field.label} id={`${candidate._id}-${field.key}`} required={field.required} hint={field.helpText}>
+        <Field key={field.key} label={field.label} id={`${candidate._id}-${field.key}`} required={field.required} hint={[field.helpText, ["file", "pdf", "video"].includes(field.type) ? uploadHint(field.type) : ""].filter(Boolean).join(" ")}>
           {["file", "pdf", "video"].includes(field.type) ? (
             <>
               <input
@@ -51,9 +77,10 @@ function SubmissionForm({ eventId, round, candidate, existing, onSaved }) {
                 type="file"
                 required={field.required && !existing?.files?.some((file) => file.fieldKey === field.key)}
                 accept={field.type === "video" ? "video/mp4,video/webm,video/quicktime" : field.type === "pdf" ? "application/pdf" : "image/jpeg,image/png,image/webp,application/pdf"}
-                onChange={(event) => setFiles({ ...files, [field.key]: event.target.files[0] || null })}
-                className="block w-full text-sm"
+                onChange={(event) => chooseFile(field.key, event)}
+                className="block w-full rounded-sm border border-dashed border-line-2 bg-paper-2/45 p-3 text-sm file:mr-3 file:rounded-sm file:border-0 file:bg-ink file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
               />
+              {files[field.key] && <p className="mt-2 text-xs font-medium text-ink-2">Selected: {files[field.key].name} · {fileSize(files[field.key].size)}</p>}
               {existing?.files?.filter((file) => file.fieldKey === field.key).map((file) => <a key={file.publicId} href={file.url} target="_blank" rel="noreferrer" className="link mt-2 block break-all text-xs">Current: {file.originalName || field.label}</a>)}
             </>
           ) : field.type === "text" ? (

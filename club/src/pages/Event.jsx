@@ -6,6 +6,7 @@ import { eventDeadline, formatDateTime } from "../utils/date";
 import { eligibilitySummary } from "../utils/eligibility";
 import { useContext } from "react";
 import { ClubContextData } from "../context/ClubContext.jsx";
+import ShareQrModal from "../components/ShareQrModal";
 import {
   Badge,
   Button,
@@ -30,6 +31,7 @@ export default function Event() {
   const { eventId } = useParams();
   const [event, setEvent] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showQr, setShowQr] = useState(false);
 
   const fetchEventDetails = useCallback(async () => {
     setIsLoading(true);
@@ -110,6 +112,9 @@ export default function Event() {
           </Button>
           <Button to={`/events/${event._id}/edit`} variant="secondary">
             Edit event
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => setShowQr(true)}>
+            Share QR
           </Button>
         </div>
 
@@ -238,6 +243,14 @@ export default function Event() {
           )}
         </aside>
       </div>
+      <ShareQrModal
+        open={showQr}
+        onClose={() => setShowQr(false)}
+        kind="event"
+        itemId={event._id}
+        title={event.title}
+        published={["published", "closed"].includes(event.status)}
+      />
     </Page>
   );
 }
