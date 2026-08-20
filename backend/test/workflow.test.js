@@ -9,10 +9,18 @@ const {
   inferProgramStartYear,
 } = require("../src/services/academic.services");
 const {
+  eventRound,
   normalizeRounds,
+  normalizeVerticals,
   studentApplicationStatus,
   upsertScheduleSlot,
+  verticalDeadlineAt,
+  verticalEligibilitySource,
+  verticalForRound,
+  verticalRounds,
+  withdrawRegistrationWorkflow,
 } = require("../src/services/eventWorkflow.services");
+const eventMembershipModel = require("../src/models/eventMembership.model");
 const registerationEventModel = require("../src/models/registerationEvent.model");
 const eventModel = require("../src/models/event.model");
 const scheduleSlotModel = require("../src/models/scheduleSlot.model");
@@ -249,5 +257,248 @@ test("new interview slots retain the candidate reference", async () => {
     scheduleSlotModel.findOneAndUpdate = originals.findOneAndUpdate;
     scheduleReservationModel.insertMany = originals.insertMany;
     scheduleReservationModel.deleteMany = originals.deleteMany;
+  }
+});
+
+test("every event carries at least one vertical holding its rounds", async () => {
+  const event = new eventModel({
+    clubId: new mongoose.Types.ObjectId(),
+    title: "Core recruitment",
+    shortDescription: "Vertical seeding",
+    longDescription: "Events without verticals still get a hidden default one",
+    rounds: normalizeRounds([
+      { title: "Screening test", type: "test" },
+      { title: "Interview", type: "interview" },
+    ]),
+  });
+  await event.validate();
+
+  assert.equal(event.verticals.length, 1);
+  assert.equal(event.verticals[0].isDefault, true);
+  assert.equal(event.verticalsEnabled, false);
+  assert.equal(event.verticals[0].rounds.length, 2);
+  assert.equal(event.verticals[0].numberOfRounds, 2);
+  // The round ids the workflow tables point at must survive the move.
+  assert.deepEqual(
+    event.verticals[0].rounds.map((round) => String(round._id)),
+    event.rounds.map((round) => String(round._id)),
+  );
+});
+
+test("each vertical carries independent rounds and team rules", async () => {
+  const event = new eventModel({
+    clubId: new mongoose.Types.ObjectId(),
+    title: "Multi-track recruitment",
+    shortDescription: "Verticals",
+    longDescription: "Tech and design run independently",
+    verticalsEnabled: true,
+    maxVerticalApplications: 2,
+    verticals: normalizeVerticals([
+      {
+        title: "Tech",
+        registrationType: "team",
+        minTeamSize: 2,
+        maxTeamSize: 4,
+        rounds: [{ title: "Coding task", type: "submission" }, { title: "Interview", type: "interview" }],
+      },
+      {
+        title: "Design",
+        registrationType: "individual",
+        rounds: [{ title: "Portfolio", type: "submission" }],
+      },
+    ]),
+  });
+  await event.validate();
+
+  const [tech, design] = event.verticals;
+  assert.equal(tech.numberOfRounds, 2);
+  assert.equal(design.numberOfRounds, 1);
+  assert.equal(design.registrationType, "individual");
+  assert.equal(design.maxTeamSize, 1);
+  assert.equal(tech.isDefault, false);
+  // An individual track evaluates every round per student.
+  assert.equal(design.rounds[0].evaluationScope, "participant");
+  assert.equal(event.verticalsEnabled, true);
+
+  // Round ids are globally unique, so a round always identifies one vertical.
+  const designRoundId = design.rounds[0]._id;
+  assert.equal(String(verticalForRound(event, designRoundId)._id), String(design._id));
+  assert.equal(String(eventRound(event, designRoundId)._id), String(designRoundId));
+  assert.equal(verticalRounds(event, tech._id).length, 2);
+  assert.equal(verticalRounds(event, design._id).length, 1);
+});
+
+test("normalizeVerticals preserves ids so live applications keep resolving", () => {
+  const verticalId = new mongoose.Types.ObjectId();
+  const roundId = new mongoose.Types.ObjectId();
+  const [vertical] = normalizeVerticals([{
+    _id: verticalId,
+    title: "Tech",
+    rounds: [{ _id: roundId, title: "Interview", type: "interview" }],
+  }]);
+  assert.equal(String(vertical._id), String(verticalId));
+  assert.equal(String(vertical.rounds[0]._id), String(roundId));
+});
+
+test("application status is scored inside the student's own vertical", () => {
+  const techRoundId = new mongoose.Types.ObjectId();
+  const designRoundId = new mongoose.Types.ObjectId();
+  const techVerticalId = new mongoose.Types.ObjectId();
+  const designVerticalId = new mongoose.Types.ObjectId();
+  const studentId = new mongoose.Types.ObjectId();
+  const event = {
+    verticals: [
+      { _id: techVerticalId, rounds: [{ _id: techRoundId, order: 1 }] },
+      { _id: designVerticalId, rounds: [{ _id: designRoundId, order: 1 }] },
+    ],
+  };
+  const advancedInTech = [{
+    roundId: techRoundId,
+    verticalId: techVerticalId,
+    scope: "participant",
+    studentId,
+    participantIds: [studentId],
+    status: "advanced",
+  }];
+  const rejectedInDesign = [{
+    roundId: designRoundId,
+    verticalId: designVerticalId,
+    scope: "participant",
+    studentId,
+    participantIds: [studentId],
+    status: "rejected",
+  }];
+
+  // Clearing the only round of a vertical means selected in that vertical,
+  // and says nothing about the other one.
+  assert.equal(
+    studentApplicationStatus(event, advancedInTech, studentId, "in_progress", techVerticalId),
+    "selected",
+  );
+  assert.equal(
+    studentApplicationStatus(event, rejectedInDesign, studentId, "in_progress", designVerticalId),
+    "rejected",
+  );
+});
+
+test("a vertical inherits event eligibility until it declares its own", () => {
+  const event = { eligibilityMode: "undergraduate", programmeEligibility: [{ programme: "undergraduate", years: [1, 2] }], eligibilityYears: [1, 2] };
+  assert.equal(verticalEligibilitySource(event, { eligibilityMode: null }), event);
+
+  const override = verticalEligibilitySource(event, {
+    eligibilityMode: "all_iitr",
+    programmeEligibility: [{ programme: "mtech", years: [1] }],
+  });
+  assert.equal(override.eligibilityMode, "all_iitr");
+  assert.deepEqual(override.programmeEligibility, [{ programme: "mtech", years: [1] }]);
+
+  // A vertical deadline overrides the event's; absent one, the event's holds.
+  const deadline = new Date("2026-10-01T00:00:00.000Z");
+  assert.equal(verticalDeadlineAt({ registrationDeadlineAt: deadline }, { registrationDeadlineAt: null }), deadline);
+  const own = new Date("2026-09-01T00:00:00.000Z");
+  assert.equal(verticalDeadlineAt({ registrationDeadlineAt: deadline }, { registrationDeadlineAt: own }), own);
+});
+
+test("team membership is unique per vertical, not per event", () => {
+  const indexes = eventMembershipModel.schema.indexes();
+  const unique = indexes.find(([, options]) => options.unique);
+  assert.deepEqual(unique[0], { eventId: 1, verticalId: 1, studentId: 1 });
+  assert.ok(eventMembershipModel.schema.path("verticalId"));
+  assert.equal(eventMembershipModel.schema.path("verticalId").isRequired, true);
+  // Candidates and registrations are stamped too, so club-side event-wide
+  // queries can filter without joining back through the registration.
+  assert.equal(roundCandidateModel.schema.path("verticalId").isRequired, true);
+  assert.equal(registerationEventModel.schema.path("verticalId").isRequired, true);
+});
+
+test("an event using verticals needs more than one", async () => {
+  const event = new eventModel({
+    clubId: new mongoose.Types.ObjectId(),
+    title: "Single track",
+    shortDescription: "Invalid",
+    longDescription: "Turning on verticals with only one is a configuration error",
+    verticalsEnabled: true,
+    verticals: normalizeVerticals([{ title: "Only one", rounds: [] }]),
+  });
+  await assert.rejects(() => event.validate(), /at least two verticals/);
+});
+
+test("no surviving index locks a student to one application per event", () => {
+  // A student holds one application per vertical, so nothing may enforce
+  // uniqueness on (eventId, studentId) alone. The legacy unique indexes that
+  // once did are dropped by migrate-v8; these assertions stop them coming back
+  // via the schema.
+  const registrationLock = registerationEventModel.schema.indexes().find(([keys, options]) =>
+    options?.unique && keys.eventId === 1 && keys.studentId === 1 && keys.verticalId == null);
+  assert.equal(registrationLock, undefined);
+
+  const membershipLock = eventMembershipModel.schema.indexes().find(([keys, options]) =>
+    options?.unique && keys.eventId === 1 && keys.studentId === 1 && keys.verticalId == null);
+  assert.equal(membershipLock, undefined);
+
+  // The non-unique lookup index must carry an explicit name: the generated one
+  // would be "eventId_1_studentId_1", which collides with the legacy unique
+  // index still present on upgraded databases and breaks autoIndex.
+  const lookup = eventMembershipModel.schema.indexes().find(([keys, options]) =>
+    !options?.unique && keys.eventId === 1 && keys.studentId === 1);
+  assert.equal(lookup[1].name, "event_student_lookup");
+});
+
+test("withdrawing an application retires rounds the club had already decided", async () => {
+  // The club's workspace hides "withdrawn" and "revoked" candidates. Before,
+  // withdrawal skipped already-decided candidates, so a student who withdrew
+  // after being advanced stayed visible in the round workspace forever.
+  const registrationId = new mongoose.Types.ObjectId();
+  const saved = [];
+  let queried = null;
+  const originals = { find: roundCandidateModel.find, findOne: scheduleSlotModel.find };
+  roundCandidateModel.find = async (query) => {
+    queried = query;
+    return [
+      { _id: new mongoose.Types.ObjectId(), status: "advanced", score: 88, notes: "strong", participantIds: [], save: async function () { saved.push(this.status); } },
+      { _id: new mongoose.Types.ObjectId(), status: "eligible", participantIds: [], save: async function () { saved.push(this.status); } },
+    ];
+  };
+  scheduleSlotModel.find = async () => [];
+  try {
+    await withdrawRegistrationWorkflow(registrationId);
+    // Only system-revoked records are exempt; decided ones are retired too.
+    assert.deepEqual(queried.status, { $ne: "revoked" });
+    assert.deepEqual(saved, ["withdrawn", "withdrawn"]);
+  } finally {
+    roundCandidateModel.find = originals.find;
+    scheduleSlotModel.find = originals.findOne;
+  }
+});
+
+test("importing candidates into another event reports why nothing moved", async () => {
+  // A club page left open across a decision change still offers candidates
+  // that are no longer advanced. Silently answering "0 created" gave the club
+  // no way to tell success from a stale selection.
+  const { extractCandidates } = require("../src/controllers/workflow.controllers");
+  const eventId = new mongoose.Types.ObjectId();
+  const roundId = new mongoose.Types.ObjectId();
+  const originals = { findOne: eventModel.findOne, find: roundCandidateModel.find };
+  const event = {
+    _id: eventId,
+    verticals: [{ _id: new mongoose.Types.ObjectId(), title: "bye", rounds: [{ _id: roundId, order: 1, title: "Test" }] }],
+  };
+  eventModel.findOne = () => ({ then: (resolve) => resolve(event) });
+  roundCandidateModel.find = async () => [];
+  try {
+    let status = 200;
+    let body = null;
+    const res = { status(code) { status = code; return this; }, json(payload) { body = payload; return payload; } };
+    await extractCandidates({
+      club: { _id: new mongoose.Types.ObjectId() },
+      params: { eventId: String(eventId), roundId: String(roundId) },
+      body: { candidateIds: [String(new mongoose.Types.ObjectId())], targetEventId: String(eventId), targetRoundId: String(roundId) },
+    }, res);
+    assert.equal(status, 409, "a no-op import must not report success");
+    assert.match(body.msg, /still advanced/);
+    assert.equal(body.success, false);
+  } finally {
+    eventModel.findOne = originals.findOne;
+    roundCandidateModel.find = originals.find;
   }
 });

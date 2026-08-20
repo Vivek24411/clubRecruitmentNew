@@ -17,7 +17,7 @@ The stack is **built, running and verified on the server**. Only DNS and TLS rem
 | 2 — DNS from IITR IT | **Pending — this is the only blocker** |
 | 3 — Code on server | Done (`/home/ubuntu/discovr`) |
 | 4 — Environment | Done and verified inside the container |
-| 5 — Build + run | Done — `discovr-api` and `discovr-worker` Up, Atlas connected |
+| 5 — Build + run | Done — `discovr-api` Up. **`discovr-worker` deliberately stopped**, see below |
 | 6 — nginx | Done — installed additively, `nginx -t` passed, graceful reload |
 | 7 — HTTPS | Blocked on Phase 2 |
 | 8 — Atlas allowlist | **Verify** — see note below |
@@ -44,6 +44,25 @@ Both would have been silent failures in production:
 
 1. **Compose blanked the admin password hash.** With `env_file`, Compose interpolates `$VAR` inside values — a bcrypt hash (`$2b$12$ANze5…`) lost everything after the last `$`, arriving in the container as 6 characters. Every admin login would have failed with a correct password. Fixed by mounting `backend/.env` read-only and letting the app's own `dotenv` parse it; no interpolation happens. Verified: the hash is 60 chars, cost 12, inside the container.
 2. **All three SPAs returned 403.** `mktemp -d` creates the staging directory as `0700` and `rsync -a` copied that mode onto the web root, so nginx's `www-data` could not traverse it. Fixed with `--chmod=D755,F644` in [deploy.sh](deploy/scripts/deploy.sh).
+
+### The worker is stopped on purpose — start it at cutover
+
+`discovr-worker` shares the **production** Atlas database with Render's worker, so whichever one claims a job sends that email for real. Two consequences while we wait for DNS:
+
+- It is **stopped** (`docker compose ... stop worker`). Render's worker keeps handling everything, exactly as before. Nothing is piling up: verified 0 jobs due now, 83 scheduled for the future.
+- `STUDENT_APP_ORIGIN` is set back to `https://discovr.devx6.live`, the origin that is actually live. Notification emails build their links from this value ([student.services.js:194](backend/src/services/student.services.js#L194)), so pointing it at `discovr.iitr.ac.in` before DNS exists would send students dead links.
+
+**At cutover, both must change together:**
+
+```bash
+cd /home/ubuntu/discovr
+sed -i 's|^STUDENT_APP_ORIGIN=.*|STUDENT_APP_ORIGIN=https://discovr.iitr.ac.in|' backend/.env
+docker compose -f deploy/docker/docker-compose.yml up -d       # restarts api with the new value
+docker compose -f deploy/docker/docker-compose.yml start worker
+docker compose -f deploy/docker/docker-compose.yml ps          # both Up
+```
+
+Then **stop Render's worker**, so exactly one worker drains the queue. Two workers on one database do not duplicate sends (jobs are claimed atomically), but they split the work, which makes debugging confusing.
 
 ### Atlas — worth checking
 

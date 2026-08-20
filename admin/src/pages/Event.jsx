@@ -108,7 +108,10 @@ export default function Event() {
                 value={deadline ? formatDateTime(deadline, { dateOnly: true }) : "Not set"}
               />
               <Meta label="Max participants" value={event.maxParticipants} />
-              <Meta label="Rounds" value={event.numberOfRounds} />
+              <Meta
+                label={event.verticalsEnabled ? "Verticals" : "Rounds"}
+                value={event.verticalsEnabled ? event.verticals?.length : event.verticals?.[0]?.numberOfRounds ?? event.numberOfRounds}
+              />
               <Meta
                 label="Created"
                 value={event.createdAt ? formatDateTime(event.createdAt) : "—"}
@@ -134,30 +137,44 @@ export default function Event() {
             </section>
           )}
 
-          {event.roundDetails?.length > 0 && (
+          {(event.verticals?.length > 0 || event.roundDetails?.length > 0) && (
             <section className="reveal ruled-top pt-8" style={{ "--d": "200ms" }}>
-              <h2 className="display text-xl">Selection rounds</h2>
-              <ol className="relative mt-6 space-y-6 pl-8">
-                <span
-                  className="absolute bottom-2 left-[0.6875rem] top-2 w-px bg-line"
-                  aria-hidden="true"
-                />
-                {event.roundDetails.map((round, index) => (
-                  <li key={index} className="relative">
-                    <span className="absolute -left-8 grid h-6 w-6 place-items-center rounded-full border border-line bg-surface text-[0.6875rem] font-semibold text-ink-2">
-                      {round.Round || index + 1}
-                    </span>
-                    <p className="font-semibold">
-                      {round.Type || round.type || `Round ${index + 1}`}
-                    </p>
-                    {(round.Description || round.description) && (
-                      <p className="mt-1.5 text-sm leading-relaxed text-ink-3">
-                        {round.Description || round.description}
-                      </p>
+              <h2 className="display text-xl">
+                {event.verticalsEnabled ? "Verticals and rounds" : "Selection rounds"}
+              </h2>
+              <div className="mt-6 space-y-8">
+                {(event.verticals?.length
+                  ? event.verticals
+                  : [{ _id: "legacy", rounds: event.roundDetails || [] }]
+                ).map((vertical) => (
+                  <div key={vertical._id}>
+                    {event.verticalsEnabled && (
+                      <h3 className="display mb-4 text-lg">{vertical.title}</h3>
                     )}
-                  </li>
+                    <ol className="relative space-y-6 pl-8">
+                      <span
+                        className="absolute bottom-2 left-[0.6875rem] top-2 w-px bg-line"
+                        aria-hidden="true"
+                      />
+                      {(vertical.rounds || []).map((round, index) => (
+                        <li key={round._id || index} className="relative">
+                          <span className="absolute -left-8 grid h-6 w-6 place-items-center rounded-full border border-line bg-surface text-[0.6875rem] font-semibold text-ink-2">
+                            {round.Round || index + 1}
+                          </span>
+                          <p className="font-semibold">
+                            {round.title || round.Type || round.type || `Round ${index + 1}`}
+                          </p>
+                          {(round.Description || round.description) && (
+                            <p className="mt-1.5 text-sm leading-relaxed text-ink-3">
+                              {round.Description || round.description}
+                            </p>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
                 ))}
-              </ol>
+              </div>
             </section>
           )}
         </div>

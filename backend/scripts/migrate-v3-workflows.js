@@ -6,7 +6,7 @@ const studentModel = require("../src/models/student.model");
 const platformSettingsModel = require("../src/models/platformSettings.model");
 const registerationEventModel = require("../src/models/registerationEvent.model");
 const { DEFAULT_BRANCHES, deriveAcademicState, parseAcademicYear } = require("../src/services/academic.services");
-const { ensureEventRounds, ensureRegistrationWorkflow } = require("../src/services/eventWorkflow.services");
+const { ensureEventVerticals, ensureRegistrationWorkflow } = require("../src/services/eventWorkflow.services");
 
 async function migrate() {
   const uri = process.env.MONGODB_URI || process.env.DB_CONNECT;
@@ -63,7 +63,7 @@ async function migrate() {
   let eventsMigrated = 0;
   let registrationsMigrated = 0;
   for (const event of events) {
-    await ensureEventRounds(event);
+    await ensureEventVerticals(event);
     if (event.rounds?.length) eventsMigrated += 1;
     const registrations = await registerationEventModel.find({ eventId: event._id });
     for (const registration of registrations) {

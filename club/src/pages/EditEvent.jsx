@@ -2,11 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import RoundBuilder, { normalizeRoundsForForm } from "../components/RoundBuilder";
+import { normalizeRoundsForForm } from "../components/RoundBuilder";
+import VerticalBuilder, { normalizeVerticalsForForm, serializeVertical } from "../components/VerticalBuilder";
 import EligibilityBuilder from "../components/EligibilityBuilder";
 import { eligibilityForForm } from "../utils/eligibility";
 import { Button, Card, DateTimeInput, Field, Input, Page, Select, Skeleton, Textarea } from "../components/ui";
 import { uploadDirect } from "../utils/directUpload";
+
+const allRounds = (event) => (event?.verticals || []).flatMap((vertical) => vertical.rounds || []);
 
 export default function EditEvent() {
   const { eventId } = useParams();
@@ -23,13 +26,17 @@ export default function EditEvent() {
       .then(({ data }) => {
         if (!data.success) throw new Error(data.msg);
         originalDeadline.current = data.event.registrationDeadlineAt || "";
-        const normalizedRounds = normalizeRoundsForForm(data.event.rounds || []);
-        originalRoundDeadlines.current = Object.fromEntries((data.event.rounds || []).map((round) => [round._id, round.submissionDeadlineAt || ""]));
+        const verticals = normalizeVerticalsForForm(data.event.verticals || []);
+        originalRoundDeadlines.current = Object.fromEntries(allRounds(data.event).map((round) => [round._id, round.submissionDeadlineAt || ""]));
         setForm({
           ...data.event,
           ...eligibilityForForm(data.event),
           registrationDeadlineAt: data.event.registrationDeadlineAt ? new Date(new Date(data.event.registrationDeadlineAt).getTime() - new Date(data.event.registrationDeadlineAt).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "",
-          rounds: normalizedRounds,
+          // The hidden default vertical is what a non-vertical event edits.
+          rounds: verticals[0]?.rounds || normalizeRoundsForForm(data.event.rounds || []),
+          verticals,
+          verticalsEnabled: Boolean(data.event.verticalsEnabled),
+          maxVerticalApplications: data.event.maxVerticalApplications ?? 1,
           ContactInfo: data.event.ContactInfo || [],
         });
       })
@@ -38,11 +45,22 @@ export default function EditEvent() {
 
   if (!form) return <Page width="5xl"><Skeleton className="h-10 w-1/2" /><Skeleton className="mt-10 h-96 w-full" /></Page>;
   const set = (key, value) => setForm((previous) => ({ ...previous, [key]: value }));
-  const deadlineChanged = String(originalDeadline.current || "") !== String(form.registrationDeadlineAt ? new Date(form.registrationDeadlineAt).toISOString() : "") || form.rounds.some((round) => round._id && String(originalRoundDeadlines.current[round._id] || "") !== String(round.submissionDeadlineAt ? new Date(round.submissionDeadlineAt).toISOString() : ""));
+  const editedRounds = form.verticalsEnabled
+    ? form.verticals.flatMap((vertical) => vertical.rounds || [])
+    : form.rounds;
+  const deadlineChanged = String(originalDeadline.current || "") !== String(form.registrationDeadlineAt ? new Date(form.registrationDeadlineAt).toISOString() : "") || editedRounds.some((round) => round._id && String(originalRoundDeadlines.current[round._id] || "") !== String(round.submissionDeadlineAt ? new Date(round.submissionDeadlineAt).toISOString() : ""));
 
   const save = async (event) => {
     event.preventDefault();
-    if (!form.rounds.length) return toast.error("Keep at least one event round");
+    if (form.verticalsEnabled) {
+      if (form.verticals.length < 2) return toast.error("An event with verticals needs at least two verticals");
+      const unnamed = form.verticals.find((vertical) => !String(vertical.title || "").trim());
+      if (unnamed) return toast.error("Give every vertical a name");
+      const empty = form.verticals.find((vertical) => !(vertical.rounds || []).length);
+      if (empty) return toast.error(`Keep at least one round in ${empty.title}`);
+    } else if (!form.rounds.length) {
+      return toast.error("Keep at least one event round");
+    }
     setSaving(true);
     try {
       const directAsset = await uploadDirect(banner, { role: "club", kind: "eventBanner" });
@@ -59,20 +77,31 @@ export default function EditEvent() {
         submissionOpensAt: round.submissionOpensAt ? new Date(round.submissionOpensAt).toISOString() : null,
         submissionDeadlineAt: round.submissionDeadlineAt ? new Date(round.submissionDeadlineAt).toISOString() : null,
       })));
+      if (form.verticalsEnabled) {
+        payload.verticalsJSON = JSON.stringify(form.verticals.map(serializeVertical));
+        payload.maxVerticalApplications = Math.min(
+          Number(form.maxVerticalApplications) || 1,
+          form.verticals.length,
+        );
+      }
       payload.contactInfoJSON = JSON.stringify(form.ContactInfo);
       payload.programmeEligibilityJSON = JSON.stringify(form.programmeEligibility);
       payload.notifyRegistrants = notifyRegistrants;
       if (directAsset) payload.directAsset = directAsset;
       const { data } = await axios.patch(`${import.meta.env.VITE_BASE_URI}/club/events/${eventId}`, payload);
       if (!data.success) throw new Error(data.msg);
-      const normalizedRounds = normalizeRoundsForForm(data.event.rounds || []);
-      setForm({
+      const savedVerticals = normalizeVerticalsForForm(data.event.verticals || []);
+      setForm((previous) => ({
+        ...previous,
         ...data.event,
         registrationDeadlineAt: data.event.registrationDeadlineAt ? new Date(new Date(data.event.registrationDeadlineAt).getTime() - new Date(data.event.registrationDeadlineAt).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "",
-        rounds: normalizedRounds,
-      });
+        rounds: savedVerticals[0]?.rounds || normalizeRoundsForForm(data.event.rounds || []),
+        verticals: savedVerticals,
+        verticalsEnabled: Boolean(data.event.verticalsEnabled),
+        maxVerticalApplications: data.event.maxVerticalApplications ?? 1,
+      }));
       originalDeadline.current = data.event.registrationDeadlineAt || "";
-      originalRoundDeadlines.current = Object.fromEntries((data.event.rounds || []).map((round) => [round._id, round.submissionDeadlineAt || ""]));
+      originalRoundDeadlines.current = Object.fromEntries(allRounds(data.event).map((round) => [round._id, round.submissionDeadlineAt || ""]));
       setBanner(null);
       setNotifyRegistrants(false);
       toast.success(data.msg);
@@ -115,7 +144,19 @@ export default function EditEvent() {
           <Field label="Contact details, one per line" id="contacts" className="mt-5"><Textarea id="contacts" rows="3" className="min-h-0" value={(form.ContactInfo || []).join("\n")} onChange={(event) => set("ContactInfo", event.target.value.split("\n").map((item) => item.trim()))} /></Field>
           {deadlineChanged && form.deadlineNotificationsEnabled !== false && <label className="mt-5 flex items-start gap-3 rounded-sm border-l-2 border-accent bg-accent-tint/40 p-4 text-sm"><input className="mt-1" type="checkbox" checked={notifyRegistrants} onChange={(event) => setNotifyRegistrants(event.target.checked)} /><span>Email registered students about changed registration or submission deadlines when this save succeeds.</span></label>}
         </Card>
-        <Card className="p-5 sm:p-6"><RoundBuilder rounds={form.rounds} onChange={(rounds) => set("rounds", rounds)} registrationType={form.registrationType} /></Card>
+        <Card className="p-5 sm:p-6">
+          <VerticalBuilder
+            enabled={form.verticalsEnabled}
+            verticals={form.verticals}
+            rounds={form.rounds}
+            maxVerticalApplications={form.maxVerticalApplications}
+            registrationType={form.registrationType}
+            onToggle={(value) => set("verticalsEnabled", value)}
+            onVerticalsChange={(verticals) => set("verticals", verticals)}
+            onRoundsChange={(rounds) => set("rounds", rounds)}
+            onMaxApplicationsChange={(value) => set("maxVerticalApplications", value)}
+          />
+        </Card>
         <Card className="p-5 sm:p-6"><h2 className="display text-xl">Banner</h2><p className="mt-1.5 text-sm text-ink-3">Recommended: 1600 × 700 px. JPG, PNG, or WebP up to 20 MB; files above 10 MB are optimized automatically.</p>{form.eventBanner && !banner && <img src={form.eventBanner} alt="Current event banner" className="mt-5 aspect-[16/7] w-full rounded-sm border border-line bg-paper-2 object-cover" />}<Field label="Replace banner" id="banner" className="mt-5"><input id="banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setBanner(event.target.files[0] || null)} /></Field></Card>
         <div className="flex flex-wrap gap-3"><Button type="submit" size="lg" loading={saving}>{saving ? "Saving..." : "Save event"}</Button><Button to={`/event/${eventId}`} variant="secondary" size="lg">Cancel</Button></div>
       </form>

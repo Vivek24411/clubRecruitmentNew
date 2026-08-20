@@ -2,7 +2,7 @@ import { useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
-import RoundBuilder from "../components/RoundBuilder";
+import VerticalBuilder, { serializeVertical } from "../components/VerticalBuilder";
 import EligibilityBuilder from "../components/EligibilityBuilder";
 import { allProgrammeRules } from "../utils/eligibility";
 import { Button, Card, DateTimeInput, Field, Input, Page, PageHeader, Select, Textarea } from "../components/ui";
@@ -25,6 +25,9 @@ const initialForm = {
   status: "published",
   deadlineNotificationsEnabled: true,
   rounds: [],
+  verticalsEnabled: false,
+  verticals: [],
+  maxVerticalApplications: 1,
 };
 
 export default function AddEvent() {
@@ -46,7 +49,15 @@ export default function AddEvent() {
     if (banner && (!['image/jpeg', 'image/png', 'image/webp'].includes(banner.type) || banner.size > 20 * 1024 * 1024)) {
       return toast.error("Choose a JPG, PNG, or WebP banner no larger than 20 MB");
     }
-    if (!form.rounds.length) return toast.error("Add at least one event round");
+    if (form.verticalsEnabled) {
+      if (form.verticals.length < 2) return toast.error("An event with verticals needs at least two verticals");
+      const unnamed = form.verticals.find((vertical) => !vertical.title.trim());
+      if (unnamed) return toast.error("Give every vertical a name");
+      const empty = form.verticals.find((vertical) => !vertical.rounds.length);
+      if (empty) return toast.error(`Add at least one round to ${empty.title}`);
+    } else if (!form.rounds.length) {
+      return toast.error("Add at least one event round");
+    }
     setSubmitting(true);
     try {
       const normalized = {
@@ -68,6 +79,14 @@ export default function AddEvent() {
         submissionOpensAt: round.submissionOpensAt ? new Date(round.submissionOpensAt).toISOString() : null,
         submissionDeadlineAt: round.submissionDeadlineAt ? new Date(round.submissionDeadlineAt).toISOString() : null,
       })));
+      if (normalized.verticalsEnabled) {
+        payload.verticalsEnabled = true;
+        payload.verticalsJSON = JSON.stringify(normalized.verticals.map(serializeVertical));
+        payload.maxVerticalApplications = Math.min(
+          Number(normalized.maxVerticalApplications) || 1,
+          normalized.verticals.length,
+        );
+      }
       payload.programmeEligibilityJSON = JSON.stringify(normalized.programmeEligibility);
       payload.contactInfoJSON = JSON.stringify(normalized.ContactInfo.filter(Boolean));
       if (directAsset) payload.directAsset = directAsset;
@@ -117,7 +136,19 @@ export default function AddEvent() {
           </div>
         </Card>
 
-        <Card className="p-5 sm:p-6"><RoundBuilder rounds={form.rounds} onChange={(rounds) => set("rounds", rounds)} registrationType={form.registrationType} /></Card>
+        <Card className="p-5 sm:p-6">
+          <VerticalBuilder
+            enabled={form.verticalsEnabled}
+            verticals={form.verticals}
+            rounds={form.rounds}
+            maxVerticalApplications={form.maxVerticalApplications}
+            registrationType={form.registrationType}
+            onToggle={(value) => set("verticalsEnabled", value)}
+            onVerticalsChange={(verticals) => set("verticals", verticals)}
+            onRoundsChange={(rounds) => set("rounds", rounds)}
+            onMaxApplicationsChange={(value) => set("maxVerticalApplications", value)}
+          />
+        </Card>
 
         <Card className="p-5 sm:p-6">
           <h2 className="display text-xl">Event banner</h2>

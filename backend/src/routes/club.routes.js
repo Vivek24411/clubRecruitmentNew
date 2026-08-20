@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { body, param, query } = require("express-validator");
-const { clubLogin, logout, changePassword, sendPasswordResetOtp, verifyPasswordResetOtp, resetPassword, addSession, getProfile, updateProfile, getSessions, getSession, addEvent, getEvents, getEvent, getDashBoard, getEventsRegisteredStudents, finalizeStudent, scheduleInterview, selectStudentForRound, updateEvent, updateEventStatus, deleteEvent, updateSession, deleteSession, updateApplication, bulkUpdateApplications, exportApplications, getSessionAttendees, markAttendance } = require("../controllers/club.contollers");
+const { clubLogin, logout, changePassword, sendPasswordResetOtp, verifyPasswordResetOtp, resetPassword, addSession, getProfile, updateProfile, getSessions, getSession, addEvent, getEvents, getEvent, getDashBoard, updateEvent, updateEventStatus, deleteEvent, updateSession, deleteSession, updateApplication, bulkUpdateApplications, exportApplications, getSessionAttendees, markAttendance } = require("../controllers/club.contollers");
 const { clubAuth } = require("../middlewares/auth.middlewares");
 const upload = require("../middlewares/upload");
 const { attachDirectAsset, signDirectUpload } = require("../middlewares/directUpload");
@@ -29,6 +29,24 @@ const validOptionalCapacity = (value) => {
   const capacity = Number(value);
   return Number.isInteger(capacity) && capacity >= 1;
 };
+const validVerticals = (value) => {
+  try {
+    const verticals = JSON.parse(value);
+    if (!Array.isArray(verticals) || verticals.length < 1 || verticals.length > 20) throw new Error();
+    if (verticals.some((vertical) => !vertical
+      || typeof vertical !== 'object'
+      || typeof vertical.title !== 'string'
+      || vertical.title.trim().length < 2
+      || vertical.title.length > 120
+      || (vertical.rounds !== undefined && (!Array.isArray(vertical.rounds) || vertical.rounds.length > 20)))) {
+      throw new Error();
+    }
+    return true;
+  } catch {
+    throw new Error('Vertical details are invalid');
+  }
+};
+
 const validProgrammeEligibility = (value) => {
   const maxYears = { undergraduate: 5, mtech: 2, msc: 2, mba: 2, phd: 5 };
   try {
@@ -155,6 +173,9 @@ router.post('/addEvent',clubAuth,
   body('programmeEligibilityJSON').optional().isString().isLength({ max: 2000 }).custom(validProgrammeEligibility),
   body('eligibilityYearsJSON').optional().isString().isLength({ max: 100 }),
   body('deadlineNotificationsEnabled').optional().isBoolean(),
+  body('verticalsEnabled').optional().isBoolean(),
+  body('verticalsJSON').optional().isString().isLength({ max: 400000 }).custom(validVerticals),
+  body('maxVerticalApplications').optional({ checkFalsy: true, nullable: true }).isInt({ min: 1, max: 20 }),
   body('roundsJSON').optional().isString().isLength({ max: 200000 }),
   body('contactInfoJSON').optional().isString().isLength({ max: 10000 }),
   body('roundDetailsJSON').optional().custom((value, { req }) => {
@@ -197,6 +218,9 @@ router.patch('/events/:eventId', clubAuth, upload.bannerUpload.single('eventBann
   body('minTeamSize').optional().isInt({ min: 1 }),
   body('maxTeamSize').optional().isInt({ min: 1, max: 10000 }),
   body('eventType').optional().isIn(['recruitment', 'hackathon', 'competition', 'workshop', 'other']),
+  body('verticalsEnabled').optional().isBoolean(),
+  body('verticalsJSON').optional().isString().isLength({ max: 400000 }).custom(validVerticals),
+  body('maxVerticalApplications').optional({ checkFalsy: true, nullable: true }).isInt({ min: 1, max: 20 }),
   body('roundsJSON').optional().isString().isLength({ max: 200000 }),
   body('contactInfoJSON').optional().isString().isLength({ max: 10000 }),
   body('eligibilityMode').optional().isIn(['undergraduate', 'all_iitr']),
@@ -238,28 +262,6 @@ router.delete('/sessions/:sessionId', clubAuth, [
 
 router.get('/getDashBoard', clubAuth,getDashBoard)
 
-router.get('/getEventsRegisteredStudents', clubAuth,[
-  query('eventId').isMongoId().withMessage('eventId is required')
-], validateRequest, getEventsRegisteredStudents)
-
-router.post('/finalizeStudent', clubAuth,[
-  body('eventId').isMongoId().withMessage('eventId is required'),
-  body('studentId').isMongoId().withMessage('studentId is required'),
-], validateRequest, finalizeStudent)
-
-router.post('/scheduleInterview', clubAuth,[
-  body('eventId').isMongoId().withMessage('eventId is required'),
-  body('studentId').isMongoId().withMessage('studentId is required'),
-  body('roundNumber').isInt({ min: 1, max: 20 }).withMessage('roundNumber is required'),
-  body('roundDate').isISO8601().withMessage('roundDate is required'),
-], validateRequest, scheduleInterview)
-
-router.post('/selectStudentForRound', clubAuth,[
-  body('eventId').isMongoId().withMessage('eventId is required'),
-  body('studentId').isMongoId().withMessage('studentId is required'),
-  body('roundNumber').isInt({ min: 1, max: 20 }).withMessage('roundNumber is required'),
-], validateRequest, selectStudentForRound)
-
 router.patch('/events/:eventId/applications/:registrationId', clubAuth, [
   param('eventId').isMongoId(),
   param('registrationId').isMongoId(),
@@ -275,7 +277,10 @@ router.post('/events/:eventId/applications/bulk', clubAuth, [
   body('overallStatus').isIn(['submitted', 'in_progress', 'waitlisted', 'selected', 'rejected']),
 ], validateRequest, bulkUpdateApplications)
 
-router.get('/events/:eventId/applications/export', clubAuth, [param('eventId').isMongoId()], validateRequest, exportApplications)
+router.get('/events/:eventId/applications/export', clubAuth, [
+  param('eventId').isMongoId(),
+  query('verticalId').optional().isMongoId(),
+], validateRequest, exportApplications)
 router.get('/events/:eventId/rounds/:roundId/export', clubAuth, [
   param('eventId').isMongoId(),
   param('roundId').isMongoId(),
@@ -293,6 +298,7 @@ router.patch('/sessions/:sessionId/attendance', clubAuth, [
 
 router.get('/events/:eventId/workflow', clubAuth, [
   param('eventId').isMongoId(),
+  query('verticalId').optional().isMongoId(),
   query('roundId').optional().isMongoId(),
   query('status').optional().isIn(['all', 'eligible', 'scheduled', 'active', 'submitted', 'under_review', 'waitlisted', 'advanced', 'rejected', 'missed']),
   query('search').optional().isString().isLength({ max: 100 }),

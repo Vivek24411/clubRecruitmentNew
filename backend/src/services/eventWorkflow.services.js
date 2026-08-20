@@ -107,21 +107,113 @@ function normalizeRounds(input) {
   });
 }
 
-async function ensureEventRounds(eventOrId) {
+function normalizeVerticals(input, defaults = {}) {
+  const list = Array.isArray(input) ? input.slice(0, 20) : [];
+  return list.map((vertical, index) => {
+    const registrationType = ["individual", "team", "optional_team"].includes(vertical?.registrationType)
+      ? vertical.registrationType
+      : (defaults.registrationType || "team");
+    const minTeamSize = registrationType === "individual"
+      ? 1
+      : Math.max(Number(vertical?.minTeamSize) || 1, 1);
+    const maxTeamSize = registrationType === "individual"
+      ? 1
+      : Math.max(Number(vertical?.maxTeamSize) || minTeamSize, minTeamSize);
+    return {
+      // Existing verticals keep their _id: registrations, memberships and
+      // candidates all point at it.
+      ...(mongoose.isValidObjectId(vertical?._id) ? { _id: vertical._id } : {}),
+      title: cleanString(vertical?.title || `Vertical ${index + 1}`, 120),
+      shortDescription: cleanString(vertical?.shortDescription, 500),
+      description: cleanString(vertical?.description, 5000),
+      order: index + 1,
+      isDefault: false,
+      status: vertical?.status === "closed" ? "closed" : "open",
+      registrationType,
+      minTeamSize,
+      maxTeamSize,
+      maxParticipants: vertical?.maxParticipants ? Number(vertical.maxParticipants) : null,
+      registrationDeadlineAt: cleanDate(vertical?.registrationDeadlineAt),
+      eligibilityMode: ["undergraduate", "all_iitr"].includes(vertical?.eligibilityMode)
+        ? vertical.eligibilityMode
+        : null,
+      programmeEligibility: Array.isArray(vertical?.programmeEligibility) ? vertical.programmeEligibility : [],
+      rounds: normalizeRounds(vertical?.rounds).map((round) => ({
+        ...round,
+        evaluationScope: (registrationType === "individual" || round.type === "test")
+          ? "participant"
+          : round.evaluationScope,
+      })),
+    };
+  });
+}
+
+async function ensureEventVerticals(eventOrId) {
   const event = typeof eventOrId === "string" || eventOrId?._bsontype
     ? await eventModel.findById(eventOrId)
     : eventOrId;
   if (!event) return null;
+  let stale = false;
   if (!event.rounds?.length && event.roundDetails?.length) {
     event.rounds = normalizeRounds(event.roundDetails);
-    event.numberOfRounds = event.rounds.length;
-    await event.save();
+    stale = true;
   }
+  // The model hook seeds a hidden default vertical from event.rounds, so a
+  // bare save is enough to bring a pre-vertical event up to date.
+  if (!event.verticals?.length) stale = true;
+  if (stale) await event.save();
   return event;
 }
 
+// Resolves the vertical to work in. Passing no id means the first one, which
+// is the hidden default on events that never enabled verticals.
+function eventVertical(event, verticalId) {
+  const verticals = event?.verticals || [];
+  if (!verticals.length) return null;
+  if (!verticalId) return verticals[0];
+  return verticals.find((vertical) => String(vertical._id) === String(verticalId)) || null;
+}
+
+function verticalRounds(event, verticalId) {
+  const vertical = eventVertical(event, verticalId);
+  if (vertical) return vertical.rounds || [];
+  return event?.rounds || [];
+}
+
+function verticalForRound(event, roundId) {
+  return (event?.verticals || []).find((vertical) =>
+    (vertical.rounds || []).some((round) => String(round._id) === String(roundId))) || null;
+}
+
+// Round ids are globally unique ObjectIds even though rounds are embedded, so
+// a round always identifies exactly one vertical.
 function eventRound(event, roundId) {
-  return event?.rounds?.find((round) => String(round._id) === String(roundId)) || null;
+  for (const vertical of event?.verticals || []) {
+    const round = (vertical.rounds || []).find((item) => String(item._id) === String(roundId));
+    if (round) return round;
+  }
+  return (event?.rounds || []).find((round) => String(round._id) === String(roundId)) || null;
+}
+
+// A vertical inherits the event's rules unless it declares its own.
+function verticalEligibilitySource(event, vertical) {
+  if (!vertical?.eligibilityMode) return event;
+  return {
+    eligibilityMode: vertical.eligibilityMode,
+    programmeEligibility: vertical.programmeEligibility,
+    eligibilityYears: [],
+  };
+}
+
+function verticalDeadlineAt(event, vertical) {
+  return vertical?.registrationDeadlineAt || event?.registrationDeadlineAt || null;
+}
+
+function registrationVerticalId(event, registration, round = null) {
+  return registration?.verticalId
+    || (round ? verticalForRound(event, round._id)?._id : null)
+    || event?.verticals?.[0]?._id
+    || null;
 }
 
 function registrationParticipantIds(registration) {
@@ -139,16 +231,17 @@ function candidateIncludesStudent(candidate, studentId) {
   return (candidate.participantIds || []).some((student) => String(student?._id || student) === target);
 }
 
-function studentApplicationStatus(event, candidates, studentId, fallback = "in_progress") {
+function studentApplicationStatus(event, candidates, studentId, fallback = "in_progress", verticalId = null) {
   if (fallback === "withdrawn") return "withdrawn";
   const relevant = (candidates || []).filter((candidate) =>
     candidate.status !== "revoked" && candidateIncludesStudent(candidate, studentId));
   if (!relevant.length) return fallback || "in_progress";
 
-  const orderByRound = new Map((event?.rounds || []).map((round) => [String(round._id), round.order]));
+  const rounds = verticalRounds(event, verticalId || relevant[0]?.verticalId);
+  const orderByRound = new Map(rounds.map((round) => [String(round._id), round.order]));
   const highestOrder = Math.max(...relevant.map((candidate) => orderByRound.get(String(candidate.roundId)) || 0));
   const current = relevant.filter((candidate) => (orderByRound.get(String(candidate.roundId)) || 0) === highestOrder);
-  const finalRound = highestOrder === (event?.rounds || []).length;
+  const finalRound = highestOrder === rounds.length;
   const statuses = current.map((candidate) => candidate.status);
 
   if (finalRound && statuses.includes("advanced")) return "selected";
@@ -163,6 +256,7 @@ async function createCandidatesForRound({ event, round, registration, participan
   const participants = (participantIds?.length ? participantIds : registrationParticipantIds(registration))
     .map((id) => id?._id || id);
   if (!participants.length) return [];
+  const verticalId = registrationVerticalId(event, registration, round);
   if (round.evaluationScope === "participant") {
     return Promise.all(participants.map(async (studentId) => {
       const candidate = await roundCandidateModel.findOneAndUpdate(
@@ -170,6 +264,7 @@ async function createCandidatesForRound({ event, round, registration, participan
         {
           $setOnInsert: {
             eventId: event._id,
+            verticalId,
             roundId: round._id,
             registrationId: registration._id,
             studentId,
@@ -195,6 +290,7 @@ async function createCandidatesForRound({ event, round, registration, participan
     {
       $setOnInsert: {
         eventId: event._id,
+        verticalId,
         roundId: round._id,
         registrationId: registration._id,
         studentId: null,
@@ -218,8 +314,8 @@ async function createCandidatesForRound({ event, round, registration, participan
 }
 
 async function initializeRegistrationWorkflow(event, registration) {
-  await ensureEventRounds(event);
-  const firstRound = event.rounds?.[0];
+  await ensureEventVerticals(event);
+  const firstRound = verticalRounds(event, registration.verticalId)[0];
   if (!firstRound) return [];
   registration.currentRound = 1;
   registration.currentRoundId = firstRound._id;
@@ -229,12 +325,13 @@ async function initializeRegistrationWorkflow(event, registration) {
 }
 
 async function ensureRegistrationWorkflow(event, registration) {
-  await ensureEventRounds(event);
-  if (!event.rounds?.length || registration.overallStatus === "withdrawn") return [];
+  await ensureEventVerticals(event);
+  const rounds = verticalRounds(event, registration.verticalId);
+  if (!rounds.length || registration.overallStatus === "withdrawn") return [];
   const existing = await roundCandidateModel.find({ registrationId: registration._id }).limit(1);
   if (existing.length) return existing;
-  const legacyIndex = Math.min(Math.max(Number(registration.currentRound || 1) - 1, 0), event.rounds.length - 1);
-  const round = event.rounds[legacyIndex] || event.rounds[0];
+  const legacyIndex = Math.min(Math.max(Number(registration.currentRound || 1) - 1, 0), rounds.length - 1);
+  const round = rounds[legacyIndex] || rounds[0];
   registration.currentRound = round.order;
   registration.currentRoundId = round._id;
   if (["submitted", "waitlisted"].includes(registration.overallStatus)) registration.overallStatus = "in_progress";
@@ -250,9 +347,9 @@ async function ensureRegistrationWorkflow(event, registration) {
 }
 
 async function syncRegistrationParticipants(event, registration) {
-  await ensureEventRounds(event);
+  await ensureEventVerticals(event);
   const activeRound = eventRound(event, registration.currentRoundId)
-    || event.rounds?.[Math.max(Number(registration.currentRound || 1) - 1, 0)];
+    || verticalRounds(event, registration.verticalId)[Math.max(Number(registration.currentRound || 1) - 1, 0)];
   if (!activeRound) return [];
   return createCandidatesForRound({ event, round: activeRound, registration });
 }
@@ -260,7 +357,8 @@ async function syncRegistrationParticipants(event, registration) {
 async function advanceCandidate(event, registration, candidate) {
   const currentRound = eventRound(event, candidate.roundId);
   if (!currentRound) return [];
-  const nextRound = event.rounds.find((round) => round.order === currentRound.order + 1);
+  const nextRound = verticalRounds(event, registrationVerticalId(event, registration, currentRound))
+    .find((round) => round.order === currentRound.order + 1);
   if (!nextRound) {
     registration.overallStatus = "selected";
     registration.currentRound = currentRound.order;
@@ -486,9 +584,16 @@ async function removeParticipantFromRegistrationWorkflow(registrationId, student
 }
 
 async function withdrawRegistrationWorkflow(registrationId) {
+  // Withdrawing retires the whole application, including rounds the club had
+  // already decided. Leaving an "advanced" candidate behind kept the student
+  // in the club's active workspace after they had left, and disagreed with
+  // removeParticipantFromRegistrationWorkflow, which already overwrites a
+  // decided status when a single participant leaves. Scores, notes and
+  // decisionPublishedAt stay on the record, so the decision is still auditable.
+  // "revoked" is a system state rather than a decision, so it is left alone.
   const candidates = await roundCandidateModel.find({
     registrationId,
-    status: { $nin: ["advanced", "rejected", "waitlisted", "missed", "revoked"] },
+    status: { $ne: "revoked" },
   });
   for (const candidate of candidates) {
     candidate.status = "withdrawn";
@@ -497,10 +602,10 @@ async function withdrawRegistrationWorkflow(registrationId) {
   }
 }
 
-async function ensureMembership({ eventId, registrationId, studentId, role }) {
+async function ensureMembership({ eventId, verticalId, registrationId, studentId, role }) {
   return eventMembershipModel.findOneAndUpdate(
-    { eventId, studentId },
-    { $setOnInsert: { eventId, registrationId, studentId, role, joinedAt: new Date() } },
+    { eventId, verticalId, studentId },
+    { $setOnInsert: { eventId, verticalId, registrationId, studentId, role, joinedAt: new Date() } },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 }
@@ -510,10 +615,17 @@ module.exports = {
   autoScheduleCandidates,
   cleanDate,
   createCandidatesForRound,
-  ensureEventRounds,
+  ensureEventVerticals,
   ensureRegistrationWorkflow,
   ensureMembership,
   eventRound,
+  eventVertical,
+  verticalRounds,
+  verticalForRound,
+  verticalEligibilitySource,
+  verticalDeadlineAt,
+  registrationVerticalId,
+  normalizeVerticals,
   findScheduleConflict,
   initializeRegistrationWorkflow,
   normalizeRounds,

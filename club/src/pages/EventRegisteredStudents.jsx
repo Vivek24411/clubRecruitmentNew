@@ -35,6 +35,32 @@ function PersonRow({ student, captain = false }) {
   );
 }
 
+const CROSS_TONE = { selected: "ok", advanced: "ok", in_progress: "info", waitlisted: "warn", rejected: "bad", withdrawn: "neutral" };
+
+// Where this candidate's participants stand in the event's other verticals.
+// Read-only context for the reviewer; nothing here changes a decision.
+function CrossVerticalStatus({ candidate, crossVertical }) {
+  const entries = [...new Map(
+    (candidate.participantIds || [])
+      .flatMap((student) => (crossVertical[String(student?._id || student)] || [])
+        .map((entry) => [`${student?._id || student}-${entry.verticalId}`, { ...entry, student }])),
+  ).values()];
+  if (!entries.length) return null;
+
+  return (
+    <div className="mt-3 border-t border-line/70 pt-3">
+      <p className="text-xs font-semibold text-ink-4">Also applied to</p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {entries.map((entry) => (
+          <Badge key={`${entry.student?._id || entry.student}-${entry.verticalId}`} tone={CROSS_TONE[entry.status] || "neutral"}>
+            {entry.verticalTitle}: {String(entry.status).replaceAll("_", " ")}
+          </Badge>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CandidateIdentity({ candidate, registration, finalRound }) {
   if (candidate.scope === "participant") {
     const student = candidate.studentId || candidate.participantIds?.[0];
@@ -101,6 +127,7 @@ export default function EventRegisteredStudents() {
   const { eventId } = useParams();
   const [data, setData] = useState(null);
   const [roundId, setRoundId] = useState("");
+  const [verticalId, setVerticalId] = useState("");
   const [selected, setSelected] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [search, setSearch] = useState("");
@@ -117,6 +144,7 @@ export default function EventRegisteredStudents() {
     try {
       const { data: response } = await axios.get(`${import.meta.env.VITE_BASE_URI}/club/events/${eventId}/workflow`, {
         params: {
+          verticalId: verticalId || undefined,
           roundId: roundId || undefined,
           status: statusFilter,
           search: debouncedSearch || undefined,
@@ -126,21 +154,27 @@ export default function EventRegisteredStudents() {
       });
       if (!response.success) throw new Error(response.msg);
       setData(response);
-      setRoundId((current) => current || response.selectedRoundId || response.event.rounds?.[0]?._id || "");
+      setVerticalId((current) => current || response.selectedVerticalId || "");
+      setRoundId((current) => current || response.selectedRoundId || "");
     } catch (error) {
       toast.error(error.response?.data?.msg || error.message || "Could not load event workflow");
     }
-  }, [debouncedSearch, eventId, page, roundId, statusFilter]);
+  }, [debouncedSearch, eventId, page, roundId, statusFilter, verticalId]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => window.clearTimeout(timer);
   }, [search]);
-  useEffect(() => { setSelected([]); setDrafts({}); }, [roundId, page, statusFilter, debouncedSearch]);
+  useEffect(() => { setSelected([]); setDrafts({}); }, [roundId, verticalId, page, statusFilter, debouncedSearch]);
 
-  const round = data?.event?.rounds?.find((item) => item._id === roundId);
-  const finalRound = round?.order === data?.event?.rounds?.length;
+  const verticals = data?.event?.verticals || [];
+  const verticalsEnabled = Boolean(data?.event?.verticalsEnabled) && verticals.length > 1;
+  const activeVertical = verticals.find((item) => item._id === verticalId) || verticals[0];
+  const verticalRounds = activeVertical?.rounds || [];
+  const round = verticalRounds.find((item) => item._id === roundId);
+  const finalRound = round?.order === verticalRounds.length;
+  const crossVertical = data?.crossVertical || {};
   const registrations = useMemo(() => new Map((data?.registrations || []).map((item) => [item._id, item])), [data]);
   const slots = useMemo(() => new Map((data?.slots || []).filter((slot) => slot.status !== "cancelled").map((slot) => [slot.candidateId, slot])), [data]);
   const submissions = useMemo(() => {
@@ -231,6 +265,10 @@ export default function EventRegisteredStudents() {
       const { data: response } = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/events/${eventId}/rounds/${roundId}/extract`, { candidateIds: advanced.map((item) => item._id), ...extract });
       if (!response.success) throw new Error(response.msg);
       toast.success(response.msg);
+      // Decisions may have moved on elsewhere; reload so the selection cannot
+      // go stale against the round it was made in.
+      await load();
+      setSelected([]);
     } catch (error) { toast.error(error.response?.data?.msg || error.message); }
     finally { setOperation(""); }
   };
@@ -261,15 +299,46 @@ export default function EventRegisteredStudents() {
 
   if (!data) return <Page><SkeletonList rows={6} /></Page>;
   const targetEvent = data.targetEvents?.find((event) => event._id === extract.targetEventId);
+  const targetRounds = (targetEvent?.verticals || []).flatMap((vertical) =>
+    (vertical.rounds || []).map((item) => ({ ...item, verticalTitle: vertical.title })));
 
   return (
     <Page>
       <Link to={`/event/${eventId}`} className="link text-sm text-ink-3">← Back to event</Link>
       <header className="mt-6"><p className="eyebrow eyebrow-accent">Round workspace</p><h1 className="display mt-2 break-words text-3xl sm:text-4xl">{data.event.title}</h1><p className="mt-3 text-sm text-ink-3">Review submissions, publish exact decisions, and schedule conflict-free slots.</p></header>
 
-      {finalSelectedCount > 0 && <Card className="mt-7 border-l-4 border-l-ok p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow text-ok">Final selections</p><h2 className="display mt-1 text-xl">{finalSelectedCount} selected {finalSelectedCount === 1 ? "entry" : "entries"}</h2></div><Button type="button" variant="secondary" size="sm" onClick={() => { setRoundId(data.event.rounds.at(-1)._id); setStatusFilter("advanced"); setSelectedTab(true); setPage(1); }}>View selected</Button></div></Card>}
+      {verticalsEnabled && (
+        <div className="mt-7">
+          <p className="eyebrow">Vertical</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {verticals.map((item) => (
+              <button
+                key={item._id}
+                type="button"
+                aria-pressed={item._id === activeVertical?._id}
+                className={`rounded-sm border px-4 py-2 text-sm font-semibold transition-colors ${item._id === activeVertical?._id ? "border-accent bg-accent-tint/50 text-accent" : "border-line text-ink-3 hover:text-ink"}`}
+                onClick={() => {
+                  setVerticalId(item._id);
+                  setRoundId(item.rounds?.[0]?._id || "");
+                  setStatusFilter("all");
+                  setSelectedTab(false);
+                  setPage(1);
+                }}
+              >
+                {item.title}
+                {item.status === "closed" && <span className="ml-2 text-xs font-normal text-ink-4">closed</span>}
+              </button>
+            ))}
+          </div>
+          <p className="mt-3 text-sm text-ink-3">
+            Each vertical runs its own rounds and teams. Decisions here apply only to {activeVertical?.title}.
+          </p>
+        </div>
+      )}
 
-      <div className="mt-8 overflow-x-auto border-b border-line" role="tablist"><div className="flex min-w-max gap-1">{data.event.rounds.map((item) => <button key={item._id} type="button" role="tab" aria-selected={!selectedTab && item._id === roundId} className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${!selectedTab && item._id === roundId ? "border-accent text-accent" : "border-transparent text-ink-3 hover:text-ink"}`} onClick={() => { setRoundId(item._id); setStatusFilter("all"); setSelectedTab(false); setPage(1); }}>{item.order}. {item.title}</button>)}<button type="button" role="tab" aria-selected={selectedTab} className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${selectedTab ? "border-ok text-ok" : "border-transparent text-ink-3 hover:text-ink"}`} onClick={() => { setRoundId(data.event.rounds.at(-1)?._id || ""); setStatusFilter("advanced"); setSelectedTab(true); setPage(1); }}>Selected students ({finalSelectedCount})</button></div></div>
+      {finalSelectedCount > 0 && <Card className="mt-7 border-l-4 border-l-ok p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow text-ok">Final selections</p><h2 className="display mt-1 text-xl">{finalSelectedCount} selected {finalSelectedCount === 1 ? "entry" : "entries"}</h2></div><Button type="button" variant="secondary" size="sm" onClick={() => { setRoundId(verticalRounds.at(-1)?._id || ""); setStatusFilter("advanced"); setSelectedTab(true); setPage(1); }}>View selected</Button></div></Card>}
+
+      <div className="mt-8 overflow-x-auto border-b border-line" role="tablist"><div className="flex min-w-max gap-1">{verticalRounds.map((item) => <button key={item._id} type="button" role="tab" aria-selected={!selectedTab && item._id === roundId} className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${!selectedTab && item._id === roundId ? "border-accent text-accent" : "border-transparent text-ink-3 hover:text-ink"}`} onClick={() => { setRoundId(item._id); setStatusFilter("all"); setSelectedTab(false); setPage(1); }}>{item.order}. {item.title}</button>)}<button type="button" role="tab" aria-selected={selectedTab} className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${selectedTab ? "border-ok text-ok" : "border-transparent text-ink-3 hover:text-ink"}`} onClick={() => { setRoundId(verticalRounds.at(-1)?._id || ""); setStatusFilter("advanced"); setSelectedTab(true); setPage(1); }}>Selected students ({finalSelectedCount})</button></div></div>
 
       {round && <Card className="mt-6 p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex flex-wrap gap-2"><Badge tone="info">{round.type.replaceAll("_", " ")}</Badge><Badge>{round.evaluationScope === "participant" ? "Per student" : "Whole team/application"}</Badge></div><h2 className="display mt-3 text-xl">{round.title}</h2><p className="mt-2 max-w-2xl text-sm text-ink-3">{round.description || "No round description added."}</p></div><div className="text-right text-sm text-ink-3"><p>{data.pagination?.total || 0} matching candidate record(s)</p>{round.submissionDeadlineAt && <p className="mt-1">Deadline {displayDate(round.submissionDeadlineAt)}</p>}</div></div></Card>}
 
@@ -279,7 +348,7 @@ export default function EventRegisteredStudents() {
         const registration = registrations.get(candidate.registrationId);
         const submission = submissions.get(candidate._id);
         const slot = slots.get(candidate._id);
-        return <Card key={candidate._id} className="overflow-hidden"><div className="grid gap-5 p-5 xl:grid-cols-[minmax(15rem,1fr)_minmax(15rem,1.2fr)_minmax(15rem,1fr)_12rem]"><label className="flex min-w-0 items-start gap-3"><input className="mt-1" type="checkbox" checked={selected.includes(candidate._id)} onChange={() => toggle(candidate._id)} /><span className="min-w-0 flex-1"><CandidateIdentity candidate={candidate} registration={registration} finalRound={finalRound} /><p className="mt-3 text-xs text-ink-4">Applied {displayDate(registration?.registeredAt)}</p></span></label><div className="min-w-0"><p className="eyebrow">Submission</p><SubmissionSummary submission={submission} /></div><div className="grid content-start gap-3"><Field label="Score (optional)" id={`score-${candidate._id}`}><Input id={`score-${candidate._id}`} type="number" min="0" value={drafts[candidate._id]?.score ?? candidate.score ?? ""} onChange={(event) => patchDraft(candidate._id, { score: event.target.value })} /></Field><Field label="Private reviewer notes" id={`notes-${candidate._id}`}><Textarea id={`notes-${candidate._id}`} rows="3" className="min-h-0" value={drafts[candidate._id]?.notes ?? candidate.notes ?? ""} onChange={(event) => patchDraft(candidate._id, { notes: event.target.value })} /></Field><Button type="button" variant="secondary" size="sm" loading={operation === `review-${candidate._id}`} onClick={() => saveReview(candidate)}>Save score and notes</Button></div><div className="min-w-0 text-sm"><p className="eyebrow">Schedule</p><p className="mt-2 font-medium text-ink-2">{slot ? displayDate(slot.startAt) : "No slot"}</p>{slot?.venue && <p className="mt-1 text-xs text-ink-3">{slot.venue}</p>}{slot?.meetingUrl && <a href={slot.meetingUrl} target="_blank" rel="noreferrer" className="link mt-1 block break-all text-xs">Meeting link ↗</a>}{round.scheduleMode === "slots" && ["eligible", "scheduled", "active", "submitted", "under_review"].includes(candidate.status) && <Button type="button" variant="secondary" size="sm" className="mt-3" onClick={() => setManual({ candidateId: candidate._id, startAt: localDateTime(slot?.startAt), endAt: localDateTime(slot?.endAt), venue: slot?.venue || round.venue || "", meetingUrl: slot?.meetingUrl || round.meetingUrl || "" })}>{slot ? "Reschedule" : "Set slot"}</Button>}</div></div></Card>;
+        return <Card key={candidate._id} className="overflow-hidden"><div className="grid gap-5 p-5 xl:grid-cols-[minmax(15rem,1fr)_minmax(15rem,1.2fr)_minmax(15rem,1fr)_12rem]"><label className="flex min-w-0 items-start gap-3"><input className="mt-1" type="checkbox" checked={selected.includes(candidate._id)} onChange={() => toggle(candidate._id)} /><span className="min-w-0 flex-1"><CandidateIdentity candidate={candidate} registration={registration} finalRound={finalRound} /><p className="mt-3 text-xs text-ink-4">Applied {displayDate(registration?.registeredAt)}</p><CrossVerticalStatus candidate={candidate} crossVertical={crossVertical} /></span></label><div className="min-w-0"><p className="eyebrow">Submission</p><SubmissionSummary submission={submission} /></div><div className="grid content-start gap-3"><Field label="Score (optional)" id={`score-${candidate._id}`}><Input id={`score-${candidate._id}`} type="number" min="0" value={drafts[candidate._id]?.score ?? candidate.score ?? ""} onChange={(event) => patchDraft(candidate._id, { score: event.target.value })} /></Field><Field label="Private reviewer notes" id={`notes-${candidate._id}`}><Textarea id={`notes-${candidate._id}`} rows="3" className="min-h-0" value={drafts[candidate._id]?.notes ?? candidate.notes ?? ""} onChange={(event) => patchDraft(candidate._id, { notes: event.target.value })} /></Field><Button type="button" variant="secondary" size="sm" loading={operation === `review-${candidate._id}`} onClick={() => saveReview(candidate)}>Save score and notes</Button></div><div className="min-w-0 text-sm"><p className="eyebrow">Schedule</p><p className="mt-2 font-medium text-ink-2">{slot ? displayDate(slot.startAt) : "No slot"}</p>{slot?.venue && <p className="mt-1 text-xs text-ink-3">{slot.venue}</p>}{slot?.meetingUrl && <a href={slot.meetingUrl} target="_blank" rel="noreferrer" className="link mt-1 block break-all text-xs">Meeting link ↗</a>}{round.scheduleMode === "slots" && ["eligible", "scheduled", "active", "submitted", "under_review"].includes(candidate.status) && <Button type="button" variant="secondary" size="sm" className="mt-3" onClick={() => setManual({ candidateId: candidate._id, startAt: localDateTime(slot?.startAt), endAt: localDateTime(slot?.endAt), venue: slot?.venue || round.venue || "", meetingUrl: slot?.meetingUrl || round.meetingUrl || "" })}>{slot ? "Reschedule" : "Set slot"}</Button>}</div></div></Card>;
       })}</div>}
 
       {data.pagination?.pages > 1 && <div className="mt-6 flex items-center justify-between gap-4"><Button type="button" variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((current) => Math.max(current - 1, 1))}>Previous</Button><p className="text-sm text-ink-3">Page {data.pagination.page} of {data.pagination.pages}</p><Button type="button" variant="secondary" size="sm" disabled={page >= data.pagination.pages} onClick={() => setPage((current) => current + 1)}>Next</Button></div>}
@@ -288,7 +357,7 @@ export default function EventRegisteredStudents() {
 
       {round?.scheduleMode === "slots" && <Card className="mt-6 p-5 sm:p-6"><h2 className="display text-xl">Auto-schedule selected</h2><p className="mt-2 text-sm text-ink-3">Set an easy-to-read window. Existing slots across all clubs are checked before assignment.</p><form onSubmit={autoSchedule} className="mt-5 grid gap-4 lg:grid-cols-2"><Field label="Window starts" id="windowStart"><DateTimeInput id="windowStart" required value={autoForm.startAt} onChange={(value) => setAutoForm({ ...autoForm, startAt: value })} /></Field><Field label="Window ends" id="windowEnd"><DateTimeInput id="windowEnd" required value={autoForm.endAt} onChange={(value) => setAutoForm({ ...autoForm, endAt: value })} /></Field><div className="grid gap-4 sm:grid-cols-2"><Field label="Slot minutes" id="duration"><Input id="duration" type="number" min="5" value={autoForm.durationMinutes} onChange={(event) => setAutoForm({ ...autoForm, durationMinutes: Number(event.target.value) })} /></Field><Field label="Buffer minutes" id="buffer"><Input id="buffer" type="number" min="0" value={autoForm.bufferMinutes} onChange={(event) => setAutoForm({ ...autoForm, bufferMinutes: Number(event.target.value) })} /></Field></div><div className="grid gap-4 sm:grid-cols-2"><Field label="Venue" id="venue"><Input id="venue" value={autoForm.venue} onChange={(event) => setAutoForm({ ...autoForm, venue: event.target.value })} /></Field><Field label="Meeting link" id="meeting"><Input id="meeting" type="url" value={autoForm.meetingUrl} onChange={(event) => setAutoForm({ ...autoForm, meetingUrl: event.target.value })} /></Field></div><div className="lg:col-span-2"><Button type="submit" loading={operation === "auto-schedule"} disabled={!chosen.length || Boolean(operation)}>Schedule {chosen.length || "selected"}</Button></div></form></Card>}
 
-      {data.targetEvents?.length > 0 && <Card className="mt-6 p-5 sm:p-6"><h2 className="display text-xl">Add selected to another event</h2><p className="mt-2 text-sm text-ink-3">Only advanced candidates are imported. Individual candidate entries remain individual.</p><form onSubmit={extractCandidates} className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto]"><Field label="Target event" id="targetEvent"><Select id="targetEvent" required value={extract.targetEventId} onChange={(event) => setExtract({ targetEventId: event.target.value, targetRoundId: "" })}><option value="">Choose event</option>{data.targetEvents.map((event) => <option key={event._id} value={event._id}>{event.title}</option>)}</Select></Field><Field label="Start in round" id="targetRound"><Select id="targetRound" required disabled={!targetEvent} value={extract.targetRoundId} onChange={(event) => setExtract({ ...extract, targetRoundId: event.target.value })}><option value="">Choose round</option>{targetEvent?.rounds?.map((item) => <option key={item._id} value={item._id}>{item.order}. {item.title}</option>)}</Select></Field><div className="flex items-end"><Button type="submit" loading={operation === "extract"} disabled={!chosen.length || Boolean(operation)}>Add candidates</Button></div></form></Card>}
+      {data.targetEvents?.length > 0 && <Card className="mt-6 p-5 sm:p-6"><h2 className="display text-xl">Add selected to another event</h2><p className="mt-2 text-sm text-ink-3">Only advanced candidates are imported. Individual candidate entries remain individual.</p><form onSubmit={extractCandidates} className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto]"><Field label="Target event" id="targetEvent"><Select id="targetEvent" required value={extract.targetEventId} onChange={(event) => setExtract({ targetEventId: event.target.value, targetRoundId: "" })}><option value="">Choose event</option>{data.targetEvents.map((event) => <option key={event._id} value={event._id}>{event.title}</option>)}</Select></Field><Field label="Start in round" id="targetRound"><Select id="targetRound" required disabled={!targetEvent} value={extract.targetRoundId} onChange={(event) => setExtract({ ...extract, targetRoundId: event.target.value })}><option value="">Choose round</option>{targetRounds.map((item) => <option key={item._id} value={item._id}>{targetEvent?.verticalsEnabled ? `${item.verticalTitle} — ` : ""}{item.order}. {item.title}</option>)}</Select></Field><div className="flex items-end"><Button type="submit" loading={operation === "extract"} disabled={!chosen.length || Boolean(operation)}>Add candidates</Button></div></form></Card>}
 
       {manual && <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-ink/55 p-4 backdrop-blur-sm"><Card className="w-full max-w-2xl animate-scale-in p-5 sm:p-6"><h2 className="display text-xl">Set participant slot</h2><p className="mt-1.5 text-sm text-ink-3">The slot is checked against every participant’s existing interviews.</p><form onSubmit={saveManual} className="mt-5 grid gap-4 sm:grid-cols-2"><Field label="Starts" id="manualStart"><DateTimeInput id="manualStart" required value={manual.startAt} onChange={(value) => setManual({ ...manual, startAt: value })} /></Field><Field label="Ends" id="manualEnd"><DateTimeInput id="manualEnd" required value={manual.endAt} onChange={(value) => setManual({ ...manual, endAt: value })} /></Field><Field label="Venue" id="manualVenue"><Input id="manualVenue" value={manual.venue} onChange={(event) => setManual({ ...manual, venue: event.target.value })} /></Field><Field label="Meeting link" id="manualMeeting"><Input id="manualMeeting" type="url" value={manual.meetingUrl} onChange={(event) => setManual({ ...manual, meetingUrl: event.target.value })} /></Field><div className="flex flex-wrap gap-3 sm:col-span-2"><Button type="submit" loading={operation === "manual-schedule"} disabled={Boolean(operation)}>Check and save</Button><Button type="button" variant="secondary" disabled={Boolean(operation)} onClick={() => setManual(null)}>Cancel</Button></div></form></Card></div>}
     </Page>

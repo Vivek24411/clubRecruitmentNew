@@ -40,7 +40,8 @@ function RoundProgress({ rounds, candidates }) {
 
 function applicationSummary(application) {
   const event = application.eventId;
-  const rounds = event?.rounds || [];
+  const vertical = (event?.verticals || []).find((item) => String(item._id) === String(application.verticalId));
+  const rounds = vertical?.rounds || event?.rounds || [];
   const candidates = (application.workflow?.candidates || []).filter((candidate) => candidate.isMine !== false);
   const slots = application.workflow?.slots || [];
   const status = application.workflow?.studentOverallStatus || application.overallStatus;
@@ -100,7 +101,7 @@ export default function MyApplications() {
   const visible = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return applications;
-    return applications.filter(({ role, registrationId }) => `${registrationId?.eventId?.title || ""} ${registrationId?.eventId?.clubId?.name || ""} ${registrationId?.teamName || ""} ${registrationId?.workflow?.studentOverallStatus || registrationId?.overallStatus || ""} ${role || ""}`.toLowerCase().includes(query));
+    return applications.filter(({ role, registrationId, verticalTitle }) => `${registrationId?.eventId?.title || ""} ${registrationId?.eventId?.clubId?.name || ""} ${registrationId?.teamName || ""} ${registrationId?.workflow?.studentOverallStatus || registrationId?.overallStatus || ""} ${role || ""} ${verticalTitle || ""}`.toLowerCase().includes(query));
   }, [applications, search]);
 
   return (
@@ -109,13 +110,16 @@ export default function MyApplications() {
       {!loading && applications.length > 0 && <div className="relative mt-8"><label htmlFor="application-search" className="sr-only">Search applications</label><Input id="application-search" type="search" className="pl-4" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by event, club, team, or status…" /></div>}
 
       <div className="mt-6">
-        {loading ? <SkeletonList rows={3} /> : applications.length === 0 ? <EmptyState title="No applications yet" description="Once you apply to an event, its full progress will be tracked here." action={<Button to="/events">Browse open events</Button>} /> : visible.length === 0 ? <EmptyState title="No matching applications" description="Try another event, club, team, or status." action={<Button variant="secondary" onClick={() => setSearch("")}>Clear search</Button>} /> : <div className="stagger space-y-4">{visible.map(({ _id, role, registrationId: application, history, reason }) => {
+        {loading ? <SkeletonList rows={3} /> : applications.length === 0 ? <EmptyState title="No applications yet" description="Once you apply to an event, its full progress will be tracked here." action={<Button to="/events">Browse open events</Button>} /> : visible.length === 0 ? <EmptyState title="No matching applications" description="Try another event, club, team, or status." action={<Button variant="secondary" onClick={() => setSearch("")}>Clear search</Button>} /> : <div className="stagger space-y-4">{visible.map(({ _id, role, registrationId: application, history, reason, verticalTitle }) => {
           const event = application.eventId;
           const summary = applicationSummary(application);
+          const verticalLabel = verticalTitle || (event?.verticalsEnabled
+            ? (event.verticals || []).find((item) => String(item._id) === String(application.verticalId))?.title
+            : "");
           const individual = event?.registrationType === "individual";
           const roleLabel = individual ? "Individual applicant" : role === "captain" ? "Team captain" : "Team member";
           const status = history ? "withdrawn" : summary.status;
-          return <article key={_id} className={`card overflow-hidden border-l-4 ${status === "selected" ? "border-l-ok" : status === "rejected" ? "border-l-bad" : status === "waitlisted" ? "border-l-warn" : status === "withdrawn" ? "border-l-line-2" : "border-l-accent"}`}><div className="p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div className="flex min-w-0 gap-3.5">{event?.clubId?.clubLogo ? <img src={event.clubId.clubLogo} alt="" className="h-11 w-11 rounded-md border border-line object-contain p-1" /> : <Monogram name={event?.clubId?.name || "Club"} size="sm" />}<div className="min-w-0"><p className="eyebrow eyebrow-accent">{event?.clubId?.name || "Club"}</p><h2 className="display mt-1 text-xl leading-snug">{event?.title || "Event"}</h2><p className="mt-1.5 text-sm text-ink-3">{roleLabel} · Applied {formatDateTime(application.registeredAt)}{history ? ` · ${reason === "removed" ? "Removed from team" : reason === "left" ? "Left team" : "Withdrawn"}` : ""}</p></div></div><Badge tone={STATUS_TONE[status] || "neutral"} className="px-3 py-1.5 text-sm capitalize" live={status === "in_progress"}>{status?.replace("_", " ")}</Badge></div>
+          return <article key={_id} className={`card overflow-hidden border-l-4 ${status === "selected" ? "border-l-ok" : status === "rejected" ? "border-l-bad" : status === "waitlisted" ? "border-l-warn" : status === "withdrawn" ? "border-l-line-2" : "border-l-accent"}`}><div className="p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div className="flex min-w-0 gap-3.5">{event?.clubId?.clubLogo ? <img src={event.clubId.clubLogo} alt="" className="h-11 w-11 rounded-md border border-line object-contain p-1" /> : <Monogram name={event?.clubId?.name || "Club"} size="sm" />}<div className="min-w-0"><p className="eyebrow eyebrow-accent">{event?.clubId?.name || "Club"}</p><h2 className="display mt-1 text-xl leading-snug">{event?.title || "Event"}</h2>{verticalLabel && <p className="mt-1 text-sm font-medium text-accent">{verticalLabel}</p>}<p className="mt-1.5 text-sm text-ink-3">{roleLabel} · Applied {formatDateTime(application.registeredAt)}{history ? ` · ${reason === "removed" ? "Removed from team" : reason === "left" ? "Left team" : "Withdrawn"}` : ""}</p></div></div><Badge tone={STATUS_TONE[status] || "neutral"} className="px-3 py-1.5 text-sm capitalize" live={status === "in_progress"}>{status?.replace("_", " ")}</Badge></div>
 
           <div className="mt-6 grid gap-4 border-t border-line pt-5 sm:grid-cols-2 lg:grid-cols-4"><div><p className="eyebrow">Application</p><p className="mt-1.5 font-medium">{individual ? "Individual" : application.teamName || "Unnamed team"}</p></div><div><p className="eyebrow">Current stage</p><p className="mt-1.5 font-medium">{summary.currentRound ? `Round ${summary.currentRound.order}: ${summary.currentRound.title}` : "Submitted"}</p></div><div className="sm:col-span-2"><p className="eyebrow">{summary.next?.label || (TERMINAL.has(status) ? "Decision" : "Next date")}</p><p className="mt-1.5 font-medium">{summary.next ? formatDateTime(summary.next.value) : status === "selected" ? "Selection process completed" : status === "rejected" ? "This application will not move forward" : status === "withdrawn" ? "Application withdrawn" : "Not scheduled"}</p></div></div>
 

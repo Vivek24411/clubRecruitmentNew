@@ -150,7 +150,8 @@ router.get('/getClubSessions', publicCache(60), [
 router.get('/getDashboard', optionalStudentAuth, catalogueCache(60), getDashBoard)
 
 router.post('/registerEvent',studentAuth,[
-  body('eventId').isMongoId().withMessage("Invalid event ID")
+  body('eventId').isMongoId().withMessage("Invalid event ID"),
+  body('verticalId').optional().isMongoId().withMessage("Invalid vertical ID")
 ], validateRequest, registerEvent)
 
 router.get('/getEventDetails',studentAuth,[
@@ -158,45 +159,43 @@ router.get('/getEventDetails',studentAuth,[
 ], validateRequest, getEventDetails)
 
 router.post('/addMemberOffer', studentAuth, [
-  body('eventId').isMongoId().withMessage("Invalid event ID"),
+  body('registrationId').isMongoId().withMessage("Invalid application ID"),
   body('memberEmail').custom(isIitrEmail).withMessage("Invalid member email").bail().normalizeEmail().isLength({ max: 254 })
 ], validateRequest, addMemberOffer);
 
 router.post('/acceptMemberOffer', studentAuth, [
-  body('eventId').isMongoId().withMessage("Invalid event ID"),
-  body('studentId').isMongoId().withMessage("Invalid student ID")
+  body('registrationId').isMongoId().withMessage("Invalid application ID")
 ], validateRequest, acceptMemberOffer)
 
 router.post('/declineMemberOffer', studentAuth, [
-  body('eventId').isMongoId(),
-  body('captainId').isMongoId(),
+  body('registrationId').isMongoId(),
 ], validateRequest, declineMemberOffer)
 
 router.post('/cancelMemberOffer', studentAuth, [
-  body('eventId').isMongoId(),
+  body('registrationId').isMongoId(),
   body('memberEmail').custom(isIitrEmail).normalizeEmail(),
 ], validateRequest, cancelMemberOffer)
 
 router.post('/removeTeamMember', studentAuth, [
-  body('eventId').isMongoId(),
+  body('registrationId').isMongoId(),
   body('memberId').isMongoId(),
 ], validateRequest, removeTeamMember)
 
 router.post('/leaveTeam', studentAuth, [
-  body('eventId').isMongoId(),
+  body('registrationId').isMongoId(),
 ], validateRequest, leaveTeam)
 
 router.post('/transferCaptain', studentAuth, [
-  body('eventId').isMongoId(),
+  body('registrationId').isMongoId(),
   body('memberId').isMongoId(),
 ], validateRequest, transferCaptain)
 
 router.post('/unregisterAsCaptain',studentAuth, [
-  body('eventId').isMongoId().withMessage("Invalid event ID")
+  body('registrationId').isMongoId().withMessage("Invalid application ID")
 ], validateRequest, unregisteredAsCaptain)
 
 router.post('/addTeamName',studentAuth, [
-  body('eventId').isMongoId().withMessage("Invalid event ID"),
+  body('registrationId').isMongoId().withMessage("Invalid application ID"),
   body('teamName').isString().trim().isLength({ min: 2, max: 80 }).withMessage("Invalid team name")
 ], validateRequest, addTeamName)
 

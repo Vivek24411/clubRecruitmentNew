@@ -29,7 +29,9 @@ const { destroyCloudinaryAsset, destroyCloudinaryImage, destroyUploadedFile } = 
 const { normalizeProgrammeEligibility } = require("../services/academic.services");
 const { invalidatePrincipal } = require("../services/authPrincipalCache.services");
 const {
-  ensureEventRounds,
+  ensureEventVerticals,
+  eventVertical,
+  normalizeVerticals,
   normalizeRounds,
 } = require("../services/eventWorkflow.services");
 const DUMMY_PASSWORD_HASH = "$2b$12$4Qj6z7mmoEgcnxHLS0xDR.jjYdMm05/mtrLZVBInMaqjKAuvz9taa";
@@ -505,6 +507,10 @@ module.exports.addEvent = async (req, res) => {
       : round.evaluationScope,
   }));
   const roundDetails = req.body.roundsJSON ? [] : normalizedRoundDetails(rawRounds);
+  const verticalsEnabled = req.body.verticalsEnabled === true || req.body.verticalsEnabled === "true";
+  const requestedVerticals = normalizeVerticals(parsedArray(req.body.verticalsJSON), {
+    registrationType: registrationType || "team",
+  });
   const eligibilityMode = req.body.eligibilityMode === "all_iitr" ? "all_iitr" : "undergraduate";
   const legacyYears = parsedArray(req.body.eligibilityYearsJSON)
     .map(Number).filter((year) => year >= 1 && year <= 5);
@@ -551,6 +557,13 @@ module.exports.addEvent = async (req, res) => {
       status: status || "published",
       eventType: eventType || "recruitment",
       rounds,
+      // The model seeds a hidden default vertical from `rounds` when the club
+      // is not using verticals.
+      verticals: verticalsEnabled ? requestedVerticals : [],
+      verticalsEnabled: verticalsEnabled && requestedVerticals.length > 1,
+      maxVerticalApplications: req.body.maxVerticalApplications
+        ? Number(req.body.maxVerticalApplications)
+        : 1,
       numberOfRounds: rounds.length,
       eligibilityMode,
       programmeEligibility,
@@ -594,7 +607,7 @@ module.exports.getEvent = async (req, res) => {
       _id: eventId,
       clubId: req.club._id,
     });
-    await ensureEventRounds(event);
+    await ensureEventVerticals(event);
    
 
     if (!event) {
@@ -618,180 +631,6 @@ module.exports.getDashBoard = async (req, res) => {
   }
 }
 
-module.exports.getEventsRegisteredStudents = async (req, res) => {
-  try {
-    const error = validationResult(req);
-
-    if (!error.isEmpty()) {
-      return res.json({ errors: error.array(), success: false });
-    }
-
-    const { eventId } = req.query;
-
-    const event = await ownedEvent(eventId, req.club._id);
-    if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
-
-    const registeredStudents = await registerationEventModel.find({ eventId: event._id }).populate('studentId').populate('eventId').populate('membersAccepted');
-
-    return res.json({ success: true, registeredStudents });
-  } catch (err) {
-    
-    return res.json({ success: false, msg: "Failed to fetch registered students" });
-  }
-};
-
-module.exports.finalizeStudent = async (req, res) => {
-  try {
-    const error = validationResult(req);
-
-    if (!error.isEmpty()) {
-      return res.json({ errors: error.array(), success: false });
-    }
-
-    const { eventId, studentId } = req.body;
-
-    const event = await ownedEvent(eventId, req.club._id);
-    if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
-    const registration = await registerationEventModel.findOne({ eventId: event._id, studentId: studentId });
-
-    if (!registration) {
-      return res.json({ success: false, msg: "Registration not found" });
-    }
-    if (registration.overallStatus === "withdrawn") return res.status(409).json({ success: false, msg: "This application was withdrawn by the student" });
-    const teamSize = 1 + (registration.membersAccepted?.length || 0);
-    if (event.registrationType !== "individual" && teamSize < (event.minTeamSize || 1)) {
-      return res.status(400).json({ success: false, msg: "The team does not meet the event's minimum size" });
-    }
-
-    if (!registration.numberOfRounds || !registration.roundDetails[registration.numberOfRounds - 1]) {
-      return res.status(400).json({ success: false, msg: "Final round is not configured" });
-    }
-    registration.roundDetails[registration.numberOfRounds-1].selected = true;
-    registration.overallStatus = "selected";
-
-    // Mark the subdocument as modified so Mongoose knows to save it
-    registration.markModified('roundDetails');
-
-    await registration.save();
-
-    await notifyTeam(registration, {
-      type: "application_selected",
-      title: `Selected for ${event.title}`,
-      message: "Congratulations! Your team completed the final recruitment round.",
-      link: `/event/${eventId}`,
-    });
-    await writeAudit({ actorRole: "club", actorId: req.club._id, action: "application.finalize", targetType: "registration", targetId: registration._id });
-
-    return res.json({ success: true, msg: "Student finalized successfully" });
-  } catch (err) {
-    console.error("Error finalizing student:", err);
-    return res.json({ success: false, msg: "Failed to finalize student" });
-  }
-}
-
-module.exports.scheduleInterview = async (req, res) => {
-  try {
-    const error = validationResult(req);
-
-    if (!error.isEmpty()) {
-      return res.json({ errors: error.array(), success: false });
-    }
-
-    const { eventId, studentId, roundNumber, roundDate } = req.body;
-
-    const event = await ownedEvent(eventId, req.club._id);
-    if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
-    const registration = await registerationEventModel.findOne({ eventId: event._id, studentId: studentId });
-
-    if (!registration) {
-      return res.json({ success: false, msg: "Registration not found" });
-    }
-    if (registration.overallStatus === "withdrawn") return res.status(409).json({ success: false, msg: "This application was withdrawn by the student" });
-
-
-    
-    if (roundNumber < 1 || roundNumber > registration.numberOfRounds || !registration.roundDetails[roundNumber - 1]) {
-      return res.status(400).json({ success: false, msg: "Invalid round number" });
-    }
-    registration.roundDetails[roundNumber-1].roundDate = roundDate;
-    registration.roundDetails[roundNumber-1].status = "scheduled";
-    registration.currentRound = roundNumber;
-    registration.overallStatus = "in_progress";
-
-
-
-    // Mark the subdocument as modified so Mongoose knows to save it
-    registration.markModified('roundDetails');
-
-    await registration.save();
-
-    await notifyTeam(registration, {
-      type: "round_scheduled",
-      title: `Round ${roundNumber} scheduled`,
-      message: `Your next round for ${event.title} is scheduled for ${roundDate}.`,
-      link: `/event/${eventId}`,
-    });
-    await writeAudit({ actorRole: "club", actorId: req.club._id, action: "application.round_schedule", targetType: "registration", targetId: registration._id, metadata: { roundNumber, roundDate } });
-
-    return res.json({ success: true, msg: "Interview scheduled successfully" });
-  } catch (err) {
-    console.error("Error scheduling interview:", err);
-    return res.json({ success: false, msg: "Failed to schedule interview" });
-  }
-}
-
-
-module.exports.selectStudentForRound = async (req, res) => {
-  try {
-    const error = validationResult(req);
-
-    if (!error.isEmpty()) {
-      return res.json({ errors: error.array(), success: false });
-    }
-
-    const { eventId, studentId, roundNumber } = req.body;
-
-    const event = await ownedEvent(eventId, req.club._id);
-    if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
-    const registration = await registerationEventModel.findOne({ eventId: event._id, studentId: studentId });
-
-    if (!registration) {
-      return res.json({ success: false, msg: "Registration not found" });
-    }
-    if (registration.overallStatus === "withdrawn") return res.status(409).json({ success: false, msg: "This application was withdrawn by the student" });
-
-    if (roundNumber < 1 || roundNumber > registration.numberOfRounds || !registration.roundDetails[roundNumber - 1]) {
-      return res.status(400).json({ success: false, msg: "Invalid round number" });
-    }
-    registration.roundDetails[roundNumber-1].selected = true;
-    registration.roundDetails[roundNumber-1].status = "cleared";
-    registration.currentRound = Math.min(roundNumber + 1, registration.numberOfRounds);
-    registration.overallStatus = "in_progress";
-
-
-    // Mark the subdocument as modified so Mongoose knows to save it
-    registration.markModified('roundDetails');
-    await registration.save();
-
-    await notifyTeam(registration, {
-      type: "round_cleared",
-      title: `Round ${roundNumber} cleared`,
-      message: roundNumber === registration.numberOfRounds
-        ? "Your team cleared the final round."
-        : `Your team progressed to round ${roundNumber + 1}.`,
-      link: `/event/${eventId}`,
-    });
-    await writeAudit({ actorRole: "club", actorId: req.club._id, action: "application.round_clear", targetType: "registration", targetId: registration._id, metadata: { roundNumber } });
-
-    
-
-    return res.json({ success: true, msg: "Student selected for round successfully" });
-  } catch (err) {
-    console.error("Error selecting student for round:", err);
-    return res.json({ success: false, msg: "Failed to select student for round" });
-  }
-}
-
 module.exports.updateEvent = async (req, res) => {
   const event = await ownedEvent(req.params.eventId, req.club._id);
   if (!event) {
@@ -800,7 +639,8 @@ module.exports.updateEvent = async (req, res) => {
   }
 
   const previousDeadline = event.registrationDeadlineAt ? new Date(event.registrationDeadlineAt) : null;
-  const previousRoundDeadlines = new Map((event.rounds || []).map((round) => [
+  const allRounds = (target) => (target.verticals || []).flatMap((vertical) => vertical.rounds || []);
+  const previousRoundDeadlines = new Map(allRounds(event).map((round) => [
     String(round._id),
     round.submissionDeadlineAt ? new Date(round.submissionDeadlineAt).toISOString() : "",
   ]));
@@ -841,21 +681,54 @@ module.exports.updateEvent = async (req, res) => {
       event.eligibilityYears,
     );
   }
-  if (req.body.roundsJSON !== undefined) {
-    const rounds = normalizeRounds(parsedArray(req.body.roundsJSON)).map((round) => ({
-      ...round,
-      evaluationScope: (event.registrationType === "individual" || round.type === "test")
-        ? "participant"
-        : round.evaluationScope,
-    }));
-    const retainedRoundIds = new Set(rounds.filter((round) => round._id).map((round) => String(round._id)));
-    const removedRoundIds = (event.rounds || []).filter((round) => !retainedRoundIds.has(String(round._id))).map((round) => round._id);
+  if (req.body.maxVerticalApplications !== undefined) {
+    event.maxVerticalApplications = req.body.maxVerticalApplications
+      ? Number(req.body.maxVerticalApplications)
+      : null;
+  }
+  // Rounds arrive either as a flat list (no verticals) or nested inside
+  // verticalsJSON. Either way they land on the vertical they belong to.
+  if (req.body.verticalsJSON !== undefined || req.body.roundsJSON !== undefined) {
+    const incoming = req.body.verticalsJSON !== undefined
+      ? normalizeVerticals(parsedArray(req.body.verticalsJSON), { registrationType: event.registrationType })
+      : [{
+        ...(event.verticals?.[0]?.toObject ? event.verticals[0].toObject() : event.verticals?.[0] || {}),
+        rounds: normalizeRounds(parsedArray(req.body.roundsJSON)).map((round) => ({
+          ...round,
+          evaluationScope: (event.registrationType === "individual" || round.type === "test")
+            ? "participant"
+            : round.evaluationScope,
+        })),
+      }];
+
+    const retainedVerticalIds = new Set(incoming.filter((vertical) => vertical._id).map((vertical) => String(vertical._id)));
+    const removedVerticals = (event.verticals || []).filter((vertical) => !retainedVerticalIds.has(String(vertical._id)));
+    if (removedVerticals.length) {
+      const blocked = await registerationEventModel.exists({
+        eventId: event._id,
+        verticalId: { $in: removedVerticals.map((vertical) => vertical._id) },
+        overallStatus: { $ne: "withdrawn" },
+      });
+      if (blocked) {
+        await destroyUploadedFile(req.file);
+        return res.status(409).json({ success: false, msg: "A vertical with live applications cannot be removed. Close it instead" });
+      }
+    }
+
+    const retainedRoundIds = new Set(incoming.flatMap((vertical) =>
+      (vertical.rounds || []).filter((round) => round._id).map((round) => String(round._id))));
+    const removedRoundIds = allRounds(event)
+      .filter((round) => !retainedRoundIds.has(String(round._id)))
+      .map((round) => round._id);
     if (removedRoundIds.length && await roundCandidateModel.exists({ eventId: event._id, roundId: { $in: removedRoundIds } })) {
       await destroyUploadedFile(req.file);
       return res.status(409).json({ success: false, msg: "A round with candidate activity cannot be removed. Keep it and edit its details instead" });
     }
-    event.rounds = rounds;
-    event.numberOfRounds = rounds.length;
+
+    event.verticals = incoming;
+    event.verticalsEnabled = req.body.verticalsJSON !== undefined
+      ? incoming.length > 1
+      : event.verticalsEnabled;
   }
   const oldBannerPublicId = event.eventBannerPublicId;
   if (req.file) {
@@ -872,7 +745,7 @@ module.exports.updateEvent = async (req, res) => {
     await destroyCloudinaryImage(oldBannerPublicId);
   }
   const registrationDeadlineChanged = String(previousDeadline?.toISOString() || "") !== String(event.registrationDeadlineAt?.toISOString() || "");
-  const changedRoundDeadlines = (event.rounds || []).filter((round) =>
+  const changedRoundDeadlines = allRounds(event).filter((round) =>
     previousRoundDeadlines.has(String(round._id))
     && previousRoundDeadlines.get(String(round._id)) !== String(round.submissionDeadlineAt?.toISOString() || ""));
   const deadlineChanged = registrationDeadlineChanged || changedRoundDeadlines.length > 0;
@@ -1265,10 +1138,15 @@ function csvValue(value) {
 module.exports.exportApplications = async (req, res) => {
   const event = await ownedEvent(req.params.eventId, req.club._id);
   if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
-  const registrations = await registerationEventModel.find({ eventId: event._id }).populate("studentId").populate("membersAccepted");
-  const rows = [["Team", "Captain", "Email", "Phone", "Programme", "Branch / Discipline", "Year", "Members", "Status", "Score", "Registered At"]];
+  const vertical = eventVertical(event, req.query.verticalId);
+  const registrations = await registerationEventModel
+    .find({ eventId: event._id, ...(req.query.verticalId ? { verticalId: vertical?._id } : {}) })
+    .populate("studentId").populate("membersAccepted");
+  const verticalTitles = new Map((event.verticals || []).map((item) => [String(item._id), item.title]));
+  const rows = [["Vertical", "Team", "Captain", "Email", "Phone", "Programme", "Branch / Discipline", "Year", "Members", "Status", "Score", "Registered At"]];
   for (const registration of registrations) {
     rows.push([
+      verticalTitles.get(String(registration.verticalId)) || "",
       registration.teamName,
       registration.studentId?.name,
       registration.studentId?.email,
@@ -1284,7 +1162,7 @@ module.exports.exportApplications = async (req, res) => {
   }
   const csv = rows.map((row) => row.map(csvValue).join(",")).join("\n");
   res.set("Content-Type", "text/csv; charset=utf-8");
-  res.set("Content-Disposition", `attachment; filename="${String(event.title).replace(/[^a-z0-9_-]/gi, '_')}-applications.csv"`);
+  res.set("Content-Disposition", `attachment; filename="${String(event.title).replace(/[^a-z0-9_-]/gi, '_')}${vertical && req.query.verticalId ? `-${String(vertical.title).replace(/[^a-z0-9_-]/gi, '_')}` : ''}-applications.csv"`);
   return res.send(csv);
 };
 

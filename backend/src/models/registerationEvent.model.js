@@ -7,6 +7,10 @@ const registerationEventSchema = new mongoose.Schema({
         ref: 'Event',
         required: true
     },
+    verticalId: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true
+    },
     studentId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Student',
@@ -62,6 +66,7 @@ const registerationEventSchema = new mongoose.Schema({
     source: {
         type: { type: String, enum: ['direct', 'extracted'], default: 'direct' },
         eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', default: null },
+        verticalId: { type: mongoose.Schema.Types.ObjectId, default: null },
         roundId: { type: mongoose.Schema.Types.ObjectId, default: null },
         registrationId: { type: mongoose.Schema.Types.ObjectId, ref: 'RegisterationEvent', default: null },
     },
@@ -74,9 +79,10 @@ const registerationEventSchema = new mongoose.Schema({
 
 // A student may have multiple historical attempts after withdrawing. Active
 // membership uniqueness is enforced by EventMembership instead.
+registerationEventSchema.index({ eventId: 1, verticalId: 1, studentId: 1, registeredAt: -1 });
 registerationEventSchema.index({ eventId: 1, studentId: 1, registeredAt: -1 });
-registerationEventSchema.index({ eventId: 1, overallStatus: 1, registeredAt: 1 });
-registerationEventSchema.index({ eventId: 1, membersAccepted: 1, overallStatus: 1 });
+registerationEventSchema.index({ eventId: 1, verticalId: 1, overallStatus: 1, registeredAt: 1 });
+registerationEventSchema.index({ eventId: 1, verticalId: 1, membersAccepted: 1, overallStatus: 1 });
 registerationEventSchema.pre('save', function(next) {
     this.updatedAt = new Date();
     next();

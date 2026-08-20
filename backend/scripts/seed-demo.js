@@ -239,6 +239,11 @@ async function seed() {
     confirmedRsvpCount: 0,
   });
 
+  // Events created above get their hidden default vertical from the model
+  // hook; every registration and membership has to name it.
+  const roboticsVerticalId = roboticsEvent.verticals[0]._id;
+  const designVerticalId = designEvent.verticals[0]._id;
+
   const alice = students["demo.alice@example.test"];
   const bob = students["demo.bob@example.test"];
   const cara = students["demo.cara@example.test"];
@@ -246,9 +251,11 @@ async function seed() {
 
   const teamRegistration = await upsert(registrationModel, {
     eventId: roboticsEvent._id,
+    verticalId: roboticsVerticalId,
     studentId: alice._id,
   }, {
     eventId: roboticsEvent._id,
+    verticalId: roboticsVerticalId,
     studentId: alice._id,
     roundDetails: applicationRounds(roboticsEvent, ["cleared", "scheduled"]),
     membersAccepted: [bob._id],
@@ -265,9 +272,11 @@ async function seed() {
 
   const selectedRegistration = await upsert(registrationModel, {
     eventId: designEvent._id,
+    verticalId: designVerticalId,
     studentId: cara._id,
   }, {
     eventId: designEvent._id,
+    verticalId: designVerticalId,
     studentId: cara._id,
     roundDetails: applicationRounds(designEvent, ["cleared"]),
     membersAccepted: [],
@@ -283,22 +292,25 @@ async function seed() {
   });
 
   await Promise.all([
-    upsert(eventMembershipModel, { eventId: roboticsEvent._id, studentId: alice._id }, {
+    upsert(eventMembershipModel, { eventId: roboticsEvent._id, verticalId: roboticsVerticalId, studentId: alice._id }, {
       eventId: roboticsEvent._id,
+      verticalId: roboticsVerticalId,
       registrationId: teamRegistration._id,
       studentId: alice._id,
       role: "captain",
       joinedAt: teamRegistration.registeredAt,
     }),
-    upsert(eventMembershipModel, { eventId: roboticsEvent._id, studentId: bob._id }, {
+    upsert(eventMembershipModel, { eventId: roboticsEvent._id, verticalId: roboticsVerticalId, studentId: bob._id }, {
       eventId: roboticsEvent._id,
+      verticalId: roboticsVerticalId,
       registrationId: teamRegistration._id,
       studentId: bob._id,
       role: "member",
       joinedAt: teamRegistration.registeredAt,
     }),
-    upsert(eventMembershipModel, { eventId: designEvent._id, studentId: cara._id }, {
+    upsert(eventMembershipModel, { eventId: designEvent._id, verticalId: designVerticalId, studentId: cara._id }, {
       eventId: designEvent._id,
+      verticalId: designVerticalId,
       registrationId: selectedRegistration._id,
       studentId: cara._id,
       role: "captain",

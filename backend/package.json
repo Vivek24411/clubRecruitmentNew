@@ -12,8 +12,9 @@
     "migrate:v5": "node scripts/migrate-v5-programmes.js",
     "migrate:v6": "node scripts/migrate-v6-scale-indexes.js",
     "migrate:v7": "node scripts/migrate-v7-push-notifications.js",
+    "migrate:v8": "node scripts/migrate-v8-verticals.js",
     "seed:demo": "node scripts/seed-demo.js",
-    "check": "node --check app.js && node --check server.js && node --check worker.js && node --check src/middlewares/directUpload.js && node --check src/services/jobQueue.services.js && node --check src/services/firebaseMessaging.services.js && node --check src/services/authPrincipalCache.services.js && node --check scripts/seed-demo.js && node --check scripts/migrate-v4-discovr.js && node --check scripts/migrate-v5-programmes.js && node --check scripts/migrate-v6-scale-indexes.js && node --check scripts/migrate-v7-push-notifications.js"
+    "check": "node --check app.js && node --check server.js && node --check worker.js && node --check src/middlewares/directUpload.js && node --check src/services/jobQueue.services.js && node --check src/services/firebaseMessaging.services.js && node --check src/services/authPrincipalCache.services.js && node --check scripts/seed-demo.js && node --check scripts/migrate-v4-discovr.js && node --check scripts/migrate-v5-programmes.js && node --check scripts/migrate-v6-scale-indexes.js && node --check scripts/migrate-v7-push-notifications.js && node --check scripts/migrate-v8-verticals.js"
   },
   "keywords": [],
   "author": "",

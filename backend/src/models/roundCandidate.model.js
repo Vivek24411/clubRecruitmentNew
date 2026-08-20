@@ -2,6 +2,9 @@ const mongoose = require("mongoose");
 
 const roundCandidateSchema = new mongoose.Schema({
   eventId: { type: mongoose.Schema.Types.ObjectId, ref: "Event", required: true, index: true },
+  // Denormalised from the registration. roundId is already globally unique so
+  // round-scoped queries never needed this, but event-wide club queries do.
+  verticalId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
   roundId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
   registrationId: { type: mongoose.Schema.Types.ObjectId, ref: "RegisterationEvent", required: true, index: true },
   studentId: { type: mongoose.Schema.Types.ObjectId, ref: "Student", default: null },
@@ -30,5 +33,6 @@ roundCandidateSchema.index(
 roundCandidateSchema.index({ participantIds: 1, status: 1 });
 roundCandidateSchema.index({ sourceCandidateIds: 1 });
 roundCandidateSchema.index({ eventId: 1, roundId: 1, status: 1, createdAt: 1 });
+roundCandidateSchema.index({ eventId: 1, verticalId: 1, status: 1 });
 
 module.exports = mongoose.model("RoundCandidate", roundCandidateSchema);

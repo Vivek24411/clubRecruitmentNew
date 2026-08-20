@@ -1,3 +1,5 @@
+const { exactHttpOrigin, isLoopbackHostname, isPublicHttpsOrigin } = require("../utils/appOrigin");
+
 function validateEnv() {
   const required = ["JWT_SECRET", "MONGODB_URI"];
   const missing = required.filter((key) => !process.env[key]);
@@ -18,16 +20,28 @@ function validateEnv() {
   }
   if (process.env.ALLOWED_ORIGINS) {
     for (const origin of process.env.ALLOWED_ORIGINS.split(",").map((value) => value.trim()).filter(Boolean)) {
-      const parsed = new URL(origin);
-      if (!["http:", "https:"].includes(parsed.protocol) || parsed.origin !== origin || origin === "*") {
+      const parsed = exactHttpOrigin(origin);
+      if (!parsed || origin === "*") {
         throw new Error(`Invalid ALLOWED_ORIGINS entry: ${origin}`);
+      }
+      if (process.env.NODE_ENV === "production" && (parsed.protocol !== "https:" || isLoopbackHostname(parsed.hostname))) {
+        throw new Error(`Production ALLOWED_ORIGINS entries must be public HTTPS origins: ${origin}`);
       }
     }
   }
+  const studentOriginRequired = process.env.NODE_ENV === "production"
+    || Boolean(process.env.RESEND_API_KEY)
+    || process.env.PUSH_NOTIFICATIONS_ENABLED === "true";
+  if (studentOriginRequired && !process.env.STUDENT_APP_ORIGIN) {
+    throw new Error("STUDENT_APP_ORIGIN is required when notifications are enabled");
+  }
   if (process.env.STUDENT_APP_ORIGIN) {
-    const studentOrigin = new URL(process.env.STUDENT_APP_ORIGIN);
-    if (!["http:", "https:"].includes(studentOrigin.protocol) || studentOrigin.origin !== process.env.STUDENT_APP_ORIGIN) {
+    if (!exactHttpOrigin(process.env.STUDENT_APP_ORIGIN)) {
       throw new Error("STUDENT_APP_ORIGIN must be an exact HTTP(S) origin");
+    }
+    if ((process.env.NODE_ENV === "production" || process.env.RESEND_API_KEY)
+      && !isPublicHttpsOrigin(process.env.STUDENT_APP_ORIGIN)) {
+      throw new Error("STUDENT_APP_ORIGIN must be a public HTTPS origin when email delivery or production mode is enabled");
     }
   }
   if (process.env.TRUST_PROXY_HOPS && (!Number.isInteger(Number(process.env.TRUST_PROXY_HOPS)) || Number(process.env.TRUST_PROXY_HOPS) < 0)) {
@@ -43,8 +57,6 @@ function validateEnv() {
       || (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY)
       || process.env.GOOGLE_APPLICATION_CREDENTIALS;
     if (!hasFirebaseCredential) throw new Error("Firebase service-account credentials are required when push notifications are enabled");
-    if (!process.env.STUDENT_APP_ORIGIN) throw new Error("STUDENT_APP_ORIGIN is required when push notifications are enabled");
-
     let serviceAccountProjectId = "";
     try {
       if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {

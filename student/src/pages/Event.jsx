@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { daysUntil, eventDeadline, formatDateTime } from "../utils/date";
 import EventWorkflow from "../components/EventWorkflow";
+import VerticalApplication from "../components/VerticalApplication";
 import { StudentContextData } from "../context/StudentContext";
 import ClubLogo from "../components/ClubLogo";
 import {
@@ -102,12 +103,11 @@ export default function Event() {
   const navigate = useNavigate();
   const { loggedInStudent } = useContext(StudentContextData);
   const [event, setEvent] = useState(null);
-  const [view, setView] = useState(null);
-  const [detail, setDetail] = useState(null);
-  const [memberEmail, setMemberEmail] = useState("");
-  const [teamName, setTeamName] = useState("");
+  const [verticals, setVerticals] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [working, setWorking] = useState(false);
+  // Holds the id of the vertical whose action is in flight, so only that
+  // card shows a spinner while the rest simply lock.
+  const [working, setWorking] = useState(null);
   const [platformOpen, setPlatformOpen] = useState(true);
   const [eligibility, setEligibility] = useState({ eligible: true, reason: "" });
 
@@ -125,11 +125,9 @@ export default function Event() {
           `${import.meta.env.VITE_BASE_URI}/student/getEventDetails`,
           { params: { eventId } },
         );
-        setView(Number(applicationResponse.data.Show));
-        setDetail(applicationResponse.data.detail);
+        setVerticals(applicationResponse.data.verticals || []);
       } else {
-        setView(null);
-        setDetail(null);
+        setVerticals([]);
       }
     } catch (error) {
       toast.error(error.response?.data?.msg || error.message || "Could not load event");
@@ -142,9 +140,9 @@ export default function Event() {
     load();
   }, [load]);
 
-  const action = async (endpoint, payload = {}, confirmation) => {
+  const action = async (endpoint, payload = {}, confirmation, scope = "event") => {
     if (confirmation && !window.confirm(confirmation)) return;
-    setWorking(true);
+    setWorking(scope);
     try {
       const { data } = await axios.post(
         `${import.meta.env.VITE_BASE_URI}/student/${endpoint}`,
@@ -152,15 +150,13 @@ export default function Event() {
       );
       if (!data.success) throw new Error(data.msg);
       toast.success(data.msg);
-      setMemberEmail("");
-      setTeamName("");
       await load();
     } catch (error) {
       toast.error(
         error.response?.data?.msg || error.message || "Could not complete that action",
       );
     } finally {
-      setWorking(false);
+      setWorking(null);
     }
   };
 
@@ -189,10 +185,16 @@ export default function Event() {
 
   const deadline = eventDeadline(event);
   const open = platformOpen && eligibility.eligible !== false && event.status === "published" && (!deadline || deadline > new Date());
-  const isTeamEvent = event.registrationType !== "individual";
-  const registration = view === 1 || view === 2 ? detail : null;
-  const studentStatus = registration?.studentOverallStatus || registration?.overallStatus;
-  const maxTeam = event.maxTeamSize || 1;
+  const verticalsEnabled = Boolean(event.verticalsEnabled) && (event.verticals?.length || 0) > 1;
+  // Signed-out visitors still see the catalogue, so fall back to the event's
+  // own verticals when getEventDetails was never called.
+  const shownVerticals = verticals.length
+    ? verticals
+    : (event.verticals || []).map((vertical) => ({ ...vertical, show: 0, invitations: [], canApply: false }));
+  const primaryVertical = shownVerticals[0];
+  const hasApplication = shownVerticals.some((vertical) => vertical.show === 1 || vertical.show === 2);
+  const isTeamEvent = (primaryVertical?.registrationType || event.registrationType) !== "individual";
+  const maxTeam = primaryVertical?.maxTeamSize || event.maxTeamSize || 1;
   const daysLeft = daysUntil(deadline);
 
   const statusBadge = open ? (
@@ -333,359 +335,103 @@ export default function Event() {
             </div>
           </section>
 
-          {(event.rounds?.length > 0 || event.roundDetails?.length > 0) && (
+          {(event.verticals?.length > 0 || event.roundDetails?.length > 0) && (
             <section className="reveal ruled-top pt-8" style={{ "--d": "180ms" }}>
-              <h2 className="display text-xl">Selection process</h2>
-              <p className="mt-2 text-sm text-ink-3">
-                {(event.rounds || event.roundDetails).length} rounds from application to decision.
-              </p>
-              <RoundTimeline rounds={event.rounds || event.roundDetails} />
+              <h2 className="display text-xl">{verticalsEnabled ? "Verticals" : "Selection process"}</h2>
+              {verticalsEnabled ? (
+                <p className="mt-2 text-sm text-ink-3">
+                  This event runs {event.verticals.length} independent verticals. Each has its own rounds and its own teams
+                  {event.maxVerticalApplications === 1
+                    ? ", and you may apply to one of them."
+                    : event.maxVerticalApplications
+                      ? `, and you may apply to up to ${event.maxVerticalApplications}.`
+                      : "."}
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-ink-3">
+                  {(event.verticals?.[0]?.rounds || event.roundDetails || []).length} rounds from application to decision.
+                </p>
+              )}
+              <div className="mt-2 space-y-8">
+                {(event.verticals?.length
+                  ? event.verticals
+                  : [{ _id: "legacy", rounds: event.roundDetails || [] }]
+                ).map((vertical) => (
+                  <div key={vertical._id}>
+                    {verticalsEnabled && (
+                      <div className="mt-6 flex flex-wrap items-baseline gap-3">
+                        <h3 className="display text-lg">{vertical.title}</h3>
+                        {vertical.status === "closed" && <Badge tone="neutral">Closed</Badge>}
+                        <span className="text-sm text-ink-3">
+                          {vertical.registrationType === "individual"
+                            ? "Individual"
+                            : `Teams of ${vertical.minTeamSize}–${vertical.maxTeamSize}`}
+                        </span>
+                      </div>
+                    )}
+                    {vertical.description && (
+                      <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{vertical.description}</p>
+                    )}
+                    <RoundTimeline rounds={vertical.rounds || []} />
+                  </div>
+                ))}
+              </div>
             </section>
           )}
-          {registration && <EventWorkflow eventId={eventId} />}
+          {hasApplication && <EventWorkflow eventId={eventId} />}
         </div>
 
         {/* --------------------------------------------------------------- */}
-        {/* Application panel                                                */}
+        {/* Application panel — one card per vertical                        */}
         {/* --------------------------------------------------------------- */}
         <aside className="space-y-4 lg:sticky lg:top-24 lg:h-fit">
-          <Card className="reveal p-6" style={{ "--d": "160ms" }}>
-            {!loggedInStudent && (
-              <>
-                <h2 className="display text-lg">{open ? "Ready to apply?" : "Applications closed"}</h2>
-                <p className="mt-2.5 text-sm leading-relaxed text-ink-3">
-                  {open
-                    ? "Sign in with your student account to apply, build a team, and track every selection round."
-                    : "You can still explore this event. Sign in to view your existing application, if you have one."}
-                </p>
-                <Button
-                  block
-                  size="lg"
-                  className="mt-6"
-                  onClick={() => rememberEventAndNavigate("/login")}
-                >
-                  {open ? "Sign in to apply" : "Sign in"}
-                </Button>
-                <button
-                  type="button"
-                  onClick={() => rememberEventAndNavigate("/register")}
-                  className="link link-accent mt-4 block w-full text-center text-sm font-semibold"
-                >
-                  Create a student account
-                </button>
-              </>
-            )}
+          {!loggedInStudent && (
+            <Card className="reveal p-6" style={{ "--d": "160ms" }}>
+              <h2 className="display text-lg">{open ? "Ready to apply?" : "Applications closed"}</h2>
+              <p className="mt-2.5 text-sm leading-relaxed text-ink-3">
+                {open
+                  ? verticalsEnabled
+                    ? "Sign in with your student account to pick a vertical, build a team, and track every selection round."
+                    : "Sign in with your student account to apply, build a team, and track every selection round."
+                  : "You can still explore this event. Sign in to view your existing application, if you have one."}
+              </p>
+              <Button block size="lg" className="mt-6" onClick={() => rememberEventAndNavigate("/login")}>
+                {open ? "Sign in to apply" : "Sign in"}
+              </Button>
+              <button
+                type="button"
+                onClick={() => rememberEventAndNavigate("/register")}
+                className="link link-accent mt-4 block w-full text-center text-sm font-semibold"
+              >
+                Create a student account
+              </button>
+            </Card>
+          )}
 
-            {/* Not yet applied */}
-            {loggedInStudent && view === 0 && (
-              <>
-                <h2 className="display text-lg">Apply for this event</h2>
-                <p className="mt-2.5 text-sm leading-relaxed text-ink-3">
-                  {!platformOpen
-                    ? "The platform recruitment cycle is currently closed."
-                    : eligibility.eligible === false
-                      ? eligibility.reason
-                    : isTeamEvent
-                      ? "Register as captain, then invite teammates by their institute email."
-                      : "Submit an individual application."}
-                </p>
-                <Button
-                  block
-                  size="lg"
-                  className="mt-6"
-                  disabled={!open || working}
-                  loading={working}
-                  onClick={() => action("registerEvent")}
-                >
-                  {working ? "Submitting…" : open ? "Apply now" : "Applications closed"}
-                </Button>
-                {deadline && open && (
-                  <p className="mt-3 text-center text-xs text-ink-3">
-                    Closes {formatDateTime(deadline)}
-                  </p>
-                )}
-              </>
-            )}
+          {verticalsEnabled && loggedInStudent && event.maxVerticalApplications && (
+            <div className="rounded-sm border-l-2 border-accent bg-accent-tint/50 px-4 py-3 text-sm text-ink-2">
+              {event.maxVerticalApplications === 1
+                ? "You may apply to one vertical in this event."
+                : `You may apply to up to ${event.maxVerticalApplications} verticals in this event.`}
+            </div>
+          )}
 
-            {/* Captain view */}
-            {view === 1 && registration && (
-              <>
-                <div className="flex items-start justify-between gap-3">
-                  <h2 className="display text-lg">
-                    {isTeamEvent ? "Your team" : "Your application"}
-                  </h2>
-                  <Badge tone={studentStatus === "selected" ? "ok" : studentStatus === "rejected" ? "bad" : studentStatus === "waitlisted" ? "warn" : "info"} className="px-3 py-1.5 text-sm capitalize">
-                    {studentStatus?.replace("_", " ")}
-                  </Badge>
-                </div>
-
-                {isTeamEvent && (
-                  <>
-                    <form
-                      className="mt-6"
-                      onSubmit={(submitEvent) => {
-                        submitEvent.preventDefault();
-                        action("addTeamName", { teamName });
-                      }}
-                    >
-                      <Field label="Team name" id="teamName">
-                        <Input
-                          id="teamName"
-                          value={teamName}
-                          onChange={(changeEvent) => setTeamName(changeEvent.target.value)}
-                          placeholder={registration.teamName || "Choose a team name"}
-                          minLength={2}
-                          required
-                        />
-                      </Field>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        block
-                        className="mt-2.5"
-                        disabled={!open || working}
-                      >
-                        {registration.teamName ? "Rename team" : "Save team name"}
-                      </Button>
-                    </form>
-
-                    <div className="mt-6 border-t border-line pt-5">
-                      <p className="eyebrow">
-                        Members · {1 + (registration.membersAccepted?.length || 0)}/{maxTeam}
-                      </p>
-                      <p className="mt-1.5 text-xs leading-relaxed text-ink-4">The captain and accepted members are counted. Pending invitations are not.</p>
-                      <ul className="mt-3 space-y-2">
-                        <li className="flex items-center gap-3 rounded-sm bg-paper-2 px-3 py-2.5">
-                          <StudentAvatar student={registration.studentId} />
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">
-                              {registration.studentId?.name}
-                            </p>
-                            <p className="text-xs text-ink-3">Captain</p>
-                          </div>
-                        </li>
-                        {registration.membersAccepted?.map((member) => (
-                          <li
-                            key={member._id}
-                            className="flex items-center gap-3 rounded-sm bg-paper-2 px-3 py-2.5"
-                          >
-                            <StudentAvatar student={member} />
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium">{member.name}</p>
-                              <p className="truncate text-xs text-ink-3">{member.email}</p>
-                            </div>
-                            <div className="flex flex-col items-end gap-1.5"><button disabled={!open || working} onClick={() => action("transferCaptain", { memberId: member._id }, `Transfer captaincy to ${member.name}? You will become a regular team member.`)} className="link text-xs font-semibold text-accent disabled:opacity-40">Make captain</button><button disabled={!open || working} onClick={() => action("removeTeamMember", { memberId: member._id }, `Remove ${member.name} from the team?`)} className="link text-xs font-semibold text-bad disabled:opacity-40">Remove</button></div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {1 + (registration.membersAccepted?.length || 0) < (event.minTeamSize || 1) && (
-                      <p className="mt-4 rounded-sm border-l-2 border-warn bg-warn-tint/60 px-4 py-3 text-sm text-ink-2">
-                        Invite at least{" "}
-                        {(event.minTeamSize || 1) - 1 - (registration.membersAccepted?.length || 0)}{" "}
-                        more teammate(s) to meet the minimum team size.
-                      </p>
-                    )}
-
-                    {registration.membersOffered?.length > 0 && (
-                      <div className="mt-6">
-                        <p className="eyebrow">Pending invitations</p>
-                        <ul className="mt-3 space-y-2">
-                          {registration.membersOffered.map((member) => (
-                            <li
-                              key={member._id}
-                              className="flex items-center justify-between gap-3 rounded-sm border border-dashed border-line-2 px-3 py-2.5"
-                            >
-                              <span className="truncate text-sm text-ink-2">{member.email}</span>
-                              <button
-                                onClick={() =>
-                                  action("cancelMemberOffer", { memberEmail: member.email })
-                                }
-                                className="link text-xs font-semibold text-bad"
-                              >
-                                Cancel
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {registration.invitations?.length > 0 && (
-                      <div className="mt-6 border-t border-line pt-5">
-                        <p className="eyebrow">Invitations for you</p>
-                        <p className="mt-1.5 text-xs leading-relaxed text-ink-4">Accepting one will withdraw your current individual application and move you into that team.</p>
-                        <ul className="mt-3 space-y-2">
-                          {registration.invitations.map((offer) => (
-                            <li key={offer._id} className="rounded-sm border border-line p-3">
-                              <p className="text-sm font-semibold">{offer.teamName || `${offer.studentId?.name}'s team`}</p>
-                              <p className="mt-0.5 text-xs text-ink-3">Captain: {offer.studentId?.name}</p>
-                              <div className="mt-3 flex gap-2">
-                                <Button size="sm" disabled={!open || working} onClick={() => action("acceptMemberOffer", { studentId: offer.studentId?._id }, "Join this team? Your current individual application and its round work will be withdrawn.")}>Accept</Button>
-                                <Button size="sm" variant="secondary" disabled={working} onClick={() => action("declineMemberOffer", { captainId: offer.studentId?._id })}>Decline</Button>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    <form
-                      className="mt-6 border-t border-line pt-5"
-                      onSubmit={(submitEvent) => {
-                        submitEvent.preventDefault();
-                        action("addMemberOffer", { memberEmail });
-                      }}
-                    >
-                      <Field label="Invite by IITR email" id="memberEmail">
-                        <Input
-                          id="memberEmail"
-                          type="email"
-                          value={memberEmail}
-                          onChange={(changeEvent) => setMemberEmail(changeEvent.target.value)}
-                          placeholder="student@iitr.ac.in"
-                          required
-                        />
-                      </Field>
-                      <Button
-                        block
-                        size="sm"
-                        className="mt-2.5"
-                        disabled={
-                          !open ||
-                          working ||
-                          1 + (registration.membersAccepted?.length || 0) >= maxTeam
-                        }
-                      >
-                        Send invitation
-                      </Button>
-                    </form>
-                  </>
-                )}
-
-                <div className="mt-6 border-t border-line pt-5">
-                  <Link to="/applications" className="link link-accent block text-sm font-semibold">
-                    Track application →
-                  </Link>
-                  <button
-                    disabled={!open || working}
-                    onClick={() =>
-                      action(
-                        "unregisterAsCaptain",
-                        {},
-                        "Withdraw this application? Your team will be disbanded.",
-                      )
-                    }
-                    className="link mt-4 text-sm font-semibold text-bad disabled:opacity-40"
-                  >
-                    Withdraw application
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* Member view */}
-            {view === 2 && registration && (
-              <>
-                <div className="flex items-start justify-between gap-3"><h2 className="display text-lg">You joined this team</h2><Badge tone={studentStatus === "selected" ? "ok" : studentStatus === "rejected" ? "bad" : studentStatus === "waitlisted" ? "warn" : "info"} className="capitalize">{studentStatus?.replace("_", " ")}</Badge></div>
-                <p className="mt-3 text-base font-semibold">
-                  {registration.teamName || "Unnamed team"}
-                </p>
-                <ul className="mt-5 space-y-2">
-                  <li className="flex items-center gap-3 rounded-sm bg-paper-2 px-3 py-2.5">
-                    <StudentAvatar student={registration.studentId} />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{registration.studentId?.name}</p>
-                      <p className="text-xs text-ink-3">Captain</p>
-                    </div>
-                  </li>
-                  {registration.membersAccepted?.map((member) => (
-                    <li
-                      key={member._id}
-                      className="flex items-center gap-3 rounded-sm bg-paper-2 px-3 py-2.5"
-                    >
-                      <StudentAvatar student={member} />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{member.name}</p>
-                        <p className="truncate text-xs text-ink-3">{member.email}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-6 border-t border-line pt-5">
-                  <Link to="/applications" className="link link-accent block text-sm font-semibold">
-                    Track application →
-                  </Link>
-                  <button
-                    disabled={!open || working}
-                    onClick={() =>
-                      action(
-                        "leaveTeam",
-                        {},
-                        "Leave this team? You may need a new invitation to rejoin.",
-                      )
-                    }
-                    className="link mt-4 text-sm font-semibold text-bad disabled:opacity-40"
-                  >
-                    Leave team
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* Pending invitations */}
-            {view === 3 && Array.isArray(detail) && (
-              <>
-                <h2 className="display text-lg">Team invitations</h2>
-                <p className="mt-2.5 text-sm text-ink-3">
-                  Accept one team, or start your own application.
-                </p>
-                <ul className="mt-5 space-y-3">
-                  {detail.map((offer) => (
-                    <li key={offer._id} className="rounded-sm border border-line p-4">
-                      <p className="font-semibold">
-                        {offer.teamName || `${offer.studentId?.name}'s team`}
-                      </p>
-                      <p className="mt-0.5 text-sm text-ink-3">
-                        Captain: {offer.studentId?.name}
-                      </p>
-                      <div className="mt-3.5 flex gap-2">
-                        <Button
-                          size="sm"
-                          className="flex-1"
-                          disabled={!open || working}
-                          onClick={() =>
-                            action("acceptMemberOffer", { studentId: offer.studentId?._id })
-                          }
-                        >
-                          Accept
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="flex-1"
-                          disabled={working}
-                          onClick={() =>
-                            action("declineMemberOffer", { captainId: offer.studentId?._id })
-                          }
-                        >
-                          Decline
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  disabled={!open || working}
-                  onClick={() => action("registerEvent")}
-                  className="link link-accent mt-5 text-sm font-semibold disabled:opacity-40"
-                >
-                  Start my own application
-                </button>
-              </>
-            )}
-          </Card>
+          {loggedInStudent && shownVerticals.map((vertical, index) => (
+            <Card key={vertical._id} className="reveal p-6" style={{ "--d": `${160 + index * 40}ms` }}>
+              <VerticalApplication
+                vertical={vertical}
+                event={event}
+                loggedInStudent={loggedInStudent}
+                platformOpen={platformOpen}
+                working={working}
+                action={(endpoint, payload, confirmation) =>
+                  action(endpoint, payload, confirmation, vertical._id)}
+                onSignIn={() => rememberEventAndNavigate("/login")}
+                onRegister={() => rememberEventAndNavigate("/register")}
+                showHeading={verticalsEnabled}
+              />
+            </Card>
+          ))}
         </aside>
       </div>
     </Page>

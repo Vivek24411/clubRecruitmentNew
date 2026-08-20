@@ -67,6 +67,36 @@ roundSchema.pre("validate", function(next) {
   next();
 });
 
+// A vertical (or track) is an independent sub-event: its own rounds, its own
+// teams, its own decisions. Every event has at least one. Events that do not
+// use verticals carry a single `isDefault` vertical that no UI ever shows, so
+// the workflow engine never has to ask whether verticals are in play.
+const verticalSchema = new mongoose.Schema({
+  title: { type: String, required: true, trim: true, maxlength: 120 },
+  shortDescription: { type: String, default: "", maxlength: 500 },
+  description: { type: String, default: "", maxlength: 5000 },
+  order: { type: Number, required: true, min: 1, max: 20 },
+  isDefault: { type: Boolean, default: false },
+  status: { type: String, enum: ["open", "closed"], default: "open" },
+
+  registrationType: {
+    type: String,
+    enum: ["individual", "team", "optional_team"],
+    default: "team",
+  },
+  minTeamSize: { type: Number, default: 1, min: 1 },
+  maxTeamSize: { type: Number, default: 1, min: 1, max: 10000 },
+  maxParticipants: { type: Number, default: null, min: 1, max: 10000 },
+
+  // null / empty means "inherit whatever the event says".
+  registrationDeadlineAt: { type: Date, default: null },
+  eligibilityMode: { type: String, enum: ["undergraduate", "all_iitr", null], default: null },
+  programmeEligibility: { type: [programmeEligibilitySchema], default: [] },
+
+  rounds: { type: [roundSchema], default: [] },
+  numberOfRounds: { type: Number, default: 0, min: 0, max: 20 },
+}, { timestamps: true });
+
 const eventSchema = new mongoose.Schema({
   clubId: { type: mongoose.Schema.Types.ObjectId, ref: "Club", required: true },
   title: { type: String, required: true, trim: true, maxlength: 150 },
@@ -79,6 +109,8 @@ const eventSchema = new mongoose.Schema({
   longDescription: { type: String, required: true, maxlength: 10000 },
   registerationDeadline: { type: String, maxlength: 10 },
   registrationDeadlineAt: { type: Date, default: null },
+  // Event-level team settings seed each new vertical. The workflow engine reads
+  // the vertical's own copy, never these.
   registrationType: {
     type: String,
     enum: ["individual", "team", "optional_team"],
@@ -90,7 +122,14 @@ const eventSchema = new mongoose.Schema({
   ContactInfo: { type: [String], default: [] },
   // Retained during the migration window so old records and old clients remain readable.
   roundDetails: { type: Array, default: [] },
+  // Superseded by verticals[].rounds. Kept as a frozen legacy snapshot so the
+  // one-time backfill stays re-runnable; no new code writes it.
   rounds: { type: [roundSchema], default: [] },
+  verticals: { type: [verticalSchema], default: [] },
+  // Whether the club presents verticals to students at all.
+  verticalsEnabled: { type: Boolean, default: false },
+  // How many verticals of this event one student may apply to. null = unlimited.
+  maxVerticalApplications: { type: Number, default: 1, min: 1, max: 20 },
   eligibility: { type: String, default: "", maxlength: 2000 },
   eligibilityMode: {
     type: String,
@@ -140,15 +179,57 @@ eventSchema.pre("validate", function(next) {
   if (this.maxTeamSize < this.minTeamSize) {
     return next(new Error("Maximum team size cannot be smaller than minimum team size"));
   }
-  if (this.rounds?.length) {
-    this.rounds.forEach((round, index) => {
-      round.order = index + 1;
-      if (this.registrationType === "individual" || round.type === "test") {
+
+  // Every event carries at least one vertical. Events that predate verticals,
+  // or that never enabled them, get a hidden default seeded from the event.
+  if (!this.verticals?.length) {
+    this.verticals = [{
+      title: this.title || "General",
+      order: 1,
+      isDefault: true,
+      registrationType: this.registrationType,
+      minTeamSize: this.minTeamSize,
+      maxTeamSize: this.maxTeamSize,
+      maxParticipants: this.maxParticipants,
+      rounds: (this.rounds || []).map((round) => (round.toObject ? round.toObject() : round)),
+    }];
+  }
+
+  for (const [index, vertical] of this.verticals.entries()) {
+    vertical.order = index + 1;
+    if (this.verticalsEnabled) vertical.isDefault = false;
+    if (vertical.registrationType === "individual") {
+      vertical.minTeamSize = 1;
+      vertical.maxTeamSize = 1;
+    }
+    if (vertical.maxTeamSize < vertical.minTeamSize) {
+      return next(new Error(`Maximum team size cannot be smaller than minimum team size in ${vertical.title}`));
+    }
+    if (vertical.eligibilityMode) {
+      vertical.programmeEligibility = normalizeProgrammeEligibility(
+        vertical.programmeEligibility,
+        vertical.eligibilityMode,
+        [],
+      );
+    } else {
+      vertical.programmeEligibility = [];
+    }
+    (vertical.rounds || []).forEach((round, roundIndex) => {
+      round.order = roundIndex + 1;
+      if (vertical.registrationType === "individual" || round.type === "test") {
         round.evaluationScope = "participant";
       }
     });
-    this.numberOfRounds = this.rounds.length;
+    vertical.numberOfRounds = vertical.rounds?.length || 0;
   }
+
+  if (this.verticalsEnabled && this.verticals.length < 2) {
+    return next(new Error("An event with verticals needs at least two verticals"));
+  }
+  if (this.maxVerticalApplications != null && this.maxVerticalApplications > this.verticals.length) {
+    this.maxVerticalApplications = this.verticals.length;
+  }
+  this.numberOfRounds = this.verticals[0]?.numberOfRounds || 0;
   next();
 });
 
@@ -167,3 +248,4 @@ eventSchema.index({ status: 1, registrationDeadlineAt: 1, publishedAt: -1 });
 
 module.exports = mongoose.model("Event", eventSchema);
 module.exports.roundSchema = roundSchema;
+module.exports.verticalSchema = verticalSchema;

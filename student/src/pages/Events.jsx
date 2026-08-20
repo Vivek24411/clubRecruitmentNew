@@ -315,9 +315,11 @@ export default function Events() {
                         </dd>
                       </div>
                       <div className="flex justify-between gap-3">
-                        <dt className="text-ink-3">Rounds</dt>
+                        <dt className="text-ink-3">{event.verticalsEnabled ? "Verticals" : "Rounds"}</dt>
                         <dd className="tabular font-medium">
-                          {event.numberOfRounds || event.roundDetails?.length || "—"}
+                          {event.verticalsEnabled
+                            ? event.verticals.length
+                            : event.verticals?.[0]?.numberOfRounds || event.numberOfRounds || event.roundDetails?.length || "—"}
                         </dd>
                       </div>
                     </dl>

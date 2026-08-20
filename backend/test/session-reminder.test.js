@@ -12,6 +12,8 @@ const {
 } = require("../src/services/jobQueue.services");
 const { formatNotificationDateTime } = require("../src/services/student.services");
 const { sessionEndAt, sessionHasEnded } = require("../src/utils/sessionSchedule");
+const { buildPublicAppUrl, isPublicHttpsOrigin } = require("../src/utils/appOrigin");
+const validateEnv = require("../src/config/validateEnv");
 
 test("job records support scheduled session reminders", () => {
   assert.ok(jobModel.schema.path("type").enumValues.includes("session_reminder"));
@@ -68,6 +70,52 @@ test("reminder email data contains the session name, time, venue, and meeting li
   assert.equal(notification.emailDetails.venue, "L-2, Lecture Hall Complex");
   assert.equal(notification.emailDetails.meetingUrl, "https://meet.google.com/example");
   assert.equal(notification.link, `/session/${session._id}`);
+});
+
+test("email links use only a public HTTPS student origin", () => {
+  const path = "/session/507f1f77bcf86cd799439011";
+  assert.equal(
+    buildPublicAppUrl(path, "https://discovr.devx6.live"),
+    `https://discovr.devx6.live${path}`,
+  );
+  assert.equal(buildPublicAppUrl(path, "http://localhost:5173"), null);
+  assert.equal(buildPublicAppUrl(path, "https://127.0.0.1"), null);
+  assert.equal(buildPublicAppUrl(path, "https://[::1]"), null);
+  assert.equal(buildPublicAppUrl("//evil.example/session", "https://discovr.devx6.live"), null);
+  assert.equal(isPublicHttpsOrigin("https://discovr.devx6.live"), true);
+  assert.equal(isPublicHttpsOrigin("http://discovr.devx6.live"), false);
+});
+
+test("startup rejects a localhost student origin when real email delivery is enabled", () => {
+  const keys = [
+    "ADMIN_EMAIL",
+    "ADMIN_PASSWORD",
+    "ADMIN_PASSWORD_HASH",
+    "JWT_SECRET",
+    "MONGODB_URI",
+    "NODE_ENV",
+    "PUSH_NOTIFICATIONS_ENABLED",
+    "RESEND_API_KEY",
+    "STUDENT_APP_ORIGIN",
+  ];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    process.env.ADMIN_EMAIL = "admin@example.com";
+    process.env.ADMIN_PASSWORD = "development-only";
+    delete process.env.ADMIN_PASSWORD_HASH;
+    process.env.JWT_SECRET = "test-secret-that-is-longer-than-thirty-two-characters";
+    process.env.MONGODB_URI = "mongodb://localhost/test";
+    process.env.NODE_ENV = "development";
+    process.env.PUSH_NOTIFICATIONS_ENABLED = "false";
+    process.env.RESEND_API_KEY = "test-resend-key";
+    process.env.STUDENT_APP_ORIGIN = "http://localhost:5173";
+    assert.throws(validateEnv, /public HTTPS origin/);
+  } finally {
+    keys.forEach((key) => {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    });
+  }
 });
 
 test("sessions support optional online access details", () => {

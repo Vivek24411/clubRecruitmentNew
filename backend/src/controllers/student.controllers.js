@@ -39,7 +39,11 @@ const { getPlatformSettingsCached } = require("../services/platformConfiguration
 const { invalidatePrincipal } = require("../services/authPrincipalCache.services");
 const {
   candidateIncludesStudent,
-  ensureEventRounds,
+  ensureEventVerticals,
+  eventVertical,
+  verticalRounds,
+  verticalEligibilitySource,
+  verticalDeadlineAt,
   initializeRegistrationWorkflow,
   registrationParticipantIds,
   removeParticipantFromRegistrationWorkflow,
@@ -109,6 +113,8 @@ async function recordApplicationHistory({ studentId, registration, role, reason 
     await applicationHistoryModel.create({
       studentId,
       eventId: registration.eventId,
+      verticalId: registration.verticalId || null,
+      verticalTitle: registration.verticalTitle || "",
       registrationId: registration._id,
       captainId: registration.studentId,
       role,
@@ -126,7 +132,7 @@ async function recordApplicationHistory({ studentId, registration, role, reason 
 
 async function registrationForStudent(registration, event, studentId) {
   if (!registration) return null;
-  const workflowEvent = await ensureEventRounds(event?._id ? event : await eventModel.findById(event));
+  const workflowEvent = await ensureEventVerticals(event?._id ? event : await eventModel.findById(event));
   const candidates = await roundCandidateModel.find({
     registrationId: registration._id,
     status: { $ne: "revoked" },
@@ -138,12 +144,13 @@ async function registrationForStudent(registration, event, studentId) {
       candidates,
       studentId,
       registration.overallStatus,
+      registration.verticalId,
     ),
   };
 }
 
-async function activeEventMembership(eventId, studentId) {
-  const membership = await eventMembershipModel.findOne({ eventId, studentId });
+async function activeEventMembership(eventId, verticalId, studentId) {
+  const membership = await eventMembershipModel.findOne({ eventId, verticalId, studentId });
   if (!membership) return null;
   const registration = await registerationEventModel.findById(membership.registrationId)
     .select("overallStatus");
@@ -152,9 +159,10 @@ async function activeEventMembership(eventId, studentId) {
   return null;
 }
 
-async function activeParticipantCount(eventId) {
+async function activeParticipantCount(eventId, verticalId) {
   const registrations = await registerationEventModel.find({
     eventId,
+    verticalId,
     overallStatus: { $ne: "withdrawn" },
   }).select("studentId membersAccepted").lean();
   const participantIds = new Set();
@@ -625,17 +633,27 @@ module.exports.getAllEvents = async (req, res) => {
       ? await eventMembershipModel.find({ studentId: req.student._id, eventId: { $in: eventIds } })
         .populate("registrationId", "overallStatus")
       : [];
-    const applications = new Map(memberships.map((membership) => [String(membership.eventId), {
-      registrationId: membership.registrationId?._id || membership.registrationId,
-      role: membership.role,
-      overallStatus: membership.registrationId?.overallStatus,
-    }]));
+    const applications = new Map();
+    for (const membership of memberships) {
+      const key = String(membership.eventId);
+      if (!applications.has(key)) applications.set(key, []);
+      applications.get(key).push({
+        registrationId: membership.registrationId?._id || membership.registrationId,
+        verticalId: membership.verticalId,
+        role: membership.role,
+        overallStatus: membership.registrationId?.overallStatus,
+      });
+    }
     return res.json({
       success: true,
-      events: events.filter((event) => event.clubId).map((event) => ({
-        ...event.toObject(),
-        application: applications.get(String(event._id)) || null,
-      })),
+      events: events.filter((event) => event.clubId).map((event) => {
+        const mine = applications.get(String(event._id)) || [];
+        return {
+          ...event.toObject(),
+          applications: mine,
+          application: mine[0] || null,
+        };
+      }),
     });
   } catch (error) {
 
@@ -661,7 +679,7 @@ module.exports.getEvent = async (req, res) => {
     if (!event || !event.clubId) {
       return res.json({ success: false, msg: "Event not found" });
     }
-    await ensureEventRounds(event);
+    await ensureEventVerticals(event);
     const eligibility = req.student ? eventEligibility(event, req.student, settings) : null;
     return res.json({
       success: true,
@@ -744,7 +762,7 @@ module.exports.registerEvent = async (req, res, next) => {
       return res.json({ errors: errors.array(), success: false });
     }
 
-    const { eventId } = req.body;
+    const { eventId, verticalId } = req.body;
     const studentId = req.student._id;
 
     const [event, settings] = await Promise.all([
@@ -754,7 +772,12 @@ module.exports.registerEvent = async (req, res, next) => {
     if (!event) {
       return res.json({ success: false, msg: "Event not found" });
     }
-    await ensureEventRounds(event);
+    await ensureEventVerticals(event);
+
+    const vertical = eventVertical(event, verticalId);
+    if (!vertical) {
+      return res.status(404).json({ success: false, msg: "This vertical is no longer available" });
+    }
 
     if (!platformRegistrationIsOpen(settings)) {
       return res.status(403).json({ success: false, msg: "Recruitment registrations are currently closed" });
@@ -765,36 +788,62 @@ module.exports.registerEvent = async (req, res, next) => {
     if (!registrationIsOpen(event)) {
       return res.status(400).json({ success: false, msg: "Registration is closed" });
     }
+    if (vertical.status === "closed") {
+      return res.status(400).json({ success: false, msg: `Applications to ${vertical.title} are closed` });
+    }
+    const verticalDeadline = verticalDeadlineAt(event, vertical);
+    if (verticalDeadline && new Date(verticalDeadline) < new Date()) {
+      return res.status(400).json({ success: false, msg: `The deadline for ${vertical.title} has passed` });
+    }
 
-    const eligibility = eventEligibility(event, req.student, settings);
+    const eligibility = eventEligibility(verticalEligibilitySource(event, vertical), req.student, settings);
     if (!eligibility.eligible) {
       return res.status(403).json({ success: false, msg: eligibility.reason });
     }
 
-    const existingMembership = await activeEventMembership(eventId, studentId);
+    const existingMembership = await activeEventMembership(eventId, vertical._id, studentId);
     const acceptedElsewhere = await registerationEventModel.exists({
       eventId,
+      verticalId: vertical._id,
       membersAccepted: studentId,
       overallStatus: { $ne: "withdrawn" },
     });
     if (existingMembership || acceptedElsewhere) {
-      return res.status(409).json({ success: false, msg: "You already belong to a team for this event" });
+      return res.status(409).json({ success: false, msg: `You already belong to a team in ${vertical.title}` });
     }
 
     const alreadyRegistered = await registerationEventModel.findOne({
       eventId,
+      verticalId: vertical._id,
       studentId,
       overallStatus: { $ne: "withdrawn" },
     });
     if (alreadyRegistered) {
       return res.json({
         success: false,
-        msg: "Already registered for this event",
+        msg: `You have already applied to ${vertical.title}`,
       });
     }
 
-    if (event.maxParticipants && await activeParticipantCount(eventId) >= event.maxParticipants) {
-      return res.status(409).json({ success: false, msg: "This event has reached its participant limit" });
+    // How many other verticals of this event the student is already in.
+    if (event.maxVerticalApplications != null) {
+      const otherApplications = await eventMembershipModel.countDocuments({
+        eventId,
+        studentId,
+        verticalId: { $ne: vertical._id },
+      });
+      if (otherApplications >= event.maxVerticalApplications) {
+        return res.status(409).json({
+          success: false,
+          msg: event.maxVerticalApplications === 1
+            ? "This event lets you apply to only one vertical"
+            : `You can apply to at most ${event.maxVerticalApplications} verticals in this event`,
+        });
+      }
+    }
+
+    if (vertical.maxParticipants && await activeParticipantCount(eventId, vertical._id) >= vertical.maxParticipants) {
+      return res.status(409).json({ success: false, msg: `${vertical.title} has reached its participant limit` });
     }
 
     const roundDetailsStudent = (event.roundDetails || []).map((round) => ({
@@ -809,11 +858,11 @@ module.exports.registerEvent = async (req, res, next) => {
     const resetAt = new Date();
     let reusedWithdrawnAttempt = true;
     let registeration = await registerationEventModel.findOneAndUpdate(
-      { eventId, studentId, overallStatus: "withdrawn" },
+      { eventId, verticalId: vertical._id, studentId, overallStatus: "withdrawn" },
       {
         $set: {
           roundDetails: roundDetailsStudent,
-          numberOfRounds: event.numberOfRounds,
+          numberOfRounds: vertical.numberOfRounds,
           membersAccepted: [],
           membersOffered: [],
           teamName: null,
@@ -822,7 +871,7 @@ module.exports.registerEvent = async (req, res, next) => {
           currentRoundId: null,
           reviewerNotes: "",
           score: null,
-          source: { type: "direct", eventId: null, roundId: null, registrationId: null },
+          source: { type: "direct", eventId: null, verticalId: null, roundId: null, registrationId: null },
           registeredAt: resetAt,
           updatedAt: resetAt,
         },
@@ -843,9 +892,10 @@ module.exports.registerEvent = async (req, res, next) => {
       try {
         registeration = await registerationEventModel.create({
           eventId,
+          verticalId: vertical._id,
           studentId,
           roundDetails: roundDetailsStudent,
-          numberOfRounds: event.numberOfRounds,
+          numberOfRounds: vertical.numberOfRounds,
         });
       } catch (error) {
         if (error?.code === 11000) {
@@ -858,6 +908,7 @@ module.exports.registerEvent = async (req, res, next) => {
     try {
       await eventMembershipModel.create({
         eventId,
+        verticalId: vertical._id,
         registrationId: registeration._id,
         studentId,
         role: "captain",
@@ -870,13 +921,14 @@ module.exports.registerEvent = async (req, res, next) => {
         await registerationEventModel.deleteOne({ _id: registeration._id });
       }
       if (error?.code === 11000) {
-        return res.status(409).json({ success: false, msg: "You already belong to a team for this event" });
+        return res.status(409).json({ success: false, msg: `You already belong to a team in ${vertical.title}` });
       }
       throw error;
     }
 
+    // Pending invitations from other teams in this same vertical no longer apply.
     await registerationEventModel.updateMany(
-      { eventId, membersOffered: studentId },
+      { eventId, verticalId: vertical._id, membersOffered: studentId },
       { $pull: { membersOffered: studentId } }
     );
     await initializeRegistrationWorkflow(event, registeration);
@@ -895,6 +947,48 @@ module.exports.registerEvent = async (req, res, next) => {
   }
 };
 
+// Every team action is keyed on the registration rather than on (event,
+// student): a student can hold one application per vertical, so the old pair
+// no longer identifies a single team.
+async function teamContext(registrationId, studentId) {
+  const registration = await registerationEventModel.findOne({
+    _id: registrationId,
+    overallStatus: { $ne: "withdrawn" },
+  });
+  if (!registration) return { error: "Application not found", status: 404 };
+  const event = await ensureEventVerticals(await eventModel.findById(registration.eventId));
+  if (!event) return { error: "Event not found", status: 404 };
+  const vertical = eventVertical(event, registration.verticalId);
+  if (!vertical) return { error: "This vertical is no longer available", status: 404 };
+  return {
+    registration,
+    event,
+    vertical,
+    isCaptain: String(registration.studentId) === String(studentId),
+    isMember: (registration.membersAccepted || []).some((id) => String(id) === String(studentId)),
+  };
+}
+
+// Shared gate for every mutating team action.
+async function teamGate(res, registrationId, studentId, { requireCaptain = false, closedMessage = "Registration is closed" } = {}) {
+  const context = await teamContext(registrationId, studentId);
+  if (context.error) {
+    res.status(context.status).json({ success: false, msg: context.error });
+    return null;
+  }
+  if (!registrationIsOpen(context.event)) {
+    res.status(400).json({ success: false, msg: closedMessage });
+    return null;
+  }
+  if (!await requireActiveEventClub(context.event, res)) return null;
+  if (!await requireOpenRecruitment(res)) return null;
+  if (requireCaptain && !context.isCaptain) {
+    res.status(403).json({ success: false, msg: "Only the team captain can do this" });
+    return null;
+  }
+  return context;
+}
+
 module.exports.getEventDetails = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -904,74 +998,83 @@ module.exports.getEventDetails = async (req, res, next) => {
   const { eventId } = req.query;
   const studentId = req.student._id;
 
-  const captainExists = await registerationEventModel
-    .findOne({
-      eventId,
-      studentId,
-      overallStatus: { $ne: "withdrawn" },
-    })
-    .populate("eventId")
-    .populate("studentId", "name email profilePicture")
-    .populate("membersAccepted", "name email profilePicture")
-    .populate("membersOffered", "name email profilePicture");
-
-  if (captainExists) {
-    const invitations = await registerationEventModel
-      .find({
-        eventId,
-        _id: { $ne: captainExists._id },
-        membersOffered: studentId,
-        overallStatus: { $ne: "withdrawn" },
-      })
-      .populate("studentId", "name email profilePicture")
-      .select("studentId teamName membersAccepted");
-    return res.json({
-      success: true,
-      detail: {
-        ...await registrationForStudent(captainExists, captainExists.eventId, studentId),
-        invitations,
-      },
-      Show: 1,
-    });
-  }
-
-  const memberAccepted = await registerationEventModel
-    .findOne({
-      eventId,
-      membersAccepted: studentId, //{ $in: [studentId] }, thsi could be sued id we want to pass mutliple sutdentids and documents conatisn atlease one stidentdi
-      overallStatus: { $ne: "withdrawn" },
-    })
-    .populate("eventId")
-    .populate("studentId", "name email profilePicture")
-    .populate("membersAccepted", "name email profilePicture");
-
-  if (memberAccepted) {
-    return res.json({
-      success: true,
-      detail: await registrationForStudent(memberAccepted, memberAccepted.eventId, studentId),
-      Show: 2,
-    });
-  }
-
-  const memberOffered = await registerationEventModel
-    .find({
-      eventId,
-      membersOffered: studentId, //{ $in: [studentId] }, thsi could be sued id we want to pass mutliple sutdentids and documents conatisn atlease one stidentdi
-      overallStatus: { $ne: "withdrawn" },
-    })
-    .populate("eventId")
-    .populate("studentId", "name email profilePicture")
-    .populate("membersAccepted", "name email profilePicture");
-
-  if (memberOffered && memberOffered.length > 0) {
-    return res.json({ success: true, detail: memberOffered, Show: 3 });
-  }
-
   const visibleEvent = await eventModel
     .findOne({ _id: eventId, status: { $in: ["published", "closed"] } })
     .populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS });
   if (!visibleEvent || !visibleEvent.clubId) return res.status(404).json({ success: false, msg: "Event not found" });
-  return res.json({ success: true, Show: 0, detail: visibleEvent });
+  await ensureEventVerticals(visibleEvent);
+
+  const settings = await getPlatformSettingsCached();
+  const [ownRegistrations, offeredRegistrations] = await Promise.all([
+    registerationEventModel
+      .find({
+        eventId,
+        overallStatus: { $ne: "withdrawn" },
+        $or: [{ studentId }, { membersAccepted: studentId }],
+      })
+      .populate("studentId", "name email profilePicture")
+      .populate("membersAccepted", "name email profilePicture")
+      .populate("membersOffered", "name email profilePicture"),
+    registerationEventModel
+      .find({ eventId, membersOffered: studentId, overallStatus: { $ne: "withdrawn" } })
+      .populate("studentId", "name email profilePicture")
+      .populate("membersAccepted", "name email profilePicture")
+      .select("studentId verticalId teamName membersAccepted"),
+  ]);
+
+  const applicationCount = ownRegistrations.length;
+  const capReached = visibleEvent.maxVerticalApplications != null
+    && applicationCount >= visibleEvent.maxVerticalApplications;
+
+  const verticals = [];
+  for (const vertical of visibleEvent.verticals) {
+    const own = ownRegistrations.find((registration) =>
+      String(registration.verticalId) === String(vertical._id));
+    const invitations = offeredRegistrations.filter((registration) =>
+      String(registration.verticalId) === String(vertical._id));
+    const eligibility = eventEligibility(verticalEligibilitySource(visibleEvent, vertical), req.student, settings);
+    const deadlineAt = verticalDeadlineAt(visibleEvent, vertical);
+    const closed = vertical.status === "closed" || (deadlineAt && new Date(deadlineAt) < new Date());
+
+    // 1 = captain of a team here, 2 = accepted member, 3 = invited only, 0 = no application.
+    const show = own
+      ? (String(own.studentId?._id || own.studentId) === String(studentId) ? 1 : 2)
+      : invitations.length ? 3 : 0;
+
+    verticals.push({
+      ...vertical.toObject(),
+      deadlineAt,
+      show,
+      detail: own ? await registrationForStudent(own, visibleEvent, studentId) : null,
+      invitations,
+      eligible: eligibility.eligible,
+      eligibilityReason: eligibility.reason,
+      canApply: !own && !closed && eligibility.eligible && !capReached && registrationIsOpen(visibleEvent),
+      blockedReason: own ? "" : closed
+        ? `Applications to ${vertical.title} are closed`
+        : !eligibility.eligible ? eligibility.reason
+        : capReached ? (visibleEvent.maxVerticalApplications === 1
+            ? "This event lets you apply to only one vertical"
+            : `You can apply to at most ${visibleEvent.maxVerticalApplications} verticals in this event`)
+        : "",
+    });
+  }
+
+  const primary = verticals.find((vertical) => vertical.show > 0) || verticals[0];
+  return res.json({
+    success: true,
+    event: visibleEvent,
+    verticals,
+    applicationCount,
+    maxVerticalApplications: visibleEvent.maxVerticalApplications,
+    // Flattened view of the first vertical, for clients that predate verticals.
+    Show: primary?.show || 0,
+    detail: primary?.show === 3
+      ? primary.invitations
+      : primary?.show
+        ? { ...primary.detail, invitations: primary.invitations }
+        : visibleEvent,
+  });
 };
 
 module.exports.addMemberOffer = async (req, res, next) => {
@@ -980,35 +1083,34 @@ module.exports.addMemberOffer = async (req, res, next) => {
     return res.json({ errors: error.array(), success: false });
   }
 
-  const { eventId, memberEmail } = req.body;
+  const { registrationId, memberEmail } = req.body;
   const captainId = req.student._id;
 
   try {
-    const event = await eventModel.findById(eventId);
-    if (!event) {
-      return res.json({ success: false, msg: "Event not found" });
-    }
-    if (!registrationIsOpen(event)) {
-      return res.status(400).json({ success: false, msg: "Registration is closed" });
-    }
-    if (!await requireActiveEventClub(event, res)) return;
-    if (!await requireOpenRecruitment(res)) return;
-    if (event.registrationType === "individual") {
-      return res.status(400).json({ success: false, msg: "This is an individual event" });
+    const context = await teamGate(res, registrationId, captainId, { requireCaptain: true });
+    if (!context) return;
+    const { event, vertical, registration: captainRegisteration } = context;
+
+    if (vertical.registrationType === "individual") {
+      return res.status(400).json({ success: false, msg: `${vertical.title} is an individual track` });
     }
 
     const member = await studentModel.findOne({ email: normalizeEmail(memberEmail), status: "active" });
     if (!member) {
       return res.json({ success: false, msg: "Member not found" });
     }
+    if (member._id.toString() === captainId.toString()) {
+      return res.json({ success: false, msg: "You cannot offer yourself" });
+    }
     const settings = await getPlatformSettingsCached();
-    const memberEligibility = eventEligibility(event, member, settings);
+    const memberEligibility = eventEligibility(verticalEligibilitySource(event, vertical), member, settings);
     if (!memberEligibility.eligible) {
       return res.status(400).json({ success: false, msg: `This student is not eligible: ${memberEligibility.reason}` });
     }
 
     const alreadyRegistered = await registerationEventModel.findOne({
-      eventId,
+      eventId: event._id,
+      verticalId: vertical._id,
       studentId: member._id,
       overallStatus: { $ne: "withdrawn" },
     });
@@ -1019,67 +1121,34 @@ module.exports.addMemberOffer = async (req, res, next) => {
       });
     }
 
-    const memberMembership = await activeEventMembership(eventId, member._id);
+    const memberMembership = await activeEventMembership(event._id, vertical._id, member._id);
     const isStandaloneCaptain = alreadyRegistered
       && memberMembership?.role === "captain"
       && String(memberMembership.registrationId) === String(alreadyRegistered._id);
     if (memberMembership && !isStandaloneCaptain) {
-      return res.status(409).json({ success: false, msg: "Member already belongs to a team for this event" });
+      return res.status(409).json({ success: false, msg: `Member already belongs to a team in ${vertical.title}` });
     }
 
-    if (member._id.toString() === captainId.toString()) {
-      return res.json({ success: false, msg: "You cannot offer yourself" });
+    if ((captainRegisteration.membersAccepted || []).some((id) => String(id) === String(member._id))) {
+      return res.json({ success: false, msg: "Member already accepted your offer" });
     }
-
-    const alreadyAccepted = await registerationEventModel.findOne({
-      eventId,
-      studentId: captainId,
-      membersAccepted: { $in: [member._id] },
-      overallStatus: { $ne: "withdrawn" },
-    });
-    if (alreadyAccepted) {
-      return res.json({
-        success: false,
-        msg: "Member already accepted your offer for this event",
-      });
-    }
-
     const alreadyAcceptedSomeoneElse = await registerationEventModel.findOne({
-      eventId,
+      eventId: event._id,
+      verticalId: vertical._id,
       membersAccepted: { $in: [member._id] },
       overallStatus: { $ne: "withdrawn" },
     });
     if (alreadyAcceptedSomeoneElse) {
       return res.json({
         success: false,
-        msg: "Member already accepted offer from another captain for this event",
+        msg: `Member already accepted an offer from another captain in ${vertical.title}`,
       });
     }
-
-    const alreadyOffered = await registerationEventModel.findOne({
-      eventId,
-      studentId: captainId,
-      membersOffered: { $in: [member._id] },
-      overallStatus: { $ne: "withdrawn" },
-    });
-    if (alreadyOffered) {
-      return res.json({
-        success: false,
-        msg: "Member already offered by you for this event",
-      });
+    if ((captainRegisteration.membersOffered || []).some((id) => String(id) === String(member._id))) {
+      return res.json({ success: false, msg: "Member already offered by you" });
     }
 
-    const captainRegisteration = await registerationEventModel.findOne({
-      eventId,
-      studentId: captainId,
-      overallStatus: { $ne: "withdrawn" },
-    });
-
-    if (!captainRegisteration) {
-      return res.status(404).json({ success: false, msg: "Register as a captain before inviting members" });
-    }
-
-    const maxTeamSize = event.maxTeamSize || 1;
+    const maxTeamSize = vertical.maxTeamSize || 1;
     if (captainRegisteration.membersAccepted.length + 1 >= maxTeamSize) {
       return res.status(400).json({ success: false, msg: "Team is already full" });
     }
@@ -1091,10 +1160,10 @@ module.exports.addMemberOffer = async (req, res, next) => {
     await notifyStudent(member._id, {
       type: "team_invitation",
       title: `Invitation to ${event.title}`,
-      message: `${req.student.name} invited you to join their team.`,
-      link: `/event/${eventId}`,
+      message: `${req.student.name} invited you to join their team for ${vertical.title}.`,
+      link: `/event/${event._id}`,
     });
-    await writeAudit({ actorRole: "student", actorId: captainId, action: "team.invite", targetType: "student", targetId: member._id, metadata: { eventId } });
+    await writeAudit({ actorRole: "student", actorId: captainId, action: "team.invite", targetType: "student", targetId: member._id, metadata: { eventId: event._id, verticalId: vertical._id } });
 
     return res.json({ success: true, msg: "Member offered successfully" });
   } catch (err) {
@@ -1109,14 +1178,13 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
     return res.json({ errors: error.array(), success: false });
   }
 
-  const { eventId, studentId } = req.body;
+  const { registrationId } = req.body;
   const memberId = req.student._id;
 
   try {
-    const event = await eventModel.findById(eventId);
-    if (!event) {
-      return res.json({ success: false, msg: "Event not found" });
-    }
+    const context = await teamContext(registrationId, memberId);
+    if (context.error) return res.status(context.status).json({ success: false, msg: context.error });
+    const { event, vertical, registration: captainRegisteration } = context;
 
     if (!registrationIsOpen(event)) {
       return res.status(400).json({ success: false, msg: "Registration is closed" });
@@ -1124,29 +1192,20 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
     if (!await requireActiveEventClub(event, res)) return;
     if (!await requireOpenRecruitment(res)) return;
 
+    if (!(captainRegisteration.membersOffered || []).some((id) => String(id) === String(memberId))) {
+      return res.json({ success: false, msg: "Invitation is no longer valid" });
+    }
+
     const settings = await getPlatformSettingsCached();
-    const invitationEligibility = eventEligibility(event, req.student, settings);
+    const invitationEligibility = eventEligibility(verticalEligibilitySource(event, vertical), req.student, settings);
     if (!invitationEligibility.eligible) {
       return res.status(403).json({ success: false, msg: invitationEligibility.reason });
     }
 
-    const captainRegisteration = await registerationEventModel.findOne({
-      eventId,
-      studentId: studentId,
-      membersOffered: memberId,
-      overallStatus: { $ne: "withdrawn" },
-    });
-
-    if (!captainRegisteration) {
-      return res.json({
-        success: false,
-        msg: "Invitation is no longer valid",
-      });
-    }
-
-    const existingMembership = await activeEventMembership(eventId, memberId);
+    const existingMembership = await activeEventMembership(event._id, vertical._id, memberId);
     const ownRegistration = await registerationEventModel.findOne({
-      eventId,
+      eventId: event._id,
+      verticalId: vertical._id,
       studentId: memberId,
       overallStatus: { $ne: "withdrawn" },
     });
@@ -1160,21 +1219,40 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
       && String(existingMembership.registrationId) === String(ownRegistration?._id)
     );
     const acceptedElsewhere = await registerationEventModel.exists({
-      eventId,
+      eventId: event._id,
+      verticalId: vertical._id,
       membersAccepted: memberId,
       overallStatus: { $ne: "withdrawn" },
     });
     if ((existingMembership && (!movingOwnApplication || !ownCaptainMembership)) || acceptedElsewhere) {
-      return res.status(409).json({ success: false, msg: "You already belong to a team for this event" });
+      return res.status(409).json({ success: false, msg: `You already belong to a team in ${vertical.title}` });
     }
 
-    const maxTeamSize = event.maxTeamSize || 1;
+    // Joining a team in a new vertical still counts against the per-event cap.
+    if (!ownRegistration && event.maxVerticalApplications != null) {
+      const otherApplications = await eventMembershipModel.countDocuments({
+        eventId: event._id,
+        studentId: memberId,
+        verticalId: { $ne: vertical._id },
+      });
+      if (otherApplications >= event.maxVerticalApplications) {
+        return res.status(409).json({
+          success: false,
+          msg: event.maxVerticalApplications === 1
+            ? "This event lets you apply to only one vertical"
+            : `You can apply to at most ${event.maxVerticalApplications} verticals in this event`,
+        });
+      }
+    }
+
+    const maxTeamSize = vertical.maxTeamSize || 1;
     if (captainRegisteration.membersAccepted.length + 1 >= maxTeamSize) {
       return res.status(400).json({ success: false, msg: "This team is full" });
     }
 
-    if (!movingOwnApplication && event.maxParticipants && await activeParticipantCount(eventId) >= event.maxParticipants) {
-      return res.status(409).json({ success: false, msg: "This event has reached its participant limit" });
+    if (!movingOwnApplication && vertical.maxParticipants
+      && await activeParticipantCount(event._id, vertical._id) >= vertical.maxParticipants) {
+      return res.status(409).json({ success: false, msg: `${vertical.title} has reached its participant limit` });
     }
 
     try {
@@ -1187,7 +1265,8 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
         if (!moved) return res.status(409).json({ success: false, msg: "Your application changed. Refresh and try again" });
       } else {
         await eventMembershipModel.create({
-          eventId,
+          eventId: event._id,
+          verticalId: vertical._id,
           registrationId: captainRegisteration._id,
           studentId: memberId,
           role: "member",
@@ -1195,7 +1274,7 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
       }
     } catch (error) {
       if (error?.code === 11000) {
-        return res.status(409).json({ success: false, msg: "You already belong to a team for this event" });
+        return res.status(409).json({ success: false, msg: `You already belong to a team in ${vertical.title}` });
       }
       throw error;
     }
@@ -1221,7 +1300,7 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
           { registrationId: ownRegistration._id, role: "captain", joinedAt: existingMembership.joinedAt },
         );
       } else {
-        await eventMembershipModel.deleteOne({ eventId, studentId: memberId });
+        await eventMembershipModel.deleteOne({ eventId: event._id, verticalId: vertical._id, studentId: memberId });
       }
       return res.status(409).json({ success: false, msg: "This team became full or the invitation expired" });
     }
@@ -1235,7 +1314,7 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
     }
 
     await registerationEventModel.updateMany(
-      { eventId, _id: { $ne: captainRegisteration._id } },
+      { eventId: event._id, verticalId: vertical._id, _id: { $ne: captainRegisteration._id } },
       { $pull: { membersOffered: memberId } }
     );
     await syncRegistrationParticipants(event, joinedRegistration);
@@ -1243,9 +1322,9 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
       type: "team_joined",
       title: "Team member joined",
       message: String(studentId) === String(memberId)
-        ? `You joined the team for ${event.title}.`
-        : `${req.student.name} joined your team for ${event.title}.`,
-      link: `/event/${eventId}`,
+        ? `You joined the team for ${vertical.title} in ${event.title}.`
+        : `${req.student.name} joined your team for ${vertical.title}.`,
+      link: `/event/${event._id}`,
     })));
     await writeAudit({ actorRole: "student", actorId: memberId, action: "team.accept_invitation", targetType: "registration", targetId: joinedRegistration._id });
 
@@ -1261,32 +1340,23 @@ module.exports.acceptMemberOffer = async (req, res, next) => {
   }
 };
 
-
 module.exports.unregisteredAsCaptain = async (req, res, next) => {
   const error = validationResult(req);
   if (!error.isEmpty()) {
     return res.json({ errors: error.array(), success: false });
   }
 
-  const { eventId } = req.body;
   const captainId = req.student._id;
 
   try {
-    const event = await eventModel.findById(eventId);
-    if (!event) {
-      return res.json({ success: false, msg: "Event not found" });
-    }
+    const context = await teamContext(req.body.registrationId, captainId);
+    if (context.error) return res.status(context.status).json({ success: false, msg: context.error });
+    const { event, vertical, registration, isCaptain } = context;
     if (!registrationIsOpen(event)) {
       return res.status(400).json({ success: false, msg: "Withdrawals are closed after the registration deadline" });
     }
+    if (!isCaptain) return res.status(403).json({ success: false, msg: "Only the team captain can withdraw this application" });
 
-    const registration = await registerationEventModel.findOne({
-      eventId,
-      studentId: captainId,
-      overallStatus: { $ne: "withdrawn" },
-    });
-
-    if (!registration) return res.status(404).json({ success: false, msg: "Registration not found" });
     const formerMembers = [...registration.membersAccepted];
     await Promise.all([
       recordApplicationHistory({ studentId: captainId, registration, role: "captain", reason: "withdrawn" }),
@@ -1301,10 +1371,10 @@ module.exports.unregisteredAsCaptain = async (req, res, next) => {
     await Promise.all(formerMembers.map((studentId) => notifyStudent(studentId, {
       type: "team_disbanded",
       title: `Team withdrawn from ${event.title}`,
-      message: "The team captain withdrew this application.",
-      link: `/event/${eventId}`,
+      message: `The team captain withdrew your ${vertical.title} application.`,
+      link: `/event/${event._id}`,
     })));
-    await writeAudit({ actorRole: "student", actorId: captainId, action: "event.withdraw", targetType: "event", targetId: eventId });
+    await writeAudit({ actorRole: "student", actorId: captainId, action: "event.withdraw", targetType: "event", targetId: event._id, metadata: { verticalId: vertical._id } });
 
     return res.json({ success: true, msg: "Unregistered successfully" });
   } catch (err) {
@@ -1319,38 +1389,18 @@ module.exports.addTeamName = async (req, res, next) => {
     return res.json({ errors: error.array(), success: false });
   }
 
-  const { eventId, teamName } = req.body;
+  const { registrationId, teamName } = req.body;
   const captainId = req.student._id;
 
   try {
-    const event = await eventModel.findById(eventId);
-    if (!event) {
-      return res.json({ success: false, msg: "Event not found" });
-    }
+    const context = await teamGate(res, registrationId, captainId, { requireCaptain: true });
+    if (!context) return;
+    const { registration } = context;
 
-    if (!registrationIsOpen(event)) {
-      return res.status(400).json({ success: false, msg: "Registration is closed" });
-    }
-    if (!await requireActiveEventClub(event, res)) return;
-    if (!await requireOpenRecruitment(res)) return;
-
-    const captainRegisteration = await registerationEventModel.findOne({
-      eventId,
-      studentId: captainId,
-      overallStatus: { $ne: "withdrawn" },
-    });
-
-    if (!captainRegisteration) {
-      return res.json({
-        success: false,
-        msg: "Captain registration not found",
-      });
-    }
-
-    captainRegisteration.teamName = teamName;
-    captainRegisteration.markModified("teamName");
-    await captainRegisteration.save();
-    await writeAudit({ actorRole: "student", actorId: captainId, action: "team.rename", targetType: "registration", targetId: captainRegisteration._id });
+    registration.teamName = teamName;
+    registration.markModified("teamName");
+    await registration.save();
+    await writeAudit({ actorRole: "student", actorId: captainId, action: "team.rename", targetType: "registration", targetId: registration._id });
 
     return res.json({ success: true, msg: "Team name added successfully" });
   } catch (err) {
@@ -1362,7 +1412,7 @@ module.exports.addTeamName = async (req, res, next) => {
 module.exports.declineMemberOffer = async (req, res) => {
   const memberId = req.student._id;
   const registration = await registerationEventModel.findOneAndUpdate(
-    { eventId: req.body.eventId, studentId: req.body.captainId, membersOffered: memberId, overallStatus: { $ne: "withdrawn" } },
+    { _id: req.body.registrationId, membersOffered: memberId, overallStatus: { $ne: "withdrawn" } },
     { $pull: { membersOffered: memberId } },
     { new: true }
   );
@@ -1371,7 +1421,7 @@ module.exports.declineMemberOffer = async (req, res) => {
     type: "team_invitation_declined",
     title: "Team invitation declined",
     message: `${req.student.name} declined your team invitation.`,
-    link: `/event/${req.body.eventId}`,
+    link: `/event/${registration.eventId}`,
   });
   return res.json({ success: true, msg: "Invitation declined" });
 };
@@ -1380,7 +1430,7 @@ module.exports.cancelMemberOffer = async (req, res) => {
   const member = await studentModel.findOne({ email: normalizeEmail(req.body.memberEmail) });
   if (!member) return res.status(404).json({ success: false, msg: "Student not found" });
   const registration = await registerationEventModel.findOneAndUpdate(
-    { eventId: req.body.eventId, studentId: req.student._id, membersOffered: member._id, overallStatus: { $ne: "withdrawn" } },
+    { _id: req.body.registrationId, studentId: req.student._id, membersOffered: member._id, overallStatus: { $ne: "withdrawn" } },
     { $pull: { membersOffered: member._id } },
     { new: true }
   );
@@ -1389,38 +1439,39 @@ module.exports.cancelMemberOffer = async (req, res) => {
 };
 
 module.exports.removeTeamMember = async (req, res) => {
-  const event = await eventModel.findById(req.body.eventId);
-  if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
-  if (!registrationIsOpen(event)) return res.status(400).json({ success: false, msg: "Team changes are closed" });
-  if (!await requireActiveEventClub(event, res)) return;
-  if (!await requireOpenRecruitment(res)) return;
+  const context = await teamGate(res, req.body.registrationId, req.student._id, {
+    requireCaptain: true,
+    closedMessage: "Team changes are closed",
+  });
+  if (!context) return;
+  const { event, vertical } = context;
   const registration = await registerationEventModel.findOneAndUpdate(
-    { eventId: req.body.eventId, studentId: req.student._id, membersAccepted: req.body.memberId, overallStatus: { $ne: "withdrawn" } },
+    { _id: context.registration._id, membersAccepted: req.body.memberId, overallStatus: { $ne: "withdrawn" } },
     { $pull: { membersAccepted: req.body.memberId } },
     { new: true }
   );
   if (!registration) return res.status(404).json({ success: false, msg: "Team member not found" });
   await recordApplicationHistory({ studentId: req.body.memberId, registration, role: "member", reason: "removed" });
   await removeParticipantFromRegistrationWorkflow(registration._id, req.body.memberId, "withdrawn");
-  await eventMembershipModel.deleteOne({ eventId: req.body.eventId, studentId: req.body.memberId, role: "member" });
+  await eventMembershipModel.deleteOne({ registrationId: registration._id, studentId: req.body.memberId, role: "member" });
   await writeAudit({ actorRole: "student", actorId: req.student._id, action: "team.remove_member", targetType: "registration", targetId: registration._id, metadata: { memberId: req.body.memberId } });
   await notifyStudent(req.body.memberId, {
     type: "team_removed",
     title: "Removed from team",
-    message: "The team captain removed you from the event team.",
-    link: `/event/${req.body.eventId}`,
+    message: `The team captain removed you from the ${vertical.title} team.`,
+    link: `/event/${event._id}`,
   });
   return res.json({ success: true, msg: "Team member removed" });
 };
 
 module.exports.leaveTeam = async (req, res) => {
-  const event = await eventModel.findById(req.body.eventId);
-  if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
-  if (!registrationIsOpen(event)) return res.status(400).json({ success: false, msg: "Team changes are closed" });
-  if (!await requireActiveEventClub(event, res)) return;
-  if (!await requireOpenRecruitment(res)) return;
+  const context = await teamGate(res, req.body.registrationId, req.student._id, {
+    closedMessage: "Team changes are closed",
+  });
+  if (!context) return;
+  const { event } = context;
   const membership = await eventMembershipModel.findOne({
-    eventId: req.body.eventId,
+    registrationId: context.registration._id,
     studentId: req.student._id,
     role: "member",
   });
@@ -1439,41 +1490,32 @@ module.exports.leaveTeam = async (req, res) => {
       type: "team_member_left",
       title: "Team member left",
       message: `${req.student.name} left your event team.`,
-      link: `/event/${req.body.eventId}`,
+      link: `/event/${event._id}`,
     });
   }
   return res.json({ success: true, msg: "You left the team" });
 };
 
 module.exports.transferCaptain = async (req, res) => {
-  const event = await eventModel.findById(req.body.eventId);
-  if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
-  if (!registrationIsOpen(event)) {
-    return res.status(400).json({ success: false, msg: "Captain changes are closed after the registration deadline" });
-  }
-  if (!await requireActiveEventClub(event, res)) return;
-  if (!await requireOpenRecruitment(res)) return;
-
   const oldCaptainId = req.student._id;
   const newCaptainId = req.body.memberId;
-  const registration = await registerationEventModel.findOne({
-    eventId: event._id,
-    studentId: oldCaptainId,
-    membersAccepted: newCaptainId,
-    overallStatus: { $ne: "withdrawn" },
+  const context = await teamGate(res, req.body.registrationId, oldCaptainId, {
+    requireCaptain: true,
+    closedMessage: "Captain changes are closed after the registration deadline",
   });
-  if (!registration) {
+  if (!context) return;
+  const { event, vertical, registration } = context;
+
+  if (!(registration.membersAccepted || []).some((id) => String(id) === String(newCaptainId))) {
     return res.status(404).json({ success: false, msg: "Choose an active member of your team" });
   }
 
   const oldCaptainMembership = await eventMembershipModel.findOne({
-    eventId: event._id,
     registrationId: registration._id,
     studentId: oldCaptainId,
     role: "captain",
   });
   const newCaptainMembership = await eventMembershipModel.findOne({
-    eventId: event._id,
     registrationId: registration._id,
     studentId: newCaptainId,
     role: "member",
@@ -1484,18 +1526,20 @@ module.exports.transferCaptain = async (req, res) => {
 
   await removeWithdrawnRegistrationRecords({
     eventId: event._id,
+    verticalId: vertical._id,
     studentId: newCaptainId,
     _id: { $ne: registration._id },
   });
   const staleApplications = await removeDetachedRegistrationRecords({
     eventId: event._id,
+    verticalId: vertical._id,
     studentId: newCaptainId,
     _id: { $ne: registration._id },
   });
   if (staleApplications.blocked) {
     return res.status(409).json({
       success: false,
-      msg: "This member still has another active team record for the event. Ask them to leave that team first",
+      msg: "This member still has another active team record for this vertical. Ask them to leave that team first",
     });
   }
 
@@ -1546,7 +1590,7 @@ module.exports.transferCaptain = async (req, res) => {
       action: "team.transfer_captain",
       targetType: "registration",
       targetId: registration._id,
-      metadata: { newCaptainId },
+      metadata: { newCaptainId, verticalId: vertical._id },
     }),
   ]);
   return res.json({ success: true, msg: "Captaincy transferred successfully" });
@@ -1589,6 +1633,11 @@ module.exports.getMyApplications = async (req, res) => {
   const activeApplications = memberships.map((membership) => {
     const value = membership.toObject();
     if (!value.registrationId) return value;
+    const event = value.registrationId.eventId;
+    const vertical = (event?.verticals || []).find((item) =>
+      String(item._id) === String(value.registrationId.verticalId));
+    value.verticalTitle = vertical?.title || "";
+    value.verticalsEnabled = Boolean(event?.verticalsEnabled);
     const registrationId = String(value.registrationId?._id || "");
     const registrationCandidates = candidatesByRegistration.get(registrationId) || [];
     value.registrationId.workflow = {
@@ -1602,6 +1651,7 @@ module.exports.getMyApplications = async (req, res) => {
         registrationCandidates,
         req.student._id,
         value.registrationId.overallStatus,
+        value.registrationId.verticalId,
       ),
     };
     return value;
@@ -1636,6 +1686,7 @@ module.exports.getMyApplications = async (req, res) => {
   const applicationHistory = histories.map((history) => ({
     _id: history._id,
     studentId: req.student._id,
+    verticalTitle: history.verticalTitle || "",
     role: history.role,
     joinedAt: history.createdAt,
     history: true,
@@ -1643,6 +1694,7 @@ module.exports.getMyApplications = async (req, res) => {
     registrationId: {
       _id: history.registrationId,
       eventId: history.eventId,
+      verticalId: history.verticalId,
       studentId: history.captainId,
       membersAccepted: [],
       teamName: history.teamName,

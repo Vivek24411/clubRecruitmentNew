@@ -3,6 +3,8 @@ const mongoose = require("mongoose");
 const applicationHistorySchema = new mongoose.Schema({
   studentId: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true, index: true },
   eventId: { type: mongoose.Schema.Types.ObjectId, ref: "Event", required: true },
+  verticalId: { type: mongoose.Schema.Types.ObjectId, default: null },
+  verticalTitle: { type: String, default: "", maxlength: 120 },
   registrationId: { type: mongoose.Schema.Types.ObjectId, ref: "RegisterationEvent", required: true },
   captainId: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true },
   role: { type: String, enum: ["captain", "member"], required: true },

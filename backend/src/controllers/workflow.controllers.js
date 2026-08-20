@@ -14,10 +14,13 @@ const {
   advanceCandidate,
   autoScheduleCandidates,
   createCandidatesForRound,
-  ensureEventRounds,
+  ensureEventVerticals,
   ensureMembership,
   ensureRegistrationWorkflow,
   eventRound,
+  eventVertical,
+  verticalRounds,
+  verticalForRound,
   registrationParticipantIds,
   revokeDownstreamCandidates,
   studentApplicationStatus,
@@ -35,7 +38,7 @@ function invalidRequest(req, res) {
 
 async function ownedEvent(eventId, clubId) {
   const event = await eventModel.findOne({ _id: eventId, clubId });
-  return ensureEventRounds(event);
+  return ensureEventVerticals(event);
 }
 
 function escapedRegex(value) {
@@ -43,11 +46,18 @@ function escapedRegex(value) {
 }
 
 async function workflowData(event, query = {}) {
-  const selectedRound = event.rounds.find((round) => String(round._id) === String(query.roundId)) || event.rounds[0];
+  // A round id identifies its own vertical, so an explicit roundId wins over
+  // the vertical selector and keeps deep links working.
+  const vertical = (query.roundId && verticalForRound(event, query.roundId))
+    || eventVertical(event, query.verticalId)
+    || event.verticals[0];
+  const rounds = verticalRounds(event, vertical?._id);
+  const selectedRound = rounds.find((round) => String(round._id) === String(query.roundId)) || rounds[0];
   const page = Math.max(Number(query.page) || 1, 1);
   const limit = Math.min(Math.max(Number(query.limit) || 50, 10), 100);
   const filter = {
     eventId: event._id,
+    verticalId: vertical?._id,
     status: query.status && query.status !== "all" ? query.status : { $nin: ["revoked", "withdrawn"] },
   };
   if (selectedRound?._id) filter.roundId = selectedRound._id;
@@ -57,7 +67,7 @@ async function workflowData(event, query = {}) {
     const pattern = new RegExp(escapedRegex(search), "i");
     const [students, registrations] = await Promise.all([
       studentModel.find({ $or: [{ name: pattern }, { email: pattern }, { enrollmentNumber: pattern }, { branch: pattern }] }).select("_id").limit(500).lean(),
-      registerationEventModel.find({ eventId: event._id, teamName: pattern }).select("_id").limit(500).lean(),
+      registerationEventModel.find({ eventId: event._id, verticalId: vertical?._id, teamName: pattern }).select("_id").limit(500).lean(),
     ]);
     const studentIds = students.map((student) => student._id);
     const registrationIds = registrations.map((registration) => registration._id);
@@ -77,10 +87,10 @@ async function workflowData(event, query = {}) {
       .limit(limit),
     roundCandidateModel.countDocuments(filter),
     roundCandidateModel.aggregate([
-      { $match: { eventId: event._id, status: { $nin: ["revoked", "withdrawn"] } } },
+      { $match: { eventId: event._id, verticalId: vertical?._id, status: { $nin: ["revoked", "withdrawn"] } } },
       { $group: { _id: { roundId: "$roundId", status: "$status" }, count: { $sum: 1 } } },
     ]),
-    registerationEventModel.countDocuments({ eventId: event._id, overallStatus: { $ne: "withdrawn" } }),
+    registerationEventModel.countDocuments({ eventId: event._id, verticalId: vertical?._id, overallStatus: { $ne: "withdrawn" } }),
   ]);
 
   const registrationIds = [...new Set(candidates.map((candidate) => String(candidate.registrationId)))];
@@ -101,6 +111,51 @@ async function workflowData(event, query = {}) {
       .lean(),
   ]);
 
+  // When an event runs several verticals, reviewers need to see where else a
+  // candidate stands before deciding. Display only: nothing here writes.
+  let crossVertical = {};
+  if ((event.verticals || []).length > 1) {
+    const studentIds = [...new Set(candidates.flatMap((candidate) =>
+      (candidate.participantIds || []).map((student) => String(student?._id || student))))];
+    if (studentIds.length) {
+      const otherMemberships = await eventMembershipModel.find({
+        eventId: event._id,
+        studentId: { $in: studentIds },
+        verticalId: { $ne: vertical?._id },
+      }).lean();
+      const otherRegistrationIds = [...new Set(otherMemberships.map((membership) => String(membership.registrationId)))];
+      const otherCandidates = otherRegistrationIds.length
+        ? await roundCandidateModel.find({
+          registrationId: { $in: otherRegistrationIds },
+          status: { $ne: "revoked" },
+        }).lean()
+        : [];
+      const byRegistration = new Map();
+      for (const candidate of otherCandidates) {
+        const key = String(candidate.registrationId);
+        if (!byRegistration.has(key)) byRegistration.set(key, []);
+        byRegistration.get(key).push(candidate);
+      }
+      const titles = new Map((event.verticals || []).map((item) => [String(item._id), item.title]));
+      for (const membership of otherMemberships) {
+        const key = String(membership.studentId);
+        if (!crossVertical[key]) crossVertical[key] = [];
+        crossVertical[key].push({
+          verticalId: membership.verticalId,
+          verticalTitle: titles.get(String(membership.verticalId)) || "",
+          role: membership.role,
+          status: studentApplicationStatus(
+            event,
+            byRegistration.get(String(membership.registrationId)) || [],
+            membership.studentId,
+            "in_progress",
+            membership.verticalId,
+          ),
+        });
+      }
+    }
+  }
+
   const roundCounts = {};
   for (const item of grouped) {
     const roundId = String(item._id.roundId);
@@ -108,12 +163,15 @@ async function workflowData(event, query = {}) {
     roundCounts[roundId].total += item.count;
     roundCounts[roundId].statuses[item._id.status] = item.count;
   }
-  const finalRoundId = String(event.rounds.at(-1)?._id || "");
+  const finalRoundId = String(rounds.at(-1)?._id || "");
   return {
     registrations,
     candidates,
     submissions,
     slots,
+    vertical,
+    selectedVerticalId: vertical?._id || null,
+    crossVertical,
     summary: {
       registrations: registrationTotal,
       roundCounts,
@@ -131,10 +189,10 @@ module.exports.getEventWorkflow = async (req, res) => {
   const [data, targetEvents] = await Promise.all([
     workflowData(event, req.query),
     eventModel.find({ clubId: req.club._id, _id: { $ne: event._id }, status: { $ne: "archived" } })
-      .select("title status rounds roundDetails numberOfRounds")
+      .select("title status rounds roundDetails numberOfRounds verticals verticalsEnabled")
       .sort({ createdAt: -1 }),
   ]);
-  await Promise.all(targetEvents.map((target) => ensureEventRounds(target)));
+  await Promise.all(targetEvents.map((target) => ensureEventVerticals(target)));
   return res.json({ success: true, event, ...data, targetEvents });
 };
 
@@ -242,11 +300,12 @@ async function recomputeRegistrationProgress(event, registrationId) {
   const registration = await registerationEventModel.findById(registrationId);
   if (!registration || registration.overallStatus === "withdrawn") return;
 
-  const roundOrder = new Map((event.rounds || []).map((round) => [String(round._id), round.order]));
+  const rounds = verticalRounds(event, registration.verticalId);
+  const roundOrder = new Map(rounds.map((round) => [String(round._id), round.order]));
   const highestOrder = Math.max(...candidates.map((candidate) => roundOrder.get(String(candidate.roundId)) || 0));
-  const highestRound = event.rounds.find((round) => round.order === highestOrder);
+  const highestRound = rounds.find((round) => round.order === highestOrder);
   const currentCandidates = candidates.filter((candidate) => String(candidate.roundId) === String(highestRound?._id));
-  const finalRound = highestOrder === event.rounds.length;
+  const finalRound = highestOrder === rounds.length;
   const terminalRejections = new Set(["rejected", "missed", "withdrawn"]);
 
   registration.currentRound = highestOrder || registration.currentRound;
@@ -316,7 +375,7 @@ module.exports.publishRoundDecisions = async (req, res) => {
 
   await Promise.all([...affectedRegistrations].map((registrationId) =>
     recomputeRegistrationProgress(event, registrationId)));
-  const finalRound = round.order === event.rounds.length;
+  const finalRound = round.order === verticalRounds(event, verticalForRound(event, round._id)?._id).length;
   await Promise.all([...teamDecisionUpdates.values()].flatMap(({ registration, decisions }) =>
     registrationParticipantIds(registration).map((studentId) => {
       const own = decisions.filter((decision) => decision.participantIds.includes(String(studentId)));
@@ -480,9 +539,11 @@ module.exports.cancelScheduleSlot = async (req, res) => {
   return res.json({ success: true, msg: "Slot cancelled", slot });
 };
 
-async function createImportedRegistration({ targetEvent, targetRound, participantIds, sourceCandidate, sourceRegistration }) {
+async function createImportedRegistration({ targetEvent, targetVertical, targetRound, participantIds, sourceCandidate, sourceRegistration }) {
+  const targetVerticalId = targetVertical._id;
   const existingMemberships = await eventMembershipModel.find({
     eventId: targetEvent._id,
+    verticalId: targetVerticalId,
     studentId: { $in: participantIds },
   });
   const groups = new Map();
@@ -494,60 +555,66 @@ async function createImportedRegistration({ targetEvent, targetRound, participan
   const alreadyPlaced = new Set(existingMemberships.map((membership) => String(membership.studentId)));
   const free = participantIds.filter((studentId) => !alreadyPlaced.has(String(studentId)));
 
-  if (free.length && targetEvent.registrationType !== "individual" && sourceCandidate.scope === "application") {
+  if (free.length && targetVertical.registrationType !== "individual" && sourceCandidate.scope === "application") {
     const [captainId, ...members] = free;
     let registration = await registerationEventModel.findOne({
       eventId: targetEvent._id,
+      verticalId: targetVerticalId,
       studentId: captainId,
       overallStatus: { $ne: "withdrawn" },
     });
     if (!registration) {
       registration = await registerationEventModel.create({
         eventId: targetEvent._id,
+        verticalId: targetVerticalId,
         studentId: captainId,
         membersAccepted: members,
         teamName: sourceRegistration.teamName,
-        numberOfRounds: targetEvent.rounds.length,
+        numberOfRounds: targetVertical.rounds.length,
         currentRound: targetRound.order,
         currentRoundId: targetRound._id,
         overallStatus: "in_progress",
         source: {
           type: "extracted",
           eventId: sourceCandidate.eventId,
+          verticalId: sourceCandidate.verticalId,
           roundId: sourceCandidate.roundId,
           registrationId: sourceCandidate.registrationId,
         },
       });
     }
-    await ensureMembership({ eventId: targetEvent._id, registrationId: registration._id, studentId: captainId, role: "captain" });
+    await ensureMembership({ eventId: targetEvent._id, verticalId: targetVerticalId, registrationId: registration._id, studentId: captainId, role: "captain" });
     await Promise.all(members.map((studentId) => ensureMembership({
-      eventId: targetEvent._id, registrationId: registration._id, studentId, role: "member",
+      eventId: targetEvent._id, verticalId: targetVerticalId, registrationId: registration._id, studentId, role: "member",
     })));
     groups.set(String(registration._id), free);
   } else {
     for (const studentId of free) {
       let registration = await registerationEventModel.findOne({
         eventId: targetEvent._id,
+        verticalId: targetVerticalId,
         studentId,
         overallStatus: { $ne: "withdrawn" },
       });
       if (!registration) {
         registration = await registerationEventModel.create({
           eventId: targetEvent._id,
+          verticalId: targetVerticalId,
           studentId,
-          numberOfRounds: targetEvent.rounds.length,
+          numberOfRounds: targetVertical.rounds.length,
           currentRound: targetRound.order,
           currentRoundId: targetRound._id,
           overallStatus: "in_progress",
           source: {
             type: "extracted",
             eventId: sourceCandidate.eventId,
+            verticalId: sourceCandidate.verticalId,
             roundId: sourceCandidate.roundId,
             registrationId: sourceCandidate.registrationId,
           },
         });
       }
-      await ensureMembership({ eventId: targetEvent._id, registrationId: registration._id, studentId, role: "captain" });
+      await ensureMembership({ eventId: targetEvent._id, verticalId: targetVerticalId, registrationId: registration._id, studentId, role: "captain" });
       groups.set(String(registration._id), [studentId]);
     }
   }
@@ -580,21 +647,45 @@ module.exports.extractCandidates = async (req, res) => {
   ]);
   const sourceRound = eventRound(sourceEvent, req.params.roundId);
   const targetRound = eventRound(targetEvent, req.body.targetRoundId);
-  if (!sourceEvent || !targetEvent || !sourceRound || !targetRound) {
+  const targetVertical = targetRound ? verticalForRound(targetEvent, targetRound._id) : null;
+  if (!sourceEvent || !targetEvent || !sourceRound || !targetRound || !targetVertical) {
     return res.status(404).json({ success: false, msg: "Source or target event round was not found" });
   }
+  const requested = req.body.candidateIds.slice(0, 250);
   const sourceCandidates = await roundCandidateModel.find({
-    _id: { $in: req.body.candidateIds.slice(0, 250) },
+    _id: { $in: requested },
     eventId: sourceEvent._id,
     roundId: sourceRound._id,
     status: "advanced",
   });
+  // A page open since before a decision changed will still offer candidates
+  // that have since been rejected, withdrawn or retired. Say so rather than
+  // reporting a cheerful "0 created".
+  if (!sourceCandidates.length) {
+    return res.status(409).json({
+      success: false,
+      msg: `None of the ${requested.length} selected candidate(s) are still advanced in ${sourceRound.title}. Refresh the page and try again`,
+    });
+  }
+
   const imported = [];
+  const withdrawn = [];
+  const empty = [];
   for (const candidate of sourceCandidates) {
     const sourceRegistration = await registerationEventModel.findById(candidate.registrationId);
     if (!sourceRegistration) continue;
+    // Someone who withdrew must not be pulled into another event.
+    if (sourceRegistration.overallStatus === "withdrawn") {
+      withdrawn.push(candidate._id);
+      continue;
+    }
+    if (!candidate.participantIds?.length) {
+      empty.push(candidate._id);
+      continue;
+    }
     const created = await createImportedRegistration({
       targetEvent,
+      targetVertical,
       targetRound,
       participantIds: candidate.participantIds,
       sourceCandidate: candidate,
@@ -611,47 +702,104 @@ module.exports.extractCandidates = async (req, res) => {
   await writeAudit({
     actorRole: "club", actorId: req.club._id, action: "round.extract_candidates",
     targetType: "round", targetId: targetRound._id,
-    metadata: { sourceEventId: sourceEvent._id, sourceRoundId: sourceRound._id, imported: imported.length },
+    metadata: {
+      sourceEventId: sourceEvent._id, sourceRoundId: sourceRound._id,
+      targetVerticalId: targetVertical._id,
+      imported: imported.length,
+      skipped: withdrawn.length + empty.length,
+    },
   });
-  return res.json({ success: true, msg: `${imported.length} target candidate record(s) created`, candidates: imported });
+
+  const reasons = [
+    withdrawn.length ? `${withdrawn.length} withdrawn application(s)` : "",
+    empty.length ? `${empty.length} application(s) with no active participants` : "",
+  ].filter(Boolean).join(" and ");
+
+  if (!imported.length) {
+    return res.status(409).json({
+      success: false,
+      msg: reasons
+        ? `Nothing was imported: skipped ${reasons}`
+        : "Nothing was imported. The selected candidates are already in the target round",
+    });
+  }
+  return res.json({
+    success: true,
+    msg: `${imported.length} candidate record(s) added to ${targetVertical.title} · ${targetRound.title}${reasons ? `; skipped ${reasons}` : ""}`,
+    candidates: imported,
+    skipped: withdrawn.length + empty.length,
+  });
 };
 
 module.exports.getMyEventWorkflow = async (req, res) => {
   if (invalidRequest(req, res)) return;
-  const event = await ensureEventRounds(await eventModel.findOne({
+  const event = await ensureEventVerticals(await eventModel.findOne({
     _id: req.params.eventId,
     status: { $in: ["published", "closed", "cancelled"] },
   }).populate("clubId", "name clubLogo contactEmail website linkedin instagram"));
   if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
-  const membership = await eventMembershipModel.findOne({ eventId: event._id, studentId: req.student._id });
-  if (!membership) return res.json({ success: true, event, registration: null, candidates: [], submissions: [], slots: [] });
-  const registration = await registerationEventModel.findById(membership.registrationId)
-    .populate("studentId", "name email")
-    .populate("membersAccepted", "name email");
-  await ensureRegistrationWorkflow(event, registration);
-  const candidates = await roundCandidateModel.find({
-    eventId: event._id,
-    registrationId: membership.registrationId,
-    status: { $ne: "revoked" },
-  }).populate("studentId", "name email profilePicture").populate("participantIds", "name email profilePicture").sort({ createdAt: 1 });
-  const candidateIds = candidates.map((candidate) => candidate._id);
-  const [submissions, slots] = await Promise.all([
-    roundSubmissionModel.find({ candidateId: { $in: candidateIds } }).sort({ submittedAt: -1 }),
-    scheduleSlotModel.find({ candidateId: { $in: candidateIds }, status: { $ne: "cancelled" } }).sort({ startAt: 1 }),
-  ]);
-  const candidatesWithAccess = candidates.map((candidate) => ({
-    ...candidate.toObject(),
-    canAct: (candidate.participantIds || []).some((student) => String(student?._id || student) === String(req.student._id)),
-  }));
+
+  // A student can hold one application per vertical, so this returns every
+  // application they have in this event rather than a single one.
+  const memberships = await eventMembershipModel
+    .find({ eventId: event._id, studentId: req.student._id })
+    .sort({ joinedAt: 1 });
+  if (!memberships.length) {
+    return res.json({
+      success: true, event, applications: [],
+      registration: null, candidates: [], submissions: [], slots: [],
+    });
+  }
+
+  const applications = [];
+  for (const membership of memberships) {
+    const registration = await registerationEventModel.findById(membership.registrationId)
+      .populate("studentId", "name email")
+      .populate("membersAccepted", "name email");
+    if (!registration) continue;
+    await ensureRegistrationWorkflow(event, registration);
+    const candidates = await roundCandidateModel.find({
+      eventId: event._id,
+      registrationId: membership.registrationId,
+      status: { $ne: "revoked" },
+    }).populate("studentId", "name email profilePicture")
+      .populate("participantIds", "name email profilePicture")
+      .sort({ createdAt: 1 });
+    const candidateIds = candidates.map((candidate) => candidate._id);
+    const [submissions, slots] = await Promise.all([
+      roundSubmissionModel.find({ candidateId: { $in: candidateIds } }).sort({ submittedAt: -1 }),
+      scheduleSlotModel.find({ candidateId: { $in: candidateIds }, status: { $ne: "cancelled" } }).sort({ startAt: 1 }),
+    ]);
+    const vertical = eventVertical(event, registration.verticalId);
+    applications.push({
+      verticalId: registration.verticalId,
+      verticalTitle: vertical?.title || event.title,
+      membership,
+      registration,
+      studentOverallStatus: studentApplicationStatus(
+        event, candidates, req.student._id, registration.overallStatus, registration.verticalId,
+      ),
+      candidates: candidates.map((candidate) => ({
+        ...candidate.toObject(),
+        canAct: (candidate.participantIds || []).some((student) => String(student?._id || student) === String(req.student._id)),
+      })),
+      submissions,
+      slots,
+    });
+  }
+
+  const [primary] = applications;
   return res.json({
     success: true,
     event,
-    registration,
-    membership,
-    studentOverallStatus: studentApplicationStatus(event, candidates, req.student._id, registration.overallStatus),
-    candidates: candidatesWithAccess,
-    submissions,
-    slots,
+    applications,
+    // Flattened view of the first application, for clients that predate verticals.
+    registration: primary?.registration || null,
+    membership: primary?.membership || null,
+    studentOverallStatus: primary?.studentOverallStatus || null,
+    candidates: primary?.candidates || [],
+    submissions: primary?.submissions || [],
+    slots: primary?.slots || [],
   });
 };
 
@@ -660,7 +808,7 @@ module.exports.submitRoundWork = async (req, res) => {
     await Promise.all((req.files || []).map(destroyUploadedFile));
     return;
   }
-  const event = await ensureEventRounds(await eventModel.findOne({
+  const event = await ensureEventVerticals(await eventModel.findOne({
     _id: req.params.eventId,
     status: { $in: ["published", "closed"] },
   }));
