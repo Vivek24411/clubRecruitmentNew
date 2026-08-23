@@ -54,6 +54,11 @@ function RoundTimeline({ rounds }) {
               {round.Description || round.description}
             </p>
           )}
+          {round.submissionDeadlineAt && (
+            <p className="mt-2 text-sm font-medium text-ink-2">
+              Submission deadline: {formatDateTime(round.submissionDeadlineAt)}
+            </p>
+          )}
         </li>
       ))}
     </ol>
