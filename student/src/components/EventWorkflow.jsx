@@ -160,11 +160,17 @@ function ApplicationProgress({ application, rounds, eventId, showTitle, onSaved 
                   <div>
                     <p className="eyebrow">Round {round.order}</p>
                     <h3 className="display mt-1 text-lg">{round.title}</h3>
-                    {hasPublishedDetails ? <p className="mt-2 text-sm text-ink-3">{round.description || round.instructions || (round.submissionDeadlineAt ? `Submission deadline: ${format(round.submissionDeadlineAt)}` : "Schedule details are available below.")}</p> : roundCandidates.length > 0 ? <p className="mt-2 text-sm text-ink-3">Details will be shared by the club.</p> : null}
+                    {hasPublishedDetails ? <p className="mt-2 text-sm text-ink-3">{round.description || round.instructions || "Schedule details are available below."}</p> : roundCandidates.length > 0 ? <p className="mt-2 text-sm text-ink-3">Details will be shared by the club.</p> : null}
                   </div>
                   {!roundCandidates.length && <Badge>Locked</Badge>}
                 </div>
                 {round.scheduleMode === "common" && round.startsAt && <div className="mt-4 rounded-sm bg-paper-2 px-4 py-3 text-sm"><strong>{format(round.startsAt)}</strong>{round.venue && <span className="text-ink-3"> at {round.venue}</span>}{round.meetingUrl && <a className="link mt-1 block" href={round.meetingUrl} target="_blank" rel="noreferrer">Open meeting link ↗</a>}</div>}
+                {round.submissionDeadlineAt && (
+                  <div className="mt-3 rounded-sm border-l-2 border-accent bg-accent-tint/40 px-4 py-3 text-sm">
+                    <p className="eyebrow eyebrow-accent">Submission deadline</p>
+                    <p className="mt-1 font-semibold">{format(round.submissionDeadlineAt)}</p>
+                  </div>
+                )}
               </div>
               {roundCandidates.map((candidate) => {
                 const slot = slotByCandidate.get(candidate._id);
