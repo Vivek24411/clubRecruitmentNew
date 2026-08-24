@@ -84,7 +84,7 @@ export default function Sessions() {
               const confirmed = session.confirmedRsvpCount || 0;
               return (
                 <article key={session._id} className="card flex flex-col overflow-hidden">
-                  <div className="relative aspect-video overflow-hidden bg-paper-2">
+                  <div className="relative aspect-square overflow-hidden bg-paper-2">
                     {session.sessionThumbnail ? (
                       <>
                         <img

@@ -45,7 +45,7 @@ function StatusBadge({ deadline }) {
 function EventCardSkeleton() {
   return (
     <div className="card overflow-hidden">
-      <Skeleton className="aspect-[16/9] w-full rounded-none" />
+      <Skeleton className="aspect-square w-full rounded-none" />
       <div className="p-5">
         <Skeleton className="h-3 w-24" />
         <Skeleton className="mt-3 h-5 w-3/4" />
@@ -268,7 +268,7 @@ export default function Events() {
                   className="card card-interactive group flex flex-col overflow-hidden"
                 >
                   {/* Media */}
-                  <div className="relative aspect-[16/9] overflow-hidden bg-paper-2">
+                  <div className="relative aspect-square overflow-hidden bg-paper-2">
                     {event.eventBanner ? (
                       <>
                         <img src={event.eventBanner} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-35 blur-xl" />

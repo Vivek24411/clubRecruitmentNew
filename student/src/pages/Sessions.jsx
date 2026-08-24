@@ -182,7 +182,7 @@ export default function Sessions() {
                         to={`/session/${session._id}`}
                         className="card card-interactive group grid min-w-0 overflow-hidden p-0 sm:grid-cols-[12rem_minmax(0,1fr)_auto] sm:items-stretch"
                       >
-                        <div className="relative aspect-video min-w-0 overflow-hidden bg-paper-2 sm:aspect-auto sm:min-h-32">
+                        <div className="relative aspect-square min-w-0 overflow-hidden bg-paper-2">
                           {session.sessionThumbnail ? <><img src={session.sessionThumbnail} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-35 blur-xl" /><img src={session.sessionThumbnail} alt={`${session.title} thumbnail`} loading="lazy" className="relative h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.03]" /></> : <div className="grid h-full min-h-32 place-items-center text-center"><div><p className="display text-2xl">{startsAt?.toLocaleDateString("en-IN", { day: "2-digit", timeZone: "Asia/Kolkata" }) || "—"}</p><p className="eyebrow mt-1">{startsAt?.toLocaleDateString("en-IN", { month: "short", timeZone: "Asia/Kolkata" }) || "Date TBA"}</p></div></div>}
                         </div>
 

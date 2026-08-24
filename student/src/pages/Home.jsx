@@ -187,7 +187,7 @@ export default function Home() {
                 {openEvents.slice(0, 4).map((event) => (
                   <CardLink key={event._id} to={`/event/${event._id}`} className="group overflow-hidden p-0">
                     <div className="grid min-w-0 sm:grid-cols-[13rem_minmax(0,1fr)]">
-                      <div className="relative aspect-video min-w-0 overflow-hidden bg-paper-2 sm:aspect-auto sm:h-full">
+                      <div className="relative aspect-square min-w-0 overflow-hidden bg-paper-2">
                         {event.eventBanner || event.clubId?.clubBanner ? <><img src={event.eventBanner || event.clubId.clubBanner} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-35 blur-xl" /><img src={event.eventBanner || event.clubId.clubBanner} alt={`${event.title} banner`} className="relative h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.03]" /></> : <div className="grid h-full min-h-32 place-items-center"><Monogram name={event.clubId?.name || event.title} size="sm" /></div>}
                       </div>
                       <div className="min-w-0 p-4">
@@ -238,7 +238,7 @@ export default function Home() {
                       to={`/session/${session._id}`}
                       className="group grid min-w-0 overflow-hidden p-0 sm:grid-cols-[13rem_minmax(0,1fr)]"
                     >
-                      <div className="relative aspect-video min-w-0 overflow-hidden bg-paper-2">
+                      <div className="relative aspect-square min-w-0 overflow-hidden bg-paper-2">
                         {session.sessionThumbnail ? <><img src={session.sessionThumbnail} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-35 blur-xl" /><img src={session.sessionThumbnail} alt={`${session.title} thumbnail`} className="relative h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.03]" /></> : null}
                         <div className={`${session.sessionThumbnail ? "absolute bottom-2 left-2 bg-surface/90 shadow-sm" : "grid h-full place-items-center"} rounded-sm border border-line px-2.5 py-2 text-center backdrop-blur`}>
                         <span className="display tabular text-base leading-none">

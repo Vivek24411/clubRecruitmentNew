@@ -109,7 +109,7 @@ export default function Events() {
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 3 }).map((_, index) => (
               <div key={index} className="card overflow-hidden">
-                <Skeleton className="aspect-video w-full rounded-none" />
+                <Skeleton className="aspect-square w-full rounded-none" />
                 <div className="p-5">
                   <Skeleton className="h-5 w-2/3" />
                   <Skeleton className="mt-3 h-3 w-full" />
@@ -132,7 +132,7 @@ export default function Events() {
               const deadline = eventDeadline(event);
               return (
                 <article key={event._id} className="card flex flex-col overflow-hidden">
-                  <div className="relative aspect-video overflow-hidden bg-paper-2">
+                  <div className="relative aspect-square overflow-hidden bg-paper-2">
                     {event.eventBanner ? (
                       <>
                         <img src={event.eventBanner} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-35 blur-xl" />

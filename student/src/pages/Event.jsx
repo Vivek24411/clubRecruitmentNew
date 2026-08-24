@@ -254,7 +254,7 @@ export default function Event() {
       </header>
 
       {event.eventBanner && (
-        <div className="reveal relative mt-8 aspect-video w-full overflow-hidden rounded-md border border-line bg-ink/90 shadow-sm" style={{ "--d": "80ms" }}>
+        <div className="reveal relative mx-auto mt-8 aspect-square w-full max-w-3xl overflow-hidden rounded-md border border-line bg-ink/90 shadow-sm" style={{ "--d": "80ms" }}>
           <img src={event.eventBanner} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" />
           <div className="absolute inset-0 bg-ink/15" aria-hidden="true" />
           <img src={event.eventBanner} alt={`${event.title} banner`} className="relative h-full w-full object-contain" />

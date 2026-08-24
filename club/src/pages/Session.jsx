@@ -253,7 +253,7 @@ export default function Session() {
       </header>
 
       {session.sessionThumbnail && (
-        <div className="relative mt-8 aspect-video w-full overflow-hidden rounded-md border border-line bg-ink/90">
+        <div className="relative mx-auto mt-8 aspect-square w-full max-w-3xl overflow-hidden rounded-md border border-line bg-ink/90">
           <img src={session.sessionThumbnail} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" />
           <div className="absolute inset-0 bg-ink/15" aria-hidden="true" />
           <img src={session.sessionThumbnail} alt={`${session.title} banner`} className="relative h-full w-full object-contain" />
@@ -369,7 +369,7 @@ export default function Session() {
                 </Select>
               </Field>
             </div>
-            <Field label="Replace thumbnail" id="sessionThumbnail" hint="1600 × 900 px (16:9) works best. Up to 20 MB; files above 10 MB are optimized automatically."><input id="sessionThumbnail" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files[0] || null; if (file && file.size > 20 * 1024 * 1024) { event.target.value = ""; setThumbnail(null); toast.error("Choose an image no larger than 20 MB"); return; } setThumbnail(file); }} /></Field>
+            <Field label="Replace thumbnail" id="sessionThumbnail" hint="Recommended: 1080 × 1080 px (1:1 Instagram post). Up to 20 MB; files above 10 MB are optimized automatically."><input id="sessionThumbnail" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files[0] || null; if (file && file.size > 20 * 1024 * 1024) { event.target.value = ""; setThumbnail(null); toast.error("Choose an image no larger than 20 MB"); return; } setThumbnail(file); }} /></Field>
           </div>
 
           <Button className="mt-7" loading={saving}>Save session</Button>

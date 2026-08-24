@@ -233,10 +233,10 @@ export default function AddSession() {
 
         <Card className="reveal p-6" style={{ "--d": "120ms" }}>
           <h2 className="display text-xl">Session thumbnail</h2>
-          <p className="mt-1.5 text-sm text-ink-3">Recommended: 1600 × 900 px (16:9), JPG, PNG, or WebP up to 20 MB. Images above the provider&rsquo;s 10 MB limit are optimized automatically.</p>
+          <p className="mt-1.5 text-sm text-ink-3">Recommended: 1080 × 1080 px (1:1 Instagram post), JPG, PNG, or WebP up to 20 MB. The complete poster is shown without cropping across student and club pages.</p>
           <Field label="Choose image" id="sessionThumbnail" className="mt-5"><input id="sessionThumbnail" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files[0] || null; if (file && (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 20 * 1024 * 1024)) { event.target.value = ""; setThumbnail(null); setPreview(""); toast.error("Choose a JPG, PNG, or WebP image no larger than 20 MB"); return; } setThumbnail(file); setPreview(file ? URL.createObjectURL(file) : ""); }} /></Field>
           {preview && (
-            <div className="relative mt-5 aspect-video w-full overflow-hidden rounded-sm border border-line bg-ink/90">
+            <div className="relative mx-auto mt-5 aspect-square w-full max-w-2xl overflow-hidden rounded-sm border border-line bg-ink/90">
               <img src={preview} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" />
               <div className="absolute inset-0 bg-ink/15" aria-hidden="true" />
               <img src={preview} alt="Session thumbnail preview" className="relative h-full w-full object-contain" />
