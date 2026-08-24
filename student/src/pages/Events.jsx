@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { Link } from "react-router-dom";
-import { daysUntil, eventDeadline, formatDateTime } from "../utils/date";
+import { daysUntil, eventApplicationsOpen, eventDeadline, eventIsOpen, formatDateTime } from "../utils/date";
 import { sortClubCategories } from "../utils/clubCategories";
 import {
   Badge,
@@ -32,14 +32,10 @@ function SearchIcon() {
   );
 }
 
-function StatusBadge({ deadline }) {
-  const days = daysUntil(deadline);
-  if (days === null) return <Badge tone="neutral">No deadline</Badge>;
-  if (days < 0) return <Badge tone="neutral">Closed</Badge>;
-  if (days === 0) return <Badge tone="bad" live>Closes today</Badge>;
-  if (days === 1) return <Badge tone="bad">Closes tomorrow</Badge>;
-  if (days <= 7) return <Badge tone="warn">{days}d left</Badge>;
-  return <Badge tone="ok">Open</Badge>;
+function StatusBadge({ event }) {
+  return eventIsOpen(event)
+    ? <Badge tone="ok" live>Open</Badge>
+    : <Badge tone="neutral">Closed</Badge>;
 }
 
 function EventCardSkeleton() {
@@ -103,7 +99,7 @@ export default function Events() {
 
       if (category !== "all" && event.clubId?.category !== category) return false;
       if (eventType !== "all" && event.eventType !== eventType) return false;
-      const isOpen = event.status === "published" && (eventDeadline(event) || 0) > now;
+      const isOpen = eventIsOpen(event, now);
       if (filter === "open") return isOpen;
       if (filter === "closed") return !isOpen;
       return true;
@@ -121,8 +117,11 @@ export default function Events() {
   }, [events, searchQuery, filter, category, eventType, sortBy]);
 
   const counts = useMemo(() => {
-    const openList = events.filter((event) => event.status === "published" && (eventDeadline(event) || 0) > now);
-    const soon = openList.filter((event) => daysUntil(eventDeadline(event)) <= 3);
+    const openList = events.filter((event) => eventIsOpen(event, now));
+    const soon = openList.filter((event) => {
+      const days = daysUntil(eventDeadline(event));
+      return eventApplicationsOpen(event, now) && days !== null && days <= 3;
+    });
     return {
       total: events.length,
       open: openList.length,
@@ -150,8 +149,8 @@ export default function Events() {
       {!isLoading && events.length > 0 && (
         <div className="stagger mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat index={1} label="Listed" value={counts.total} />
-          <Stat index={2} label="Accepting applications" value={counts.open} tone="accent" />
-          <Stat index={3} label="Closing within 3 days" value={counts.soon} />
+          <Stat index={2} label="Open events" value={counts.open} tone="accent" />
+          <Stat index={3} label="Applications closing soon" value={counts.soon} />
           <Stat index={4} label="Closed" value={counts.closed} />
         </div>
       )}
@@ -260,7 +259,7 @@ export default function Events() {
           <div className="stagger grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {visibleEvents.map((event) => {
               const deadline = eventDeadline(event);
-              const closed = event.status !== "published" || !deadline || deadline < now;
+              const applicationsOpen = eventApplicationsOpen(event, now);
               return (
                 <Link
                   key={event._id}
@@ -288,7 +287,7 @@ export default function Events() {
                       </div>
                     )}
                     <span className="absolute right-3 top-3">
-                      <StatusBadge deadline={deadline} />
+                      <StatusBadge event={event} />
                     </span>
                   </div>
 
@@ -304,8 +303,8 @@ export default function Events() {
 
                     <dl className="mt-5 space-y-2 border-t border-line pt-4 text-sm">
                       <div className="flex justify-between gap-3">
-                        <dt className="text-ink-3">Closes</dt>
-                        <dd className={`text-right font-medium ${closed ? "text-ink-4" : ""}`}>
+                        <dt className="text-ink-3">Applications close</dt>
+                        <dd className={`text-right font-medium ${applicationsOpen ? "" : "text-ink-4"}`}>
                           {formatDateTime(deadline, { dateOnly: true })}
                         </dd>
                       </div>
@@ -328,7 +327,7 @@ export default function Events() {
                     </dl>
 
                     <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-accent">
-                      {closed || event.application ? "View details" : "Apply now"}
+                      {!applicationsOpen || event.application ? "View details" : "Apply now"}
                       <span className="transition-transform duration-300 group-hover:translate-x-1">
                         →
                       </span>

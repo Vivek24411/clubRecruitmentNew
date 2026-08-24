@@ -135,10 +135,10 @@ export default function Session() {
             </Link>
           )}
           {isPast
-            ? <Badge tone="neutral">Past session</Badge>
+            ? <Badge tone="neutral">Session closed</Badge>
             : isOngoing
               ? <Badge tone="ok" live>Live now</Badge>
-              : <Badge tone="ok">Upcoming</Badge>}
+              : <Badge tone="ok">Open</Badge>}
         </div>
 
         <h1 className="display mt-4 max-w-3xl text-3xl sm:text-4xl lg:text-5xl">{session.title}</h1>

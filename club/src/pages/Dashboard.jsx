@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
-import { eventDeadline, formatDateTime, sessionDate, sessionEndDate } from "../utils/date";
+import { eventDeadline, eventEndDate, eventIsOpen, formatDateTime, sessionDate, sessionEndDate, sessionIsOpen } from "../utils/date";
 import {
   Badge,
   Button,
@@ -39,8 +39,8 @@ export default function Dashboard() {
   const upcomingEvents = useMemo(
     () =>
       [...events]
-        .filter((event) => (eventDeadline(event) || 0) >= now)
-        .sort((a, b) => (eventDeadline(a) || 0) - (eventDeadline(b) || 0)),
+        .filter((event) => eventIsOpen(event, now))
+        .sort((a, b) => (eventEndDate(a) || 0) - (eventEndDate(b) || 0)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [events],
   );
@@ -48,7 +48,7 @@ export default function Dashboard() {
   const upcomingSessions = useMemo(
     () =>
       [...sessions]
-        .filter((session) => (sessionEndDate(session) || 0) > now)
+        .filter((session) => sessionIsOpen(session, now))
         .sort(
           (a, b) =>
             (sessionDate(a.date, a.time) || 0) - (sessionDate(b.date, b.time) || 0),
@@ -58,11 +58,14 @@ export default function Dashboard() {
   );
 
   const nextEvent = upcomingEvents[0] || events[0];
+  const nextEventOpen = nextEvent && eventIsOpen(nextEvent, now);
+  const nextEventEndsAt = nextEvent && eventEndDate(nextEvent);
   const nextSession = upcomingSessions[0] || sessions[0];
   const nextSessionStartsAt = nextSession && sessionDate(nextSession.date, nextSession.time);
   const nextSessionEndsAt = nextSession && sessionEndDate(nextSession);
-  const nextSessionOngoing = nextSessionStartsAt && nextSessionStartsAt <= now && nextSessionEndsAt > now;
-  const nextSessionEnded = nextSessionEndsAt && nextSessionEndsAt <= now;
+  const nextSessionOpen = nextSession && sessionIsOpen(nextSession, now);
+  const nextSessionOngoing = nextSessionOpen && nextSessionStartsAt && nextSessionStartsAt <= now && nextSessionEndsAt > now;
+  const nextSessionEnded = nextSession?.status === "published" && !nextSessionOpen;
   const publishedEvents = events.filter((event) => event.status === "published").length;
 
   return (
@@ -137,10 +140,10 @@ export default function Dashboard() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <h3 className="display text-xl leading-snug">{nextEvent.title}</h3>
                   <Badge
-                    tone={nextEvent.status === "published" ? "ok" : "neutral"}
+                    tone={nextEventOpen ? "ok" : "neutral"}
                     className="capitalize"
                   >
-                    {nextEvent.status || "draft"}
+                    {nextEvent.status === "published" ? (nextEventOpen ? "open" : "closed") : nextEvent.status || "draft"}
                   </Badge>
                 </div>
                 <div className="mt-2.5 lg:min-h-[4.5rem]">
@@ -153,9 +156,12 @@ export default function Dashboard() {
 
                 <MetaGrid className="mt-6 border-t border-line pt-5">
                   <Meta
-                    label="Deadline"
+                    label="Application deadline"
                     value={formatDateTime(eventDeadline(nextEvent), { dateOnly: true })}
                   />
+                  {nextEventEndsAt && nextEventEndsAt.getTime() !== eventDeadline(nextEvent)?.getTime() && (
+                    <Meta label="Final round ends" value={formatDateTime(nextEventEndsAt)} />
+                  )}
                   <Meta label="Rounds" value={nextEvent.numberOfRounds || "—"} />
                   <Meta label="Participant limit" value={nextEvent.maxParticipants ? `${nextEvent.maxParticipants} people` : "Unlimited"} />
                   <Meta label="Eligibility" value={nextEvent.eligibility || "Open to all"} />
@@ -206,10 +212,13 @@ export default function Dashboard() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <h3 className="display text-xl leading-snug">{nextSession.title}</h3>
                   <Badge
-                    tone={nextSessionEnded ? "neutral" : "ok"}
+                    tone={nextSessionOpen ? "ok" : "neutral"}
                     live={nextSessionOngoing}
+                    className="capitalize"
                   >
-                    {nextSessionEnded ? "Past" : nextSessionOngoing ? "Live now" : "Upcoming"}
+                    {nextSession.status === "published"
+                      ? nextSessionEnded ? "closed" : nextSessionOngoing ? "live now" : "open"
+                      : nextSession.status}
                   </Badge>
                 </div>
                 <div className="mt-2.5 lg:min-h-[4.5rem]">
@@ -256,19 +265,20 @@ export default function Dashboard() {
         <section className="ruled-top mt-16 pt-10">
           <SectionHeader
             title="Also open"
-            description="Other events still accepting applications."
+            description="Other application or selection processes still running."
           />
           <div className="stagger mt-5 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {upcomingEvents.slice(1, 7).map((event) => (
               <CardLink key={event._id} to={`/event/${event._id}`} className="p-5">
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="display text-base leading-snug">{event.title}</h3>
-                  <Badge tone="neutral" className="capitalize">
-                    {event.status}
-                  </Badge>
+                  <Badge tone="ok">Open</Badge>
                 </div>
                 <p className="mt-3 text-sm text-ink-3">
-                  Closes {formatDateTime(eventDeadline(event), { dateOnly: true })}
+                  {eventEndDate(event)?.getTime() !== eventDeadline(event)?.getTime()
+                    ? "Final round ends"
+                    : "Applications close"}{" "}
+                  {formatDateTime(eventEndDate(event), { dateOnly: true })}
                 </p>
               </CardLink>
             ))}

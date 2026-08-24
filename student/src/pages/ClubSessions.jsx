@@ -99,11 +99,11 @@ export default function ClubSessions() {
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <h2 className="display text-lg leading-snug">{session.title}</h2>
                       {isPast ? (
-                        <Badge tone="neutral">Past</Badge>
+                        <Badge tone="neutral">Closed</Badge>
                       ) : isOngoing ? (
                         <Badge tone="ok" live>Live now</Badge>
                       ) : (
-                        <Badge tone="ok">Upcoming</Badge>
+                        <Badge tone="ok">Open</Badge>
                       )}
                     </div>
                     {session.shortDescription && (

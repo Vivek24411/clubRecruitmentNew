@@ -738,18 +738,18 @@ module.exports.getDashBoard = async (req, res, next) => {
     sessionModel.find({ status: "published" }).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS }),
     getPlatformSettingsCached(),
   ]);
-  const openEvents = events.filter((event) => event.clubId && registrationIsOpen(event));
+  const visibleEvents = events.filter((event) => event.clubId);
   const memberships = req.student
     ? await eventMembershipModel.find({
       studentId: req.student._id,
-      eventId: { $in: openEvents.map((event) => event._id) },
+      eventId: { $in: visibleEvents.map((event) => event._id) },
     })
     : [];
   const applicationEventIds = new Set(memberships.map((membership) => String(membership.eventId)));
   const visibleSessions = sessions.filter((session) => session.clubId);
   return res.json({
     success: true,
-    events: openEvents.map((event) => ({ ...event.toObject(), hasApplied: applicationEventIds.has(String(event._id)) })),
+    events: visibleEvents.map((event) => ({ ...event.toObject(), hasApplied: applicationEventIds.has(String(event._id)) })),
     sessions: await sessionsWithConfirmedRsvpCounts(visibleSessions),
     settings,
   });

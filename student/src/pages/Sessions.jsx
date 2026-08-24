@@ -136,7 +136,7 @@ export default function Sessions() {
           variant={showPast ? "primary" : "secondary"}
           onClick={() => setShowPast((value) => !value)}
         >
-          {showPast ? "Showing all" : "Include past"}
+          {showPast ? "Showing all" : "Include closed"}
         </Button>
       </div>
 
@@ -145,16 +145,16 @@ export default function Sessions() {
           <SkeletonList rows={4} />
         ) : total === 0 ? (
           <EmptyState
-            title={searchTerm ? "No matching sessions" : "No upcoming sessions"}
+            title={searchTerm ? "No matching sessions" : "No open sessions"}
             description={
               searchTerm
-                ? "Try a different search term, or include past sessions."
+                ? "Try a different search term, or include closed sessions."
                 : "Clubs haven't scheduled any sessions yet. Check back soon."
             }
             action={
               !showPast && (
                 <Button variant="secondary" onClick={() => setShowPast(true)}>
-                  Include past sessions
+                  Include closed sessions
                 </Button>
               )
             }
@@ -199,11 +199,11 @@ export default function Sessions() {
 
                         <div className="flex flex-none items-center gap-3 px-5 pb-5 sm:flex-col sm:items-end sm:justify-center sm:p-5">
                           {isPast ? (
-                            <Badge tone="neutral">Past</Badge>
+                            <Badge tone="neutral">Closed</Badge>
                           ) : isOngoing ? (
                             <Badge tone="ok" live>Live now</Badge>
                           ) : (
-                            <Badge tone="ok">Upcoming</Badge>
+                            <Badge tone="ok">Open</Badge>
                           )}
                           {session.venue && (
                             <span className="truncate text-xs text-ink-3">{session.venue}</span>

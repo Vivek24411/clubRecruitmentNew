@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { eventDeadline, formatDateTime } from "../utils/date";
+import { eventApplicationsOpen, eventDeadline, eventIsOpen, formatDateTime } from "../utils/date";
 import {
   Badge,
   Button,
@@ -69,7 +69,8 @@ export default function ClubEvents() {
           <div className="stagger space-y-4">
             {clubEvents.map((event) => {
               const deadline = eventDeadline(event);
-              const open = deadline && deadline > new Date();
+              const open = eventIsOpen(event);
+              const applicationsOpen = eventApplicationsOpen(event);
               return (
                 <Link
                   key={event._id}
@@ -89,7 +90,7 @@ export default function ClubEvents() {
                   </div>
 
                   <MetaGrid cols={4} className="mt-6 border-t border-line pt-5">
-                    <Meta label="Deadline" value={formatDateTime(deadline, { dateOnly: true })} />
+                    <Meta label="Application deadline" value={formatDateTime(deadline, { dateOnly: true })} />
                     <Meta
                       label="Team size"
                       value={
@@ -103,7 +104,7 @@ export default function ClubEvents() {
                   </MetaGrid>
 
                   <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-accent">
-                    {open ? "Apply now" : "View details"}
+                    {applicationsOpen ? "Apply now" : "View details"}
                     <span className="transition-transform duration-300 group-hover:translate-x-1">
                       →
                     </span>

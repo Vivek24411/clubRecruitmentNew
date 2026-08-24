@@ -2,7 +2,15 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 import { StudentContextData } from "../context/StudentContext";
-import { daysUntil, eventDeadline, formatDateTime, sessionDate, sessionEndDate } from "../utils/date";
+import {
+  daysUntil,
+  eventApplicationsOpen,
+  eventDeadline,
+  eventIsOpen,
+  formatDateTime,
+  sessionDate,
+  sessionEndDate,
+} from "../utils/date";
 import {
   Badge,
   Button,
@@ -17,10 +25,11 @@ import {
 } from "../components/ui";
 
 /** Days remaining, rendered as the urgency badge on every event row. */
-export function DeadlinePill({ deadline }) {
+export function DeadlinePill({ event }) {
+  const deadline = eventDeadline(event);
   const days = daysUntil(deadline);
-  if (days === null) return null;
-  if (days < 0) return <Badge tone="neutral">Closed</Badge>;
+  if (!eventApplicationsOpen(event)) return <Badge tone="ok">Selection ongoing</Badge>;
+  if (days === null) return <Badge tone="ok">Open</Badge>;
   if (days === 0) return <Badge tone="bad" live>Closes today</Badge>;
   if (days === 1) return <Badge tone="bad">Closes tomorrow</Badge>;
   if (days <= 7) return <Badge tone="warn">{days}d left</Badge>;
@@ -77,7 +86,7 @@ export default function Home() {
   );
 
   const openEvents = useMemo(
-    () => sortedEvents.filter((event) => (eventDeadline(event) || 0) > new Date()),
+    () => sortedEvents.filter((event) => eventIsOpen(event)),
     [sortedEvents],
   );
 
@@ -166,8 +175,8 @@ export default function Home() {
       <div className="mt-12 grid gap-12 lg:grid-cols-2 lg:gap-10">
         <section>
           <SectionHeader
-            title="Deadlines coming up"
-            description="Events with the nearest application deadlines."
+            title="Open events"
+            description="Applications and selection processes currently running."
             action={
               <Link className="link link-accent text-sm" to="/events">
                 View all
@@ -180,7 +189,7 @@ export default function Home() {
             ) : openEvents.length === 0 ? (
               <EmptyState
                 title="No open events"
-                description="Nothing is accepting applications right now. Check back when the next cycle opens."
+                description="No event or selection process is currently running."
               />
             ) : (
               <div className="stagger space-y-3">
@@ -196,10 +205,10 @@ export default function Home() {
                         <p className="eyebrow eyebrow-accent">{event.clubId?.name}</p>
                         <h3 className="display mt-1.5 text-lg leading-snug">{event.title}</h3>
                           </div>
-                          <DeadlinePill deadline={eventDeadline(event)} />
+                          <DeadlinePill event={event} />
                         </div>
-                        <p className="mt-3 text-sm text-ink-3">Closes {formatDateTime(eventDeadline(event))}</p>
-                        <p className="mt-2 text-xs font-semibold text-accent">{event.hasApplied ? "View details" : "Apply now"} →</p>
+                        <p className="mt-3 text-sm text-ink-3">Applications close {formatDateTime(eventDeadline(event))}</p>
+                        <p className="mt-2 text-xs font-semibold text-accent">{event.hasApplied || !eventApplicationsOpen(event) ? "View details" : "Apply now"} →</p>
                       </div>
                     </div>
                   </CardLink>
@@ -231,7 +240,8 @@ export default function Home() {
               <div className="stagger space-y-3">
                 {upcomingSessions.slice(0, 4).map((session) => {
                   const startsAt = sessionDate(session.date, session.time);
-                  const isOngoing = startsAt && startsAt <= new Date();
+                  const endsAt = sessionEndDate(session);
+                  const isOngoing = startsAt && startsAt <= new Date() && endsAt > new Date();
                   return (
                     <CardLink
                       key={session._id}
@@ -258,7 +268,7 @@ export default function Home() {
                       <div className="min-w-0 p-4">
                         <p className="eyebrow eyebrow-accent">{session.clubId?.name}</p>
                         <h3 className="display mt-1 text-base leading-snug">{session.title}</h3>
-                        {isOngoing && <Badge className="mt-2" tone="ok" live>Live now</Badge>}
+                        <Badge className="mt-2" tone="ok" live={isOngoing}>{isOngoing ? "Live now" : "Open"}</Badge>
                         <p className="mt-1.5 text-sm text-ink-3">
                           {formatDateTime(startsAt)}
                           {session.venue ? ` · ${session.venue}` : ""}

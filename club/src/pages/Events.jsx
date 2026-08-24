@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
-import { eventDeadline, formatDateTime } from "../utils/date";
+import { eventDeadline, eventIsOpen, formatDateTime } from "../utils/date";
 import {
   Badge,
   Button,
@@ -130,6 +130,9 @@ export default function Events() {
           <div className="stagger grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {filteredEvents.map((event) => {
               const deadline = eventDeadline(event);
+              const effectiveStatus = event.status === "published"
+                ? (eventIsOpen(event) ? "open" : "closed")
+                : event.status;
               return (
                 <article key={event._id} className="card flex flex-col overflow-hidden">
                   <div className="relative aspect-square overflow-hidden bg-paper-2">
@@ -152,8 +155,8 @@ export default function Events() {
                       </div>
                     )}
                     <span className="absolute right-3 top-3">
-                      <Badge tone={STATUS_TONE[event.status] || "neutral"} className="capitalize">
-                        {event.status}
+                      <Badge tone={effectiveStatus === "open" ? "ok" : STATUS_TONE[effectiveStatus] || "neutral"} className="capitalize">
+                        {effectiveStatus}
                       </Badge>
                     </span>
                   </div>

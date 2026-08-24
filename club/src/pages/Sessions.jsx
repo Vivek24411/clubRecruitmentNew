@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
-import { formatDateTime, sessionDate, sessionEndDate } from "../utils/date";
+import { formatDateTime, sessionDate, sessionEndDate, sessionIsOpen } from "../utils/date";
 import {
   Badge,
   Button,
@@ -63,7 +63,7 @@ export default function Sessions() {
       <div className="mt-8 grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_12rem]">
         <label><span className="eyebrow">Search</span><Input className="mt-1.5" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Title, venue, description…" /></label>
         <label><span className="eyebrow">Status</span><Select className="mt-1.5" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option>{Object.keys(STATUS_TONE).map((status) => <option key={status} value={status} className="capitalize">{status}</option>)}</Select></label>
-        <label><span className="eyebrow">Schedule</span><Select className="mt-1.5" value={timeFilter} onChange={(event) => setTimeFilter(event.target.value)}><option value="all">All dates</option><option value="upcoming">Upcoming</option><option value="past">Past</option></Select></label>
+        <label><span className="eyebrow">Schedule</span><Select className="mt-1.5" value={timeFilter} onChange={(event) => setTimeFilter(event.target.value)}><option value="all">All dates</option><option value="upcoming">Open</option><option value="past">Closed</option></Select></label>
       </div>
 
       <div className="mt-6">
@@ -81,6 +81,12 @@ export default function Sessions() {
           <div className="stagger grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {filteredSessions.map((session) => {
               const startsAt = sessionDate(session.date, session.time);
+              const endsAt = sessionEndDate(session);
+              const open = sessionIsOpen(session);
+              const ongoing = open && startsAt && startsAt <= new Date() && endsAt > new Date();
+              const effectiveStatus = session.status === "published"
+                ? (ongoing ? "live now" : open ? "open" : "closed")
+                : session.status;
               const confirmed = session.confirmedRsvpCount || 0;
               return (
                 <article key={session._id} className="card flex flex-col overflow-hidden">
@@ -106,8 +112,8 @@ export default function Sessions() {
                       </div>
                     )}
                     <span className="absolute right-3 top-3">
-                      <Badge tone={STATUS_TONE[session.status] || "neutral"} className="capitalize">
-                        {session.status}
+                      <Badge tone={open ? "ok" : STATUS_TONE[session.status] || "neutral"} live={ongoing} className="capitalize">
+                        {effectiveStatus}
                       </Badge>
                     </span>
                   </div>

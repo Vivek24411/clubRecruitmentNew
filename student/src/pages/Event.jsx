@@ -2,7 +2,14 @@ import { useCallback, useContext, useEffect, useState } from "react";
 import axios from "axios";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { daysUntil, eventDeadline, formatDateTime } from "../utils/date";
+import {
+  daysUntil,
+  eventApplicationsOpen,
+  eventDeadline,
+  eventEndDate,
+  eventIsOpen,
+  formatDateTime,
+} from "../utils/date";
 import EventWorkflow from "../components/EventWorkflow";
 import VerticalApplication from "../components/VerticalApplication";
 import { StudentContextData } from "../context/StudentContext";
@@ -189,7 +196,10 @@ export default function Event() {
   }
 
   const deadline = eventDeadline(event);
-  const open = platformOpen && eligibility.eligible !== false && event.status === "published" && (!deadline || deadline > new Date());
+  const eventEndsAt = eventEndDate(event);
+  const eventOpen = eventIsOpen(event);
+  const applicationsOpen = eventApplicationsOpen(event);
+  const canApply = platformOpen && eligibility.eligible !== false && applicationsOpen;
   const verticalsEnabled = Boolean(event.verticalsEnabled) && (event.verticals?.length || 0) > 1;
   // Signed-out visitors still see the catalogue, so fall back to the event's
   // own verticals when getEventDetails was never called.
@@ -202,15 +212,11 @@ export default function Event() {
   const maxTeam = primaryVertical?.maxTeamSize || event.maxTeamSize || 1;
   const daysLeft = daysUntil(deadline);
 
-  const statusBadge = open ? (
-    <Badge tone="ok" live>
-      Applications open
-    </Badge>
-  ) : !platformOpen ? (
-    <Badge tone="warn">Recruitment paused</Badge>
-  ) : (
-    <Badge tone="neutral">Applications closed</Badge>
-  );
+  const applicationStatusBadge = !platformOpen
+    ? <Badge tone="warn">Recruitment paused</Badge>
+    : applicationsOpen
+      ? <Badge tone="accent">Applications open</Badge>
+      : <Badge tone="neutral">Applications closed</Badge>;
 
   return (
     <Page>
@@ -232,8 +238,9 @@ export default function Event() {
               <span className="text-sm font-semibold">{event.clubId.name}</span>
             </Link>
           )}
-          {statusBadge}
-          {open && daysLeft !== null && daysLeft >= 0 && daysLeft <= 7 && (
+          {eventOpen ? <Badge tone="ok" live>Event open</Badge> : <Badge tone="neutral">Event closed</Badge>}
+          {applicationStatusBadge}
+          {applicationsOpen && daysLeft !== null && daysLeft >= 0 && daysLeft <= 7 && (
             <Badge tone={daysLeft <= 1 ? "bad" : "warn"}>
               {daysLeft === 0
                 ? "Closes today"
@@ -275,7 +282,10 @@ export default function Event() {
             )}
 
             <MetaGrid className="mt-8 border-t border-line pt-6">
-              <Meta label="Deadline" value={formatDateTime(deadline)} />
+              <Meta label="Application deadline" value={formatDateTime(deadline)} />
+              {eventEndsAt && eventEndsAt.getTime() !== deadline?.getTime() && (
+                <Meta label="Final round ends" value={formatDateTime(eventEndsAt)} />
+              )}
               <Meta
                 label="Application"
                 value={
@@ -388,16 +398,16 @@ export default function Event() {
         <aside className="space-y-4 lg:sticky lg:top-24 lg:h-fit">
           {!loggedInStudent && (
             <Card className="reveal p-6" style={{ "--d": "160ms" }}>
-              <h2 className="display text-lg">{open ? "Ready to apply?" : "Applications closed"}</h2>
+              <h2 className="display text-lg">{canApply ? "Ready to apply?" : "Applications closed"}</h2>
               <p className="mt-2.5 text-sm leading-relaxed text-ink-3">
-                {open
+                {canApply
                   ? verticalsEnabled
                     ? "Sign in with your student account to pick a vertical, build a team, and track every selection round."
                     : "Sign in with your student account to apply, build a team, and track every selection round."
                   : "You can still explore this event. Sign in to view your existing application, if you have one."}
               </p>
               <Button block size="lg" className="mt-6" onClick={() => rememberEventAndNavigate("/login")}>
-                {open ? "Sign in to apply" : "Sign in"}
+                {canApply ? "Sign in to apply" : "Sign in"}
               </Button>
               <button
                 type="button"

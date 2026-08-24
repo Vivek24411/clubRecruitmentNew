@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { formatDateTime, sessionDate } from "../utils/date";
+import { formatDateTime, sessionDate, sessionEndDate, sessionIsOpen } from "../utils/date";
 import {
   Badge,
   Button,
@@ -224,6 +224,14 @@ export default function Session() {
     );
   }
 
+  const startsAt = sessionDate(session.date, session.time);
+  const endsAt = sessionEndDate(session);
+  const open = sessionIsOpen(session);
+  const ongoing = open && startsAt && startsAt <= new Date() && endsAt > new Date();
+  const effectiveStatus = session.status === "published"
+    ? (ongoing ? "live now" : open ? "open" : "closed")
+    : session.status;
+
   return (
     <Page>
       <Link to="/sessions" className="link text-sm text-ink-3">
@@ -236,12 +244,12 @@ export default function Session() {
             <span className="eyebrow eyebrow-accent">Session</span>
             <h1 className="display mt-2 text-3xl sm:text-4xl">{session.title}</h1>
             <p className="mt-3 text-sm text-ink-3">
-              {formatDateTime(sessionDate(session.date, session.time))}
+              {formatDateTime(startsAt)}
               {session.venue ? ` · ${session.venue}` : session.meetingUrl ? " · Online" : ""}
             </p>
           </div>
-          <Badge tone={session.status === "published" ? "ok" : "neutral"} className="capitalize">
-            {session.status}
+          <Badge tone={open ? "ok" : "neutral"} live={ongoing} className="capitalize">
+            {effectiveStatus}
           </Badge>
         </div>
         <div className="mt-6 flex flex-wrap gap-2.5">

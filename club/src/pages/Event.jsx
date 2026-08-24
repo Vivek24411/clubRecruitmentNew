@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { eventDeadline, formatDateTime } from "../utils/date";
+import { eventDeadline, eventEndDate, eventIsOpen, formatDateTime } from "../utils/date";
 import { eligibilitySummary } from "../utils/eligibility";
 import { useContext } from "react";
 import { ClubContextData } from "../context/ClubContext.jsx";
@@ -77,6 +77,10 @@ export default function Event() {
   }
 
   const deadline = eventDeadline(event);
+  const eventEndsAt = eventEndDate(event);
+  const effectiveStatus = event.status === "published"
+    ? (eventIsOpen(event) ? "open" : "closed")
+    : event.status;
 
   return (
     <Page width="5xl">
@@ -101,8 +105,8 @@ export default function Event() {
               </p>
             )}
           </div>
-          <Badge tone={STATUS_TONE[event.status] || "neutral"} className="capitalize">
-            {event.status}
+          <Badge tone={effectiveStatus === "open" ? "ok" : STATUS_TONE[effectiveStatus] || "neutral"} className="capitalize">
+            {effectiveStatus}
           </Badge>
         </div>
 
@@ -132,9 +136,12 @@ export default function Event() {
             <h2 className="display text-xl">Event details</h2>
             <MetaGrid cols={2} className="mt-6">
               <Meta
-                label="Deadline"
+                label="Application deadline"
                 value={deadline ? formatDateTime(deadline) : "Not set"}
               />
+              {eventEndsAt && eventEndsAt.getTime() !== deadline?.getTime() && (
+                <Meta label="Final round ends" value={formatDateTime(eventEndsAt)} />
+              )}
               <Meta label="Participant limit" value={event.maxParticipants ? `${event.maxParticipants} people` : "Unlimited"} />
               <Meta label="Rounds" value={event.numberOfRounds} />
               <Meta
