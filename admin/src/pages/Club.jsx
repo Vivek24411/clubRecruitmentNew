@@ -200,16 +200,13 @@ export default function Club() {
                   ) : null
                 }
               />
-              <Meta
-                label="Phone"
-                value={
-                  clubDetails.contactPhone ? (
-                    <a href={`tel:${clubDetails.contactPhone}`} className="link link-accent">
-                      {clubDetails.contactPhone}
-                    </a>
-                  ) : null
-                }
-              />
+              {(clubDetails.contactPersons?.length ? clubDetails.contactPersons : clubDetails.contactPhone ? [{ phone: clubDetails.contactPhone }] : []).map((contact, index) => (
+                <Meta
+                  key={contact._id || `${contact.phone}-${index}`}
+                  label={[contact.name, contact.role].filter(Boolean).join(" · ") || `Phone ${index + 1}`}
+                  value={<a href={`tel:${contact.phone}`} className="link link-accent">{contact.phone}</a>}
+                />
+              ))}
             </dl>
           </Card>
 

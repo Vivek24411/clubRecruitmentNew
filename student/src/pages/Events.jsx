@@ -270,15 +270,18 @@ export default function Events() {
                   {/* Media */}
                   <div className="relative aspect-[16/9] overflow-hidden bg-paper-2">
                     {event.eventBanner ? (
-                      <img
-                        src={event.eventBanner}
-                        alt=""
-                        loading="lazy"
-                        className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
-                        onError={(error) => {
-                          error.currentTarget.style.display = "none";
-                        }}
-                      />
+                      <>
+                        <img src={event.eventBanner} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-35 blur-xl" />
+                        <img
+                          src={event.eventBanner}
+                          alt={`${event.title} banner`}
+                          loading="lazy"
+                          className="relative h-full w-full object-contain transition-transform duration-700 ease-out group-hover:scale-[1.02]"
+                          onError={(error) => {
+                            error.currentTarget.style.display = "none";
+                          }}
+                        />
+                      </>
                     ) : (
                       <div className="grid h-full place-items-center">
                         <Monogram name={event.clubId?.name || event.title} size="lg" />

@@ -3,7 +3,7 @@ import { Button, DateTimeInput, Field, Input, Select, Textarea } from "./ui";
 
 export const ROUND_TYPES = [
   ["test", "Common test · individual results"],
-  ["submission", "Submission"],
+  ["submission", "Application / submission form"],
   ["interview", "Interview"],
   ["group_discussion", "Group discussion"],
   ["presentation", "Presentation"],
@@ -32,6 +32,14 @@ const emptyRound = (order) => ({
   submissionDeadlineAt: "",
   allowResubmission: true,
   submissionFields: [],
+});
+
+const emptyApplicationFormRound = (order, registrationType) => ({
+  ...emptyRound(order),
+  title: "Application form",
+  type: "submission",
+  evaluationScope: registrationType === "individual" ? "participant" : "application",
+  submissionEnabled: true,
 });
 
 export function toLocalDateTime(value) {
@@ -72,10 +80,16 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
       scheduleMode: type === "interview" ? "slots" : round.scheduleMode,
     });
   };
-  const addField = () => set("submissionFields", [
-    ...(round.submissionFields || []),
-    { key: `field_${(round.submissionFields || []).length + 1}`, label: "", type: "url", required: true, helpText: "" },
-  ]);
+  const addField = () => {
+    const fields = round.submissionFields || [];
+    const usedKeys = new Set(fields.map((field) => field.key));
+    let nextNumber = fields.length + 1;
+    while (usedKeys.has(`field_${nextNumber}`)) nextNumber += 1;
+    set("submissionFields", [
+      ...fields,
+      { key: `field_${nextNumber}`, label: "", type: "short_text", required: true, helpText: "" },
+    ]);
+  };
   const updateField = (fieldIndex, changes) => set(
     "submissionFields",
     round.submissionFields.map((field, current) => current === fieldIndex ? { ...field, ...changes } : field),
@@ -203,7 +217,7 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
               <h4 className="font-semibold">Submission form</h4>
               <p className="mt-1 text-sm text-ink-3">Links and text are stored directly. Images, PDFs, and videos upload to Cloudinary.</p>
             </div>
-            <Button type="button" variant="secondary" size="sm" onClick={addField}>Add field</Button>
+            <Button type="button" variant="secondary" size="sm" disabled={(round.submissionFields || []).length >= 12} onClick={addField}>Add field</Button>
           </div>
           <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Opens" id={`submission-open-${index}`}>
@@ -229,13 +243,16 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
             {(round.submissionFields || []).map((field, fieldIndex) => (
               <div key={`submission-field-${index}-${fieldIndex}`} className="grid gap-3 border-t border-line pt-4 sm:grid-cols-[1fr_12rem_auto]">
                 <Field label="Field label" id={`field-label-${index}-${fieldIndex}`}>
-                  <Input id={`field-label-${index}-${fieldIndex}`} value={field.label} onChange={(event) => updateField(fieldIndex, { label: event.target.value, key: event.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || field.key })} required />
+                  <Input id={`field-label-${index}-${fieldIndex}`} value={field.label} onChange={(event) => updateField(fieldIndex, { label: event.target.value })} required />
                 </Field>
                 <Field label="Input type" id={`field-type-${index}-${fieldIndex}`}>
                   <Select id={`field-type-${index}-${fieldIndex}`} value={field.type} onChange={(event) => updateField(fieldIndex, { type: event.target.value })}>
+                    <option value="short_text">Short answer</option>
+                    <option value="long_text">Long answer</option>
+                    <option value="boolean">Checkbox</option>
                     <option value="url">Website link</option>
                     <option value="github">GitHub repository</option>
-                    <option value="text">Text answer</option>
+                    {field.type === "text" && <option value="text">Text answer (legacy)</option>}
                     <option value="file">Image/file</option>
                     <option value="pdf">PDF or deck</option>
                     <option value="video">Video</option>
@@ -245,6 +262,9 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
                   <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={field.required !== false} onChange={(event) => updateField(fieldIndex, { required: event.target.checked })} />Required</label>
                   <button type="button" className="link text-sm font-semibold text-bad" onClick={() => removeField(fieldIndex)}>Remove</button>
                 </div>
+                <Field label="Help text (optional)" id={`field-help-${index}-${fieldIndex}`} className="sm:col-span-2">
+                  <Input id={`field-help-${index}-${fieldIndex}`} value={field.helpText || ""} onChange={(event) => updateField(fieldIndex, { helpText: event.target.value })} maxLength={300} placeholder="Explain what the applicant should enter" />
+                </Field>
               </div>
             ))}
           </div>
@@ -273,7 +293,10 @@ export default function RoundBuilder({ rounds, onChange, registrationType }) {
           <h2 className="display text-xl">Event rounds</h2>
           <p className="mt-1.5 text-sm text-ink-3">Build any sequence of common activities, submissions, and participant slots.</p>
         </div>
-        <Button type="button" variant="secondary" onClick={() => onChange([...rounds, emptyRound(rounds.length + 1)])}>Add round</Button>
+        <div className="flex flex-wrap gap-2">
+          {rounds.length === 0 && <Button type="button" variant="accent" onClick={() => onChange([emptyApplicationFormRound(1, registrationType)])}>Start with application form</Button>}
+          <Button type="button" variant="secondary" onClick={() => onChange([...rounds, emptyRound(rounds.length + 1)])}>Add round</Button>
+        </div>
       </div>
       {rounds.length ? (
         <div className="mt-6 space-y-7">
@@ -291,7 +314,7 @@ export default function RoundBuilder({ rounds, onChange, registrationType }) {
           ))}
         </div>
       ) : (
-        <p className="mt-6 rounded-sm border border-dashed border-line-2 px-5 py-8 text-center text-sm text-ink-3">No rounds yet. Add the first activity in this event.</p>
+        <p className="mt-6 rounded-sm border border-dashed border-line-2 px-5 py-8 text-center text-sm text-ink-3">No rounds yet. Add a regular activity, or begin with a required/optional application form whose responses appear in Manage Applications.</p>
       )}
     </div>
   );

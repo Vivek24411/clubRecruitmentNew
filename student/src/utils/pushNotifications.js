@@ -27,9 +27,14 @@ function announce(status, detail = {}) {
 }
 
 async function uploadInstallation(installationId) {
-  await axios.put(`${import.meta.env.VITE_BASE_URI}/student/push/registration`, { installationId });
+  const { data } = await axios.put(`${import.meta.env.VITE_BASE_URI}/student/push/registration`, { installationId });
   currentInstallationId = installationId;
   localStorage.setItem(INSTALLATION_KEY, installationId);
+  if (data.deliveryConfigured === false) {
+    const error = new Error("This browser is registered, but push delivery is not configured on the Discovr server yet.");
+    error.code = "push/server-unconfigured";
+    throw error;
+  }
   registrationWaiters.forEach((waiter) => {
     window.clearTimeout(waiter.timeout);
     waiter.resolve(installationId);
@@ -106,7 +111,7 @@ async function messagingClient() {
         void uploadInstallation(installationId).catch(async (error) => {
           const readable = await readablePushError(error);
           rejectRegistration(readable);
-          announce("error", { message: readable.message });
+          announce(readable.code === "push/server-unconfigured" ? "server_unconfigured" : "error", { message: readable.message });
         });
       });
       messagingApi.onUnregistered(messaging, (installationId) => {
@@ -212,6 +217,9 @@ export async function getPushNotificationState() {
     const { data } = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/push/registration`, {
       params: { installationId },
     });
+    if (data.deliveryConfigured === false) {
+      return { status: "server_unconfigured", configured: true, message: "This browser is registered, but push delivery is not configured on the Discovr server yet." };
+    }
     return { status: data.active ? "enabled" : "disabled", configured: true };
   } catch {
     return { status: "disabled", configured: true };

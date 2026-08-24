@@ -73,6 +73,14 @@ const clubSchema = new mongoose.Schema({
     type: String,
     maxlength: 30,
   },
+  contactPersons: {
+    type: [{
+      name: { type: String, default: "", trim: true, maxlength: 100 },
+      role: { type: String, default: "", trim: true, maxlength: 100 },
+      phone: { type: String, required: true, trim: true, maxlength: 30 },
+    }],
+    default: [],
+  },
   clubLogo: {
     type: String,
   },

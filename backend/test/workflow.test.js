@@ -21,6 +21,7 @@ const {
   withdrawRegistrationWorkflow,
 } = require("../src/services/eventWorkflow.services");
 const eventMembershipModel = require("../src/models/eventMembership.model");
+const clubModel = require("../src/models/club.model");
 const registerationEventModel = require("../src/models/registerationEvent.model");
 const eventModel = require("../src/models/event.model");
 const scheduleSlotModel = require("../src/models/scheduleSlot.model");
@@ -43,6 +44,21 @@ test("student profiles and sessions expose optional visual media", () => {
   assert.ok(sessionModel.schema.path("sessionThumbnailPublicId"));
   assert.ok(sessionModel.schema.path("createdAt"));
   assert.deepEqual(studentModel.schema.path("programme").enumValues, ["undergraduate", "mtech", "msc", "mba", "phd"]);
+});
+
+test("club profiles support multiple named phone contacts", async () => {
+  const club = new clubModel({
+    name: "Contact Test Club",
+    userName: "contact-test-club",
+    password: "not-a-real-password-hash",
+    contactPersons: [
+      { name: "Asha", role: "Secretary", phone: "+91 90000 00000" },
+      { name: "Ravi", role: "Coordinator", phone: "+91 91111 11111" },
+    ],
+  });
+  await club.validate();
+  assert.equal(club.contactPersons.length, 2);
+  assert.equal(club.contactPersons[0].role, "Secretary");
 });
 
 test("event records normalize programme rules and discard legacy branch eligibility", async () => {
@@ -156,6 +172,21 @@ test("round normalization supports team and individual interview modes", () => {
   assert.equal(rounds[1].evaluationScope, "participant");
   assert.equal(rounds[2].submissionEnabled, true);
   assert.deepEqual(rounds.map((round) => round.order), [1, 2, 3]);
+});
+
+test("application-form rounds preserve short, long, and checkbox questions", () => {
+  const [round] = normalizeRounds([{
+    title: "Application form",
+    type: "submission",
+    submissionFields: [
+      { key: "name", label: "Preferred name", type: "short_text", required: true },
+      { key: "motivation", label: "Why do you want to join?", type: "long_text", required: false },
+      { key: "consent", label: "I confirm these details", type: "boolean", required: true },
+    ],
+  }]);
+  assert.equal(round.submissionEnabled, true);
+  assert.deepEqual(round.submissionFields.map((field) => field.type), ["short_text", "long_text", "boolean"]);
+  assert.deepEqual(round.submissionFields.map((field) => field.required), [true, false, true]);
 });
 
 test("common tests always evaluate each participant independently", () => {

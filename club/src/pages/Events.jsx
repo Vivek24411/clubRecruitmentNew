@@ -134,15 +134,18 @@ export default function Events() {
                 <article key={event._id} className="card flex flex-col overflow-hidden">
                   <div className="relative aspect-video overflow-hidden bg-paper-2">
                     {event.eventBanner ? (
-                      <img
-                        src={event.eventBanner}
-                        alt=""
-                        loading="lazy"
-                        className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.02]"
-                        onError={(error) => {
-                          error.currentTarget.style.display = "none";
-                        }}
-                      />
+                      <>
+                        <img src={event.eventBanner} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-35 blur-xl" />
+                        <img
+                          src={event.eventBanner}
+                          alt={`${event.title} banner`}
+                          loading="lazy"
+                          className="relative h-full w-full object-contain transition-transform duration-500 hover:scale-[1.02]"
+                          onError={(error) => {
+                            error.currentTarget.style.display = "none";
+                          }}
+                        />
+                      </>
                     ) : (
                       <div className="grid h-full place-items-center">
                         <Monogram name={event.title} size="md" />

@@ -85,8 +85,8 @@ export default function Profile() {
   useEffect(() => {
     refreshPushState();
     const onPushStateChanged = (event) => {
-      if (event.detail?.status === "error") {
-        setPushState({ status: "error", configured: true, message: event.detail.message });
+      if (["error", "server_unconfigured"].includes(event.detail?.status)) {
+        setPushState({ status: event.detail.status, configured: true, message: event.detail.message });
       } else {
         refreshPushState();
       }
@@ -103,7 +103,7 @@ export default function Profile() {
       toast.success(enable ? "Browser notifications enabled" : "Browser notifications disabled on this device");
     } catch (error) {
       const message = error.message || "Could not update browser notifications";
-      setPushState({ status: "error", configured: true, message });
+      setPushState({ status: error.code === "push/server-unconfigured" ? "server_unconfigured" : "error", configured: true, message });
       toast.error(message, { autoClose: 10000 });
     } finally {
       setPushWorking(false);
@@ -260,6 +260,7 @@ export default function Profile() {
                     {pushState.status === "blocked" && "Blocked by your browser. Allow notifications in the site settings to enable them."}
                     {pushState.status === "unsupported" && "This browser does not support web push notifications."}
                     {pushState.status === "unconfigured" && "Firebase push notifications have not been configured for this deployment yet."}
+                    {pushState.status === "server_unconfigured" && (pushState.message || "This browser is registered, but the Discovr server cannot deliver push notifications yet.")}
                     {pushState.status === "error" && pushState.message}
                     {["disabled", "loading"].includes(pushState.status) && "Enable this once per browser to receive recruitment updates while the site is closed."}
                   </p>
@@ -267,7 +268,7 @@ export default function Profile() {
                 {pushState.status === "enabled" ? (
                   <Button type="button" size="sm" variant="secondary" loading={pushWorking} disabled={pushWorking} onClick={() => changePushState(false)}>Disable on this device</Button>
                 ) : (
-                  <Button type="button" size="sm" variant="secondary" loading={pushWorking} disabled={pushWorking || ["blocked", "unsupported", "unconfigured", "loading"].includes(pushState.status)} onClick={() => changePushState(true)}>Enable browser notifications</Button>
+                  <Button type="button" size="sm" variant="secondary" loading={pushWorking} disabled={pushWorking || ["blocked", "unsupported", "unconfigured", "server_unconfigured", "loading"].includes(pushState.status)} onClick={() => changePushState(true)}>Enable browser notifications</Button>
                 )}
               </div>
             </fieldset>

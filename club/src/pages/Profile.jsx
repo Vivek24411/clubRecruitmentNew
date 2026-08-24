@@ -33,6 +33,7 @@ const EMPTY = {
   recruitmentMethods: "",
   contactEmail: "",
   contactPhone: "",
+  contactPersons: [],
   resources: [],
   annualEvents: [],
 };
@@ -345,6 +346,9 @@ export default function Profile() {
         recruitmentMethods: clubProfile.recruitmentMethods || "",
         contactEmail: clubProfile.contactEmail || "",
         contactPhone: clubProfile.contactPhone || "",
+        contactPersons: clubProfile.contactPersons?.length
+          ? clubProfile.contactPersons.map((contact) => ({ name: contact.name || "", role: contact.role || "", phone: contact.phone || "" }))
+          : clubProfile.contactPhone ? [{ name: "", role: "", phone: clubProfile.contactPhone }] : [],
         resources: clubProfile.resources || [],
         annualEvents: clubProfile.annualEvents || [],
       });
@@ -363,9 +367,11 @@ export default function Profile() {
         uploadDirect(banner, { role: "club", kind: "clubBanner" }),
       ]);
       const payload = Object.fromEntries(
-        ["name", "userName", "shortDescription", "longDescription", "website", "linkedin", "instagram", "achivements", "recruitmentMethods", "contactEmail", "contactPhone"]
+        ["name", "userName", "shortDescription", "longDescription", "website", "linkedin", "instagram", "achivements", "recruitmentMethods", "contactEmail"]
           .map((key) => [key, form[key] || ""]),
       );
+      payload.contactPhone = form.contactPersons[0]?.phone || "";
+      payload.contactPersonsJSON = JSON.stringify(form.contactPersons);
       payload.resourcesJSON = JSON.stringify(form.resources);
       payload.annualEventsJSON = JSON.stringify(form.annualEvents);
       if (directAsset) payload.directAsset = directAsset;
@@ -525,14 +531,26 @@ export default function Profile() {
                   onChange={set("contactEmail")}
                 />
               </Field>
-              <Field label="Contact phone" id="contactPhone">
-                <Input
-                  id="contactPhone"
-                  type="tel"
-                  value={form.contactPhone}
-                  onChange={set("contactPhone")}
-                />
-              </Field>
+              <div className="sm:col-span-2">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div><p className="text-sm font-medium text-ink">Phone contacts</p><p className="mt-1 text-xs text-ink-3">Add the student coordinators or office-bearers whom applicants may contact.</p></div>
+                  <Button type="button" variant="secondary" size="sm" disabled={form.contactPersons.length >= 10} onClick={() => setForm({ ...form, contactPersons: [...form.contactPersons, { name: "", role: "", phone: "" }] })}>Add phone contact</Button>
+                </div>
+                <div className="mt-4 space-y-4">
+                  {form.contactPersons.map((contact, index) => {
+                    const updateContact = (key, value) => setForm({ ...form, contactPersons: form.contactPersons.map((item, current) => current === index ? { ...item, [key]: value } : item) });
+                    return (
+                      <div key={`contact-${index}`} className="grid gap-3 rounded-sm border border-line bg-paper-2/45 p-4 sm:grid-cols-3">
+                        <Field label="Contact person" id={`contact-name-${index}`}><Input id={`contact-name-${index}`} value={contact.name} onChange={(event) => updateContact("name", event.target.value)} placeholder="Name" maxLength={100} /></Field>
+                        <Field label="Role / label" id={`contact-role-${index}`}><Input id={`contact-role-${index}`} value={contact.role} onChange={(event) => updateContact("role", event.target.value)} placeholder="Secretary, coordinator…" maxLength={100} /></Field>
+                        <Field label="Phone number" id={`contact-phone-${index}`} required><Input id={`contact-phone-${index}`} type="tel" value={contact.phone} onChange={(event) => updateContact("phone", event.target.value)} maxLength={30} required /></Field>
+                        <button type="button" className="link text-left text-sm font-semibold text-bad sm:col-span-3" onClick={() => setForm({ ...form, contactPersons: form.contactPersons.filter((_, current) => current !== index) })}>Remove contact</button>
+                      </div>
+                    );
+                  })}
+                  {!form.contactPersons.length && <p className="rounded-sm border border-dashed border-line-2 px-4 py-5 text-center text-sm text-ink-3">No phone contacts added.</p>}
+                </div>
+              </div>
               <Field label="Website" id="website">
                 <Input
                   id="website"
@@ -636,7 +654,9 @@ export default function Profile() {
               <dl className="mt-6 space-y-4 border-t border-line pt-5">
                 <Meta label="Username" value={clubProfile?.userName} />
                 <Meta label="Contact email" value={clubProfile?.contactEmail} />
-                <Meta label="Contact phone" value={clubProfile?.contactPhone} />
+                {(clubProfile?.contactPersons?.length ? clubProfile.contactPersons : clubProfile?.contactPhone ? [{ phone: clubProfile.contactPhone }] : []).map((contact, index) => (
+                  <Meta key={contact._id || `${contact.phone}-${index}`} label={[contact.name, contact.role].filter(Boolean).join(" · ") || `Phone ${index + 1}`} value={contact.phone} />
+                ))}
               </dl>
             </Card>
 

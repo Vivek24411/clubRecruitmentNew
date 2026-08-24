@@ -252,6 +252,7 @@ module.exports.exportRoundCandidates = async (req, res) => {
     const key = String(submission.candidateId);
     if (!byCandidate.has(key)) byCandidate.set(key, submission);
   });
+  const submissionFieldByKey = new Map((round.submissionFields || []).map((field) => [field.key, field]));
 
   const rows = [[
     "Round", "Evaluation", "Application / team", "Candidate", "Email", "Phone",
@@ -282,7 +283,11 @@ module.exports.exportRoundCandidates = async (req, res) => {
       candidate.notes,
       registration?.registeredAt ? new Date(registration.registeredAt).toISOString() : "",
       submission?.submittedAt ? new Date(submission.submittedAt).toISOString() : "",
-      (submission?.answers || []).map((answer) => `${answer.key}: ${answer.value}`).join(" | "),
+      (submission?.answers || []).map((answer) => {
+        const field = submissionFieldByKey.get(answer.key);
+        const value = field?.type === "boolean" ? (answer.value === "true" ? "Yes" : "No") : answer.value;
+        return `${field?.label || answer.key}: ${value}`;
+      }).join(" | "),
       (submission?.files || []).map((file) => file.url).join(" | "),
     ]);
   });
@@ -883,7 +888,9 @@ module.exports.submitRoundWork = async (req, res) => {
   const missing = round.submissionFields.filter((field) => field.required && (
     ["file", "pdf", "video"].includes(field.type)
       ? !uploadedFields.has(field.key) && !existingFilesByField.has(field.key)
-      : !answerMap.get(field.key)
+      : field.type === "boolean"
+        ? answerMap.get(field.key) !== "true"
+        : !answerMap.get(field.key)
   ));
   if (missing.length) {
     await Promise.all(files.map((file) => destroyCloudinaryAsset(file.publicId, file.resourceType)));

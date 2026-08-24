@@ -142,6 +142,7 @@ router.post('/updateProfile',clubAuth,upload.single('clubLogo'),attachDirectAsse
   body("contactEmail").optional({ checkFalsy: true }).isEmail().isLength({ max: 254 }),
   body("contactPhone").optional({ checkFalsy: true }).isString().isLength({ max: 30 }),
   body("useAccountEmailForContact").optional().isBoolean(),
+  body("contactPersonsJSON").optional().isString().isLength({ max: 10000 }),
   body("resourcesJSON").optional().isString().isLength({ max: 60000 }),
   body("annualEventsJSON").optional().isString().isLength({ max: 100000 }),
 ], validateRequest, updateProfile)

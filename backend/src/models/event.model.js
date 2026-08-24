@@ -18,7 +18,7 @@ const submissionFieldSchema = new mongoose.Schema({
   label: { type: String, required: true, trim: true, maxlength: 120 },
   type: {
     type: String,
-    enum: ["text", "url", "github", "file", "pdf", "video"],
+    enum: ["text", "short_text", "long_text", "boolean", "url", "github", "file", "pdf", "video"],
     default: "url",
   },
   required: { type: Boolean, default: true },

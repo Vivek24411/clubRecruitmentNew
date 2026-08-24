@@ -83,8 +83,15 @@ function SubmissionForm({ eventId, round, candidate, existing, onSaved }) {
               {files[field.key] && <p className="mt-2 text-xs font-medium text-ink-2">Selected: {files[field.key].name} · {fileSize(files[field.key].size)}</p>}
               {existing?.files?.filter((file) => file.fieldKey === field.key).map((file) => <a key={file.publicId} href={file.url} target="_blank" rel="noreferrer" className="link mt-2 block break-all text-xs">Current: {file.originalName || field.label}</a>)}
             </>
-          ) : field.type === "text" ? (
+          ) : field.type === "boolean" ? (
+            <label className="flex items-start gap-3 rounded-sm border border-line bg-surface px-4 py-3 text-sm text-ink-2">
+              <input id={`${candidate._id}-${field.key}`} type="checkbox" required={field.required} checked={answers[field.key] === "true"} onChange={(event) => setAnswers({ ...answers, [field.key]: String(event.target.checked) })} className="mt-0.5" />
+              <span>Select to confirm</span>
+            </label>
+          ) : ["text", "long_text"].includes(field.type) ? (
             <Textarea id={`${candidate._id}-${field.key}`} rows="4" required={field.required} value={answers[field.key] || ""} onChange={(event) => setAnswers({ ...answers, [field.key]: event.target.value })} />
+          ) : field.type === "short_text" ? (
+            <Input id={`${candidate._id}-${field.key}`} type="text" required={field.required} value={answers[field.key] || ""} onChange={(event) => setAnswers({ ...answers, [field.key]: event.target.value })} />
           ) : (
             <Input id={`${candidate._id}-${field.key}`} type="url" required={field.required} value={answers[field.key] || ""} onChange={(event) => setAnswers({ ...answers, [field.key]: event.target.value })} placeholder={field.type === "github" ? "https://github.com/..." : "https://"} />
           )}
@@ -99,8 +106,9 @@ function SubmissionForm({ eventId, round, candidate, existing, onSaved }) {
   );
 }
 
-function SubmissionReadOnly({ submission }) {
+function SubmissionReadOnly({ submission, fields = [] }) {
   if (!submission) return null;
+  const fieldByKey = new Map(fields.map((field) => [field.key, field]));
   return (
     <div className="mt-4 rounded-sm border border-line bg-paper-2/55 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -110,8 +118,8 @@ function SubmissionReadOnly({ submission }) {
       <div className="mt-3 space-y-2">
         {(submission.answers || []).map((answer) => (
           <div key={answer.key} className="rounded-sm bg-surface px-3 py-2.5">
-            <p className="eyebrow">{answer.key.replaceAll("_", " ")}</p>
-            {/^https?:\/\//i.test(answer.value) ? <a href={answer.value} target="_blank" rel="noreferrer" className="link link-accent mt-1 block break-all text-sm">{answer.value} ↗</a> : <p className="mt-1 whitespace-pre-wrap break-words text-sm text-ink-2">{answer.value}</p>}
+            <p className="eyebrow">{fieldByKey.get(answer.key)?.label || answer.key.replaceAll("_", " ")}</p>
+            {fieldByKey.get(answer.key)?.type === "boolean" ? <p className="mt-1 text-sm text-ink-2">{answer.value === "true" ? "Yes" : "No"}</p> : /^https?:\/\//i.test(answer.value) ? <a href={answer.value} target="_blank" rel="noreferrer" className="link link-accent mt-1 block break-all text-sm">{answer.value} ↗</a> : <p className="mt-1 whitespace-pre-wrap break-words text-sm text-ink-2">{answer.value}</p>}
           </div>
         ))}
         {(submission.files || []).map((file) => <a key={file.publicId} href={file.url} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-sm bg-surface px-3 py-2.5 text-sm font-semibold text-accent"><span className="truncate">{file.originalName || file.fieldKey}</span><span>Open ↗</span></a>)}
@@ -191,7 +199,7 @@ function ApplicationProgress({ application, rounds, eventId, showTitle, onSaved 
                       <Badge tone={tone[candidate.status]} className="px-3 py-1.5 text-sm capitalize">{statusLabel}</Badge>
                     </div>
                     {slot && <div className="mt-4 rounded-sm border-l-2 border-accent bg-accent-tint/40 px-4 py-3 text-sm"><p className="font-semibold">{candidate.scope === "participant" ? `${person}'s slot` : "Team slot"}: {format(slot.startAt)}</p>{slot.venue && <p className="mt-1 text-ink-3">{slot.venue}</p>}{slot.meetingUrl && <a className="link mt-1 block" href={slot.meetingUrl} target="_blank" rel="noreferrer">Open meeting link ↗</a>}</div>}
-                    {submission && !editableSubmission && <SubmissionReadOnly submission={submission} />}
+                    {submission && !editableSubmission && <SubmissionReadOnly submission={submission} fields={round.submissionFields || []} />}
                     {editableSubmission && <SubmissionForm eventId={eventId} round={round} candidate={candidate} existing={submission} onSaved={onSaved} />}
                   </div>
                 );

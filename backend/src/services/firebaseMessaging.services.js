@@ -22,7 +22,7 @@ function serviceAccount() {
 }
 
 function firebaseConfigured() {
-  return Boolean(
+  const hasRequiredConfiguration = Boolean(
     process.env.PUSH_NOTIFICATIONS_ENABLED === "true"
     && process.env.FIREBASE_PROJECT_ID
     && (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64
@@ -30,6 +30,14 @@ function firebaseConfigured() {
       || (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY)
       || process.env.GOOGLE_APPLICATION_CREDENTIALS),
   );
+  if (!hasRequiredConfiguration) return false;
+  try {
+    const account = serviceAccount();
+    const credentialProjectId = account?.project_id || account?.projectId;
+    return !credentialProjectId || credentialProjectId === process.env.FIREBASE_PROJECT_ID;
+  } catch {
+    return false;
+  }
 }
 
 function messagingClient() {

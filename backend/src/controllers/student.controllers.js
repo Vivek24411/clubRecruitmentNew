@@ -54,7 +54,7 @@ const {
 
 const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
 const tokenHash = (token) => crypto.createHash("sha256").update(token).digest("hex");
-const PUBLIC_CLUB_FIELDS = "name category shortDescription longDescription website linkedin instagram achivements recruitmentMethods contactEmail contactPhone clubLogo clubBanner resources annualEvents status";
+const PUBLIC_CLUB_FIELDS = "name category shortDescription longDescription website linkedin instagram achivements recruitmentMethods contactEmail contactPhone contactPersons clubLogo clubBanner resources annualEvents status";
 const DUMMY_PASSWORD_HASH = "$2b$12$4Qj6z7mmoEgcnxHLS0xDR.jjYdMm05/mtrLZVBInMaqjKAuvz9taa";
 
 function publicStudent(student) {

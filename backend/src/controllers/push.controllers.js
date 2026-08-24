@@ -1,5 +1,6 @@
 const { validationResult } = require("express-validator");
 const pushRegistrationModel = require("../models/pushRegistration.model");
+const { firebaseConfigured } = require("../services/firebaseMessaging.services");
 
 const REGISTRATION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const MAX_INSTALLATIONS_PER_STUDENT = 10;
@@ -32,7 +33,12 @@ module.exports.registerPushInstallation = async (req, res) => {
   const staleIds = installations.slice(MAX_INSTALLATIONS_PER_STUDENT).map((item) => item._id);
   if (staleIds.length) await pushRegistrationModel.deleteMany({ _id: { $in: staleIds } });
 
-  return res.json({ success: true, msg: "Browser notifications enabled", registrationId: registration._id });
+  return res.json({
+    success: true,
+    msg: "Browser notifications enabled",
+    registrationId: registration._id,
+    deliveryConfigured: firebaseConfigured(),
+  });
 };
 
 module.exports.unregisterPushInstallation = async (req, res) => {
@@ -53,5 +59,5 @@ module.exports.getPushInstallationStatus = async (req, res) => {
     installationId: String(req.query.installationId).trim(),
     expiresAt: { $gt: new Date() },
   });
-  return res.json({ success: true, active: Boolean(active) });
+  return res.json({ success: true, active: Boolean(active), deliveryConfigured: firebaseConfigured() });
 };

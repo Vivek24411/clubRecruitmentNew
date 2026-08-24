@@ -388,6 +388,15 @@ module.exports.updateProfile = async (req, res) => {
       url: String(annualEvent.url || "").trim().slice(0, 2048),
     })).filter((annualEvent) => annualEvent.name);
   }
+  if (req.body.contactPersonsJSON !== undefined) {
+    updateData.contactPersons = parsedArray(req.body.contactPersonsJSON).slice(0, 10).map((contact) => ({
+      name: String(contact.name || "").trim().slice(0, 100),
+      role: String(contact.role || "").trim().slice(0, 100),
+      phone: String(contact.phone || "").trim().slice(0, 30),
+    })).filter((contact) => contact.phone);
+    // Keep the legacy field populated for older clients while structured contacts roll out.
+    updateData.contactPhone = updateData.contactPersons[0]?.phone || "";
+  }
 
   const oldLogoPublicId = req.club.clubLogoPublicId;
   const oldBannerPublicId = req.club.clubBannerPublicId;

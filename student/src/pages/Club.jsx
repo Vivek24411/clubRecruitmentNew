@@ -197,7 +197,7 @@ export default function Club() {
 
         {/* Contact rail */}
         <aside className="space-y-6 lg:sticky lg:top-24 lg:h-fit">
-          {(club.contactEmail || club.contactPhone) && (
+          {(club.contactEmail || club.contactPhone || club.contactPersons?.length) && (
             <Card className="p-6">
               <h2 className="eyebrow">Get in touch</h2>
               <dl className="mt-4 space-y-4">
@@ -214,19 +214,12 @@ export default function Club() {
                     </dd>
                   </div>
                 )}
-                {club.contactPhone && (
-                  <div>
-                    <dt className="text-xs text-ink-3">Phone</dt>
-                    <dd className="mt-1">
-                      <a
-                        href={`tel:${club.contactPhone}`}
-                        className="link link-accent text-sm font-medium"
-                      >
-                        {club.contactPhone}
-                      </a>
-                    </dd>
+                {(club.contactPersons?.length ? club.contactPersons : club.contactPhone ? [{ phone: club.contactPhone }] : []).map((contact, index) => (
+                  <div key={contact._id || `${contact.phone}-${index}`}>
+                    <dt className="text-xs text-ink-3">{[contact.name, contact.role].filter(Boolean).join(" · ") || `Phone ${index + 1}`}</dt>
+                    <dd className="mt-1"><a href={`tel:${contact.phone}`} className="link link-accent text-sm font-medium">{contact.phone}</a></dd>
                   </div>
-                )}
+                ))}
               </dl>
             </Card>
           )}

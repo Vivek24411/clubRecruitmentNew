@@ -76,7 +76,7 @@ function normalizeRounds(input) {
       ? round.submissionFields.slice(0, 12).map((field, fieldIndex) => ({
         key: cleanString(field?.key || `field_${fieldIndex + 1}`, 80).replace(/[^a-zA-Z0-9_-]/g, "_"),
         label: cleanString(field?.label || `Field ${fieldIndex + 1}`, 120),
-        type: ["text", "url", "github", "file", "pdf", "video"].includes(field?.type) ? field.type : "url",
+        type: ["text", "short_text", "long_text", "boolean", "url", "github", "file", "pdf", "video"].includes(field?.type) ? field.type : "short_text",
         required: field?.required !== false,
         helpText: cleanString(field?.helpText, 300),
       }))

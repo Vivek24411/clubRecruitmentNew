@@ -116,6 +116,7 @@ function SubmissionSummary({ submission, fields = [] }) {
       </div>
     );
   }
+  const fieldByKey = new Map(fields.map((field) => [field.key, field]));
   const labels = new Map(fields.map((field) => [field.key, field.label]));
   return (
     <div className="mt-3 overflow-hidden rounded-md border border-line bg-surface">
@@ -134,7 +135,9 @@ function SubmissionSummary({ submission, fields = [] }) {
             {submission.answers.map((answer) => (
               <div key={answer.key} className="min-w-0 rounded-sm bg-paper-2/45 px-3.5 py-3 text-xs">
                 <p className="eyebrow">{labels.get(answer.key) || answer.key.replaceAll("_", " ")}</p>
-                {isUrl(answer.value)
+                {fieldByKey.get(answer.key)?.type === "boolean"
+                  ? <p className="mt-2 leading-relaxed text-ink-2">{answer.value === "true" ? "Yes" : "No"}</p>
+                  : isUrl(answer.value)
                   ? <a href={answer.value} target="_blank" rel="noreferrer" className="link mt-2 block break-all font-semibold">Open submitted link ↗</a>
                   : <p className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap break-words leading-relaxed text-ink-2">{answer.value || "—"}</p>}
               </div>
