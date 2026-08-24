@@ -40,7 +40,7 @@ export default function Dashboard() {
     () =>
       [...events]
         .filter((event) => eventIsOpen(event, now))
-        .sort((a, b) => (eventEndDate(a) || 0) - (eventEndDate(b) || 0)),
+        .sort((a, b) => (eventEndDate(a)?.getTime() || Infinity) - (eventEndDate(b)?.getTime() || Infinity)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [events],
   );
@@ -275,10 +275,11 @@ export default function Dashboard() {
                   <Badge tone="ok">Open</Badge>
                 </div>
                 <p className="mt-3 text-sm text-ink-3">
-                  {eventEndDate(event)?.getTime() !== eventDeadline(event)?.getTime()
-                    ? "Final round ends"
-                    : "Applications close"}{" "}
-                  {formatDateTime(eventEndDate(event), { dateOnly: true })}
+                  {eventEndDate(event)
+                    ? <>{eventEndDate(event)?.getTime() !== eventDeadline(event)?.getTime()
+                      ? "Final round ends"
+                      : "Applications close"}{" "}{formatDateTime(eventEndDate(event), { dateOnly: true })}</>
+                    : "Final round not scheduled"}
                 </p>
               </CardLink>
             ))}

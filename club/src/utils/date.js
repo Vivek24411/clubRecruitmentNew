@@ -24,17 +24,23 @@ function finalRound(rounds) {
 
 export function eventEndDate(event) {
   const verticals = Array.isArray(event?.verticals) ? event.verticals : [];
-  const finalRoundEnds = verticals
-    .map((vertical) => roundEndDate(finalRound(vertical?.rounds)))
-    .filter(Boolean);
+  const verticalRoundSets = verticals
+    .map((vertical) => vertical?.rounds)
+    .filter((rounds) => Array.isArray(rounds) && rounds.length > 0);
 
-  if (!finalRoundEnds.length) {
-    const rounds = event?.rounds?.length ? event.rounds : event?.roundDetails;
-    const end = roundEndDate(finalRound(rounds));
-    if (end) finalRoundEnds.push(end);
+  if (verticalRoundSets.length) {
+    const finalRoundEnds = verticalRoundSets.map((rounds) => roundEndDate(finalRound(rounds)));
+    // An unscheduled final round has not ended. Keep the event open until the
+    // club gives every active vertical a final boundary or closes it manually.
+    if (finalRoundEnds.some((end) => !end)) return null;
+    return finalRoundEnds.sort((a, b) => b - a)[0];
   }
 
-  return finalRoundEnds.sort((a, b) => b - a)[0] || eventDeadline(event);
+  if (event?.rounds?.length) return roundEndDate(finalRound(event.rounds));
+  if (event?.roundDetails?.length) {
+    return roundEndDate(finalRound(event.roundDetails)) || eventDeadline(event);
+  }
+  return eventDeadline(event);
 }
 
 export function eventIsOpen(event, now = new Date()) {
