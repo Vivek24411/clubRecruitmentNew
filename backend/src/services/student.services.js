@@ -11,6 +11,30 @@ function brandedFromEmail(configuredValue) {
     return `Discovr <${address}>`;
 }
 
+function emailLogoUrl() {
+    const configured = String(process.env.EMAIL_LOGO_URL || '').trim();
+    if (/^https:\/\//i.test(configured)) return configured;
+    return buildPublicAppUrl('/discovrlogo.png', process.env.STUDENT_APP_ORIGIN)
+        || 'https://discovr.iitr.ac.in/discovrlogo.png';
+}
+
+function buildEmailBrandHeader(label) {
+    return `<tr>
+        <td style="padding:24px 32px;background:#075d94;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                    <td valign="middle">
+                        <img src="${escapeHtml(emailLogoUrl())}" width="148" alt="Discovr" style="display:block;width:148px;max-width:100%;height:auto;border:0;">
+                    </td>
+                    <td valign="middle" align="right" style="padding-left:16px;color:#d9effb;font-size:10px;line-height:15px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;">
+                        ${escapeHtml(label)}
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>`;
+}
+
 function getResendClient() {
     if (!process.env.RESEND_API_KEY) {
         throw new Error('RESEND_API_KEY is not configured');
@@ -32,6 +56,7 @@ async function sendEmail({ to, subject, text, html, idempotencyKey }) {
 }
 
 function buildOtpEmailHtml(otp) {
+    const safeOtp = escapeHtml(otp);
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -40,53 +65,36 @@ function buildOtpEmailHtml(otp) {
     <meta name="color-scheme" content="light">
     <title>Discovr verification code</title>
 </head>
-<body style="margin:0;padding:0;background:#f2f0e9;color:#111612;font-family:Arial,'Helvetica Neue',sans-serif;">
+<body style="margin:0;padding:0;background:#eef7fc;color:#10212d;font-family:Arial,'Helvetica Neue',sans-serif;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
-        Use ${otp} to verify your Discovr account. This code expires in 5 minutes.
+        Use ${safeOtp} to verify your Discovr account. This code expires in 5 minutes.
     </div>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f2f0e9;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#eef7fc;">
         <tr>
-            <td align="center" style="padding:40px 16px;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:560px;background:#fbfaf6;border:1px solid #dcd8cd;border-radius:20px;box-shadow:0 18px 50px -28px rgba(17,22,18,0.45);overflow:hidden;">
+            <td align="center" style="padding:40px 14px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:560px;background:#ffffff;border:1px solid #c8dfec;border-radius:18px;box-shadow:0 18px 50px -30px rgba(7,93,148,0.45);overflow:hidden;">
+                    ${buildEmailBrandHeader('Secure account access')}
                     <tr>
-                        <td style="height:5px;background:#d55432;font-size:0;line-height:0;">&nbsp;</td>
-                    </tr>
-                    <tr>
-                        <td style="padding:32px 36px 0;">
-                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                                <tr>
-                                    <td width="48" valign="middle">
-                                        <div style="width:42px;height:42px;line-height:42px;text-align:center;background:#111612;color:#fbfaf6;border-radius:12px;font-size:18px;font-weight:700;">D</div>
-                                    </td>
-                                    <td valign="middle" style="padding-left:12px;">
-                                        <div style="font-size:16px;line-height:22px;font-weight:700;color:#111612;">Discovr</div>
-                                        <div style="font-size:11px;line-height:16px;letter-spacing:1.4px;text-transform:uppercase;color:#697169;">Campus opportunities</div>
-                                    </td>
-                                </tr>
-                            </table>
+                        <td style="padding:34px 34px 12px;">
+                            <div style="font-size:11px;line-height:17px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:#0878be;">Email verification</div>
+                            <h1 style="margin:8px 0 12px;font-size:30px;line-height:38px;letter-spacing:-0.5px;color:#10212d;">Your one-time code</h1>
+                            <p style="margin:0;font-size:15px;line-height:24px;color:#52636e;">Enter this code in Discovr to continue. It is valid for the next 5 minutes.</p>
                         </td>
                     </tr>
                     <tr>
-                        <td style="padding:34px 36px 12px;">
-                            <div style="font-size:12px;line-height:18px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:#d55432;">Email verification</div>
-                            <h1 style="margin:8px 0 12px;font-size:30px;line-height:38px;letter-spacing:-0.6px;color:#111612;">Your one-time code</h1>
-                            <p style="margin:0;font-size:15px;line-height:24px;color:#697169;">Enter this code in Discovr to continue. It is valid for the next 5 minutes.</p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style="padding:16px 36px 20px;">
-                            <div style="padding:22px 16px;background:#f7e2da;border:1px solid #edc8ba;border-radius:12px;text-align:center;">
-                                <div style="font-family:'Courier New',Courier,monospace;font-size:34px;line-height:42px;font-weight:700;letter-spacing:9px;color:#a9361b;white-space:nowrap;">${otp}</div>
+                        <td style="padding:16px 34px 20px;">
+                            <div style="padding:22px 12px;background:#e5f3fb;border:1px solid #b9dcef;border-radius:12px;text-align:center;">
+                                <div style="font-family:'Courier New',Courier,monospace;font-size:34px;line-height:42px;font-weight:700;letter-spacing:9px;color:#075d94;white-space:nowrap;">${safeOtp}</div>
                             </div>
                         </td>
                     </tr>
                     <tr>
-                        <td style="padding:0 36px 36px;">
-                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#e6f0e9;border-radius:10px;">
+                        <td style="padding:0 34px 34px;">
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f4f9fc;border:1px solid #d8e9f2;border-radius:10px;">
                                 <tr>
-                                    <td width="28" valign="top" style="padding:16px 0 16px 16px;color:#2f6b4f;font-size:18px;line-height:22px;">&#10003;</td>
-                                    <td style="padding:16px 16px 16px 8px;font-size:13px;line-height:20px;color:#384039;">
-                                        <strong style="color:#2f6b4f;">Keep this code private.</strong><br>
+                                    <td width="28" valign="top" style="padding:16px 0 16px 16px;color:#0878be;font-size:18px;line-height:22px;">&#128274;</td>
+                                    <td style="padding:16px 16px 16px 8px;font-size:13px;line-height:20px;color:#52636e;">
+                                        <strong style="color:#075d94;">Keep this code private.</strong><br>
                                         Discovr will never ask you to share it over a call or message.
                                     </td>
                                 </tr>
@@ -94,9 +102,9 @@ function buildOtpEmailHtml(otp) {
                         </td>
                     </tr>
                     <tr>
-                        <td style="padding:22px 36px;background:#111612;color:#969c96;font-size:12px;line-height:19px;">
+                        <td style="padding:22px 34px;background:#062f4b;color:#a9cadc;font-size:12px;line-height:19px;">
                             If you did not request this code, you can safely ignore this email.<br>
-                            <span style="color:#fbfaf6;">Discovr</span> &middot; Indian Institute of Technology Roorkee
+                            <span style="color:#ffffff;">Discovr</span> &middot; Indian Institute of Technology Roorkee
                         </td>
                     </tr>
                 </table>
@@ -149,7 +157,7 @@ function buildNotificationEmailHtml({ title, message, detailsUrl, type, emailDet
         emailDetails?.venue ? ["Venue", emailDetails.venue] : null,
     ].filter(Boolean);
     const detailCard = detailRows.length || emailDetails?.meetingUrl
-        ? `<tr><td style="padding:8px 34px 8px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f2f0e9;border-radius:10px;">${detailRows.map(([label, value]) => `<tr><td style="padding:12px 16px;border-bottom:1px solid #dcd8cd;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#697169;">${escapeHtml(label)}</td><td style="padding:12px 16px;border-bottom:1px solid #dcd8cd;font-size:14px;font-weight:700;color:#111612;text-align:right;">${escapeHtml(value)}</td></tr>`).join("")}${emailDetails?.meetingUrl ? `<tr><td colspan="2" style="padding:14px 16px;"><a href="${escapeHtml(emailDetails.meetingUrl)}" style="color:#d55432;font-size:14px;font-weight:700;text-decoration:none;">Open meeting link &rarr;</a></td></tr>` : ""}</table></td></tr>`
+        ? `<tr><td style="padding:8px 34px 8px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f4f9fc;border:1px solid #d8e9f2;border-radius:10px;">${detailRows.map(([label, value]) => `<tr><td style="padding:12px 16px;border-bottom:1px solid #d8e9f2;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#69808d;">${escapeHtml(label)}</td><td style="padding:12px 16px;border-bottom:1px solid #d8e9f2;font-size:14px;font-weight:700;color:#10212d;text-align:right;">${escapeHtml(value)}</td></tr>`).join("")}${emailDetails?.meetingUrl ? `<tr><td colspan="2" style="padding:14px 16px;"><a href="${escapeHtml(emailDetails.meetingUrl)}" style="color:#0878be;font-size:14px;font-weight:700;text-decoration:none;">Open meeting link &rarr;</a></td></tr>` : ""}</table></td></tr>`
         : "";
     return `<!doctype html>
 <html lang="en">
@@ -159,25 +167,20 @@ function buildNotificationEmailHtml({ title, message, detailsUrl, type, emailDet
     <meta name="color-scheme" content="light">
     <title>${safeTitle}</title>
 </head>
-<body style="margin:0;padding:0;background:#f2f0e9;color:#111612;font-family:Arial,'Helvetica Neue',sans-serif;">
+<body style="margin:0;padding:0;background:#eef7fc;color:#10212d;font-family:Arial,'Helvetica Neue',sans-serif;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${safeMessage}</div>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f2f0e9;">
-        <tr><td align="center" style="padding:40px 16px;">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:580px;background:#fbfaf6;border:1px solid #dcd8cd;border-radius:16px;overflow:hidden;">
-                <tr><td style="height:5px;background:#d55432;font-size:0;line-height:0;">&nbsp;</td></tr>
-                <tr><td style="padding:30px 34px 0;">
-                    <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
-                        <td style="width:42px;height:42px;text-align:center;background:#111612;color:#fbfaf6;border-radius:10px;font-size:18px;font-weight:700;">D</td>
-                        <td style="padding-left:12px;"><div style="font-size:16px;font-weight:700;">Discovr</div><div style="padding-top:3px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#697169;">${type === "session_reminder" ? "Session reminder" : type === "round_deadline_reminder" || type === "round_interview_reminder" ? "Round reminder" : "Application update"}</div></td>
-                    </tr></table>
-                </td></tr>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#eef7fc;">
+        <tr><td align="center" style="padding:40px 14px;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:580px;background:#ffffff;border:1px solid #c8dfec;border-radius:18px;box-shadow:0 18px 50px -30px rgba(7,93,148,0.4);overflow:hidden;">
+                ${buildEmailBrandHeader(type === "session_reminder" ? "Session reminder" : type === "round_deadline_reminder" || type === "round_interview_reminder" ? "Round reminder" : "Application update")}
                 <tr><td style="padding:32px 34px 12px;">
-                    <h1 style="margin:0 0 12px;font-size:28px;line-height:36px;color:#111612;">${safeTitle}</h1>
-                    <p style="margin:0;font-size:15px;line-height:24px;color:#535b54;">${safeMessage}</p>
+                    <div style="margin-bottom:8px;font-size:11px;line-height:17px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:#0878be;">New Discovr update</div>
+                    <h1 style="margin:0 0 12px;font-size:28px;line-height:36px;color:#10212d;">${safeTitle}</h1>
+                    <p style="margin:0;font-size:15px;line-height:24px;color:#52636e;">${safeMessage}</p>
                 </td></tr>
                 ${detailCard}
-                ${detailsUrl ? `<tr><td style="padding:16px 34px 34px;"><a href="${escapeHtml(detailsUrl)}" style="display:inline-block;padding:13px 20px;background:#111612;color:#ffffff;text-decoration:none;border-radius:7px;font-size:14px;font-weight:700;">${actionLabel}</a><p style="margin:14px 0 0;font-size:12px;line-height:18px;color:#858b85;">If the button does not open, copy this URL into your browser:<br><span style="word-break:break-all;color:#535b54;">${escapeHtml(detailsUrl)}</span></p></td></tr>` : ""}
-                <tr><td style="padding:20px 34px;background:#111612;color:#969c96;font-size:12px;line-height:19px;">This message was sent because your Discovr email notifications are enabled.<br><span style="color:#fbfaf6;">Discovr</span> &middot; Indian Institute of Technology Roorkee</td></tr>
+                ${detailsUrl ? `<tr><td style="padding:16px 34px 34px;"><a href="${escapeHtml(detailsUrl)}" style="display:inline-block;padding:13px 20px;background:#0878be;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:700;box-shadow:0 7px 18px -10px rgba(7,93,148,0.8);">${actionLabel}</a><p style="margin:14px 0 0;font-size:12px;line-height:18px;color:#7a8c96;">If the button does not open, copy this URL into your browser:<br><span style="word-break:break-all;color:#466273;">${escapeHtml(detailsUrl)}</span></p></td></tr>` : ""}
+                <tr><td style="padding:20px 34px;background:#062f4b;color:#a9cadc;font-size:12px;line-height:19px;">This message was sent because your Discovr email notifications are enabled.<br><span style="color:#ffffff;">Discovr</span> &middot; Indian Institute of Technology Roorkee</td></tr>
             </table>
         </td></tr>
     </table>
@@ -220,4 +223,7 @@ module.exports.checkEmailDomain = (email) => {
 }
 
 module.exports.brandedFromEmail = brandedFromEmail;
+module.exports.emailLogoUrl = emailLogoUrl;
+module.exports.buildOtpEmailHtml = buildOtpEmailHtml;
+module.exports.buildNotificationEmailHtml = buildNotificationEmailHtml;
 module.exports.formatNotificationDateTime = formatNotificationDateTime;

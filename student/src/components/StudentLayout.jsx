@@ -2,9 +2,15 @@ import { useContext, useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { StudentContextData } from "../context/StudentContext";
-import { Monogram, SlidingNav } from "./ui";
+import { Button, Modal, Monogram, SlidingNav } from "./ui";
 import { toast } from "react-toastify";
-import { syncPushRegistration } from "../utils/pushNotifications";
+import {
+  enablePushNotifications,
+  getPushNotificationState,
+  syncPushRegistration,
+} from "../utils/pushNotifications";
+
+const PUSH_PROMPT_SESSION_KEY = "discovrPushPromptShown";
 
 const publicLinks = [
   ["/", "Discover"],
@@ -17,6 +23,8 @@ export default function StudentLayout({ children }) {
   const { loggedInStudent, profile, signOut } = useContext(StudentContextData);
   const [unread, setUnread] = useState(0);
   const [lifted, setLifted] = useState(false);
+  const [pushPrompt, setPushPrompt] = useState({ open: false, status: "disabled" });
+  const [pushPromptWorking, setPushPromptWorking] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -66,6 +74,32 @@ export default function StudentLayout({ children }) {
   }, [loggedInStudent, navigate]);
 
   useEffect(() => {
+    if (!loggedInStudent) {
+      setPushPrompt({ open: false, status: "disabled" });
+      return undefined;
+    }
+    if (window.sessionStorage.getItem(PUSH_PROMPT_SESSION_KEY) === "1") return undefined;
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        await syncPushRegistration().catch(() => {});
+        const state = await getPushNotificationState();
+        if (cancelled || !["disabled", "blocked"].includes(state.status)) return;
+        window.sessionStorage.setItem(PUSH_PROMPT_SESSION_KEY, "1");
+        setPushPrompt({ open: true, status: state.status });
+      } catch {
+        // Profile remains the fallback if this browser cannot report push state.
+      }
+    }, 900);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [loggedInStudent]);
+
+  useEffect(() => {
     const onScroll = () => {
       setLifted(window.scrollY > 8);
       const available = document.documentElement.scrollHeight - window.innerHeight;
@@ -85,6 +119,31 @@ export default function StudentLayout({ children }) {
   const logout = async () => {
     await signOut();
     navigate("/login", { replace: true });
+  };
+
+  const closePushPrompt = () => {
+    setPushPrompt((current) => ({ ...current, open: false }));
+  };
+
+  const enablePushFromPrompt = async () => {
+    setPushPromptWorking(true);
+    try {
+      const state = await enablePushNotifications();
+      if (state.status !== "enabled") throw new Error("Browser notifications could not be enabled");
+      closePushPrompt();
+      toast.success("Browser notifications enabled");
+    } catch (error) {
+      const blocked = typeof Notification !== "undefined" && Notification.permission === "denied";
+      setPushPrompt({ open: true, status: blocked ? "blocked" : "error" });
+      toast.error(error.message || "Could not enable browser notifications", { autoClose: 10000 });
+    } finally {
+      setPushPromptWorking(false);
+    }
+  };
+
+  const openPushSettings = () => {
+    closePushPrompt();
+    navigate("/profile");
   };
 
   const links = loggedInStudent
@@ -164,6 +223,42 @@ export default function StudentLayout({ children }) {
       </header>
 
       <main id="main-content" className="app-main">{children}</main>
+
+      <Modal
+        open={pushPrompt.open}
+        onClose={closePushPrompt}
+        title={pushPrompt.status === "blocked" ? "Notifications are blocked" : pushPrompt.status === "error" ? "Notifications need attention" : "Never miss a Discovr update"}
+        description={pushPrompt.status === "blocked"
+          ? "Allow notifications for this site in your browser settings, then manage this device from your Discovr Profile."
+          : pushPrompt.status === "error"
+            ? "We could not finish notification setup. You can try again or review the browser-notification status in Profile."
+            : "Allow browser notifications for new events, sessions, application updates, deadlines, and interviews. You can turn them off anytime from Profile."}
+        labelledBy="push-permission-title"
+      >
+        <div className="mb-5 flex items-start gap-3 rounded-md border border-accent/20 bg-accent-tint p-4">
+          <span className="grid h-10 w-10 flex-none place-items-center rounded-full bg-accent text-white shadow-sm" aria-hidden="true">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M10 21h4" strokeLinecap="round" />
+            </svg>
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-ink">Timely, useful alerts</p>
+            <p className="mt-1 text-xs leading-relaxed text-ink-3">Only Discovr updates are sent. Your browser controls permission for this device.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2.5">
+          {pushPrompt.status === "blocked" ? (
+            <Button type="button" variant="accent" onClick={openPushSettings}>View Profile settings</Button>
+          ) : (
+            <Button type="button" variant="accent" loading={pushPromptWorking} onClick={enablePushFromPrompt}>
+              {pushPrompt.status === "error" ? "Try again" : "Allow notifications"}
+            </Button>
+          )}
+          {pushPrompt.status === "error" && <Button type="button" variant="secondary" onClick={openPushSettings}>View Profile</Button>}
+          <Button type="button" variant="ghost" onClick={closePushPrompt}>Not now</Button>
+        </div>
+      </Modal>
 
       <footer className="app-footer mt-24 border-t">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-8 text-xs text-ink-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
