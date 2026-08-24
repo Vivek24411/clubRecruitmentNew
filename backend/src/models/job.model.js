@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 
 const jobSchema = new mongoose.Schema({
-  type: { type: String, enum: ["notification", "session_reminder"], required: true, index: true },
+  type: { type: String, enum: ["notification", "session_reminder", "round_reminder"], required: true, index: true },
   payload: { type: mongoose.Schema.Types.Mixed, required: true },
   status: { type: String, enum: ["queued", "processing", "completed", "failed"], default: "queued", index: true },
   attempts: { type: Number, default: 0, min: 0 },

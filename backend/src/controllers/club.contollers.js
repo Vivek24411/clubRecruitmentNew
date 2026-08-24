@@ -21,6 +21,10 @@ const studentModel = require("../models/student.model");
 const { clearSessionCookie, setSessionCookie } = require("../utils/auth");
 const { notifyStudent, notifyTeam, notifyRegistrations } = require("../services/notification.services");
 const { enqueueSessionReminder, enqueueSessionReminders } = require("../services/jobQueue.services");
+const {
+  allEventRounds: reminderEventRounds,
+  enqueueSubmissionDeadlineRemindersForRound,
+} = require("../services/roundReminder.services");
 const { sessionsWithConfirmedRsvpCounts } = require("../services/sessionRsvp.services");
 const { sessionEndAt } = require("../utils/sessionSchedule");
 const { sendOtp } = require("../services/student.services");
@@ -749,6 +753,8 @@ module.exports.updateEvent = async (req, res) => {
     previousRoundDeadlines.has(String(round._id))
     && previousRoundDeadlines.get(String(round._id)) !== String(round.submissionDeadlineAt?.toISOString() || ""));
   const deadlineChanged = registrationDeadlineChanged || changedRoundDeadlines.length > 0;
+  await Promise.all(changedRoundDeadlines.map((round) =>
+    enqueueSubmissionDeadlineRemindersForRound(event, round, { reviveCompleted: true })));
   const notifyDeadlineChange = req.body.notifyRegistrants === true || req.body.notifyRegistrants === "true";
   if (deadlineChanged && notifyDeadlineChange) {
     const registrations = await registerationEventModel.find({ eventId: event._id, overallStatus: { $ne: "withdrawn" } });
@@ -774,6 +780,10 @@ module.exports.updateEventStatus = async (req, res) => {
   event.status = req.body.status;
   if (event.status === "published" && !event.publishedAt) event.publishedAt = new Date();
   await event.save();
+  if (previousStatus !== "published" && event.status === "published") {
+    await Promise.all(reminderEventRounds(event).map((round) =>
+      enqueueSubmissionDeadlineRemindersForRound(event, round, { reviveCompleted: true })));
+  }
   if (previousStatus !== "cancelled" && event.status === "cancelled") {
     const registrations = await registerationEventModel.find({ eventId: event._id });
     await notifyRegistrations(registrations, {
@@ -845,7 +855,12 @@ module.exports.deleteEvent = async (req, res) => {
       results.push(await applicationHistoryModel.deleteMany({ eventId: event._id }, { session: dbSession }));
       results.push(await registerationEventModel.deleteMany({ eventId: event._id }, { session: dbSession }));
       results.push(await notificationModel.deleteMany({ link: eventLink }, { session: dbSession }));
-      results.push(await jobModel.deleteMany({ "payload.notification.link": eventLink }, { session: dbSession }));
+      results.push(await jobModel.deleteMany({
+        $or: [
+          { "payload.notification.link": eventLink },
+          { type: "round_reminder", "payload.eventId": { $in: [String(event._id), event._id] } },
+        ],
+      }, { session: dbSession }));
       deleted = {
         reservations: results[0].deletedCount,
         submissions: results[1].deletedCount,

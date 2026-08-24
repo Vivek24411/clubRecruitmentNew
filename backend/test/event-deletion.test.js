@@ -28,6 +28,7 @@ test("confirmed event deletion cascades through all student activity", async () 
   const candidateId = new mongoose.Types.ObjectId();
   const slotId = new mongoose.Types.ObjectId();
   const deletedCollections = new Set();
+  let deletedJobFilter;
   const originals = new Map();
   const replace = (target, key, value) => {
     originals.set(`${target.modelName || "mongoose"}:${key}`, { target, key, value: target[key] });
@@ -61,8 +62,9 @@ test("confirmed event deletion cascades through all student activity", async () 
     ["notifications", notificationModel],
     ["jobs", jobModel],
   ]) {
-    replace(model, "deleteMany", async () => {
+    replace(model, "deleteMany", async (filter) => {
       deletedCollections.add(name);
+      if (name === "jobs") deletedJobFilter = filter;
       return { deletedCount: 1 };
     });
   }
@@ -90,6 +92,10 @@ test("confirmed event deletion cascades through all student activity", async () 
       "reservations", "submissions", "slots", "candidates", "memberships",
       "histories", "registrations", "notifications", "jobs",
     ]));
+    assert.deepEqual(deletedJobFilter.$or[1], {
+      type: "round_reminder",
+      "payload.eventId": { $in: [String(eventId), eventId] },
+    });
     assert.equal(audit.action, "event.delete_with_activity");
     assert.equal(audit.metadata.title, event.title);
   } finally {

@@ -8,6 +8,7 @@ const scheduleSlotModel = require("../models/scheduleSlot.model");
 const scheduleReservationModel = require("../models/scheduleReservation.model");
 const studentModel = require("../models/student.model");
 const { notifyStudent } = require("../services/notification.services");
+const { enqueueInterviewRemindersForSlot } = require("../services/roundReminder.services");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryAsset, destroyUploadedFile } = require("../utils/uploads");
 const {
@@ -455,13 +456,16 @@ module.exports.scheduleCandidate = async (req, res) => {
   if (!candidate) return res.status(404).json({ success: false, msg: "Candidate not found" });
   try {
     const slot = await upsertScheduleSlot({ candidate, ...req.body });
-    await Promise.all(candidate.participantIds.map((studentId) => notifyStudent(studentId, {
-      type: "round_scheduled",
-      title: `${round.title} scheduled`,
-      message: `Your ${round.title} slot for ${event.title} is ${new Date(slot.startAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}${slot.venue ? ` at ${slot.venue}` : ""}.`,
-      link: `/event/${event._id}`,
-      emailDetails: { startsAt: slot.startAt, venue: slot.venue, meetingUrl: slot.meetingUrl },
-    })));
+    await Promise.all([
+      enqueueInterviewRemindersForSlot(slot, { roundType: round.type, reviveCompleted: true }),
+      ...candidate.participantIds.map((studentId) => notifyStudent(studentId, {
+        type: "round_scheduled",
+        title: `${round.title} scheduled`,
+        message: `Your ${round.title} slot for ${event.title} is ${new Date(slot.startAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}${slot.venue ? ` at ${slot.venue}` : ""}.`,
+        link: `/event/${event._id}`,
+        emailDetails: { startsAt: slot.startAt, venue: slot.venue, meetingUrl: slot.meetingUrl },
+      })),
+    ]);
     await writeAudit({ actorRole: "club", actorId: req.club._id, action: "round.slot_schedule", targetType: "slot", targetId: slot._id });
     return res.json({ success: true, msg: "Slot saved and participants notified", slot });
   } catch (error) {
@@ -496,13 +500,19 @@ module.exports.autoScheduleRound = async (req, res) => {
       venue: req.body.venue || round.venue,
       meetingUrl: req.body.meetingUrl || round.meetingUrl,
     });
-    await Promise.all(result.scheduled.flatMap((slot) => slot.participantIds.map((studentId) => notifyStudent(studentId, {
-      type: "round_scheduled",
-      title: `${round.title} scheduled`,
-      message: `Your ${round.title} slot for ${event.title} is ${new Date(slot.startAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}${slot.venue ? ` at ${slot.venue}` : ""}.`,
-      link: `/event/${event._id}`,
-      emailDetails: { startsAt: slot.startAt, venue: slot.venue, meetingUrl: slot.meetingUrl },
-    }))));
+    await Promise.all([
+      ...result.scheduled.map((slot) => enqueueInterviewRemindersForSlot(slot, {
+        roundType: round.type,
+        reviveCompleted: true,
+      })),
+      ...result.scheduled.flatMap((slot) => slot.participantIds.map((studentId) => notifyStudent(studentId, {
+        type: "round_scheduled",
+        title: `${round.title} scheduled`,
+        message: `Your ${round.title} slot for ${event.title} is ${new Date(slot.startAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}${slot.venue ? ` at ${slot.venue}` : ""}.`,
+        link: `/event/${event._id}`,
+        emailDetails: { startsAt: slot.startAt, venue: slot.venue, meetingUrl: slot.meetingUrl },
+      }))),
+    ]);
     await writeAudit({
       actorRole: "club", actorId: req.club._id, action: "round.auto_schedule",
       targetType: "round", targetId: round._id,

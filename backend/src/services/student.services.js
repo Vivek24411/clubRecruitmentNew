@@ -137,10 +137,15 @@ function buildNotificationEmailHtml({ title, message, detailsUrl, type, emailDet
         event_deadline_changed: "View updated event",
         event_extracted: "Open event",
         session_reminder: "View session",
+        round_deadline_reminder: "Open round",
+        round_interview_reminder: "View interview",
     };
     const actionLabel = escapeHtml(actionLabels[type] || "View details");
     const detailRows = [
-        emailDetails?.startsAt ? ["Date and time", formatNotificationDateTime(emailDetails.startsAt)] : null,
+        emailDetails?.clubName ? ["Club", emailDetails.clubName] : null,
+        emailDetails?.eventName ? ["Event", emailDetails.eventName] : null,
+        emailDetails?.roundName ? ["Round", emailDetails.roundName] : null,
+        emailDetails?.startsAt ? [emailDetails?.dateLabel || "Date and time", formatNotificationDateTime(emailDetails.startsAt)] : null,
         emailDetails?.venue ? ["Venue", emailDetails.venue] : null,
     ].filter(Boolean);
     const detailCard = detailRows.length || emailDetails?.meetingUrl
@@ -163,7 +168,7 @@ function buildNotificationEmailHtml({ title, message, detailsUrl, type, emailDet
                 <tr><td style="padding:30px 34px 0;">
                     <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
                         <td style="width:42px;height:42px;text-align:center;background:#111612;color:#fbfaf6;border-radius:10px;font-size:18px;font-weight:700;">D</td>
-                        <td style="padding-left:12px;"><div style="font-size:16px;font-weight:700;">Discovr</div><div style="padding-top:3px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#697169;">${type === "session_reminder" ? "Session reminder" : "Application update"}</div></td>
+                        <td style="padding-left:12px;"><div style="font-size:16px;font-weight:700;">Discovr</div><div style="padding-top:3px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#697169;">${type === "session_reminder" ? "Session reminder" : type === "round_deadline_reminder" || type === "round_interview_reminder" ? "Round reminder" : "Application update"}</div></td>
                     </tr></table>
                 </td></tr>
                 <tr><td style="padding:32px 34px 12px;">
@@ -199,7 +204,7 @@ module.exports.sendNotificationEmail = async (email, { title, message, link, typ
     await sendEmail({
         to: email,
         subject: String(title || "Discovr update").replace(/[\r\n]/g, " "),
-        text: `${message || "You have a new application update."}${emailDetails?.startsAt ? `\nDate and time: ${formatNotificationDateTime(emailDetails.startsAt)}` : ""}${emailDetails?.venue ? `\nVenue: ${emailDetails.venue}` : ""}${emailDetails?.meetingUrl ? `\nMeeting link: ${emailDetails.meetingUrl}` : ""}${detailsUrl ? `\n\nView details: ${detailsUrl}` : ""}`,
+        text: `${message || "You have a new application update."}${emailDetails?.clubName ? `\nClub: ${emailDetails.clubName}` : ""}${emailDetails?.eventName ? `\nEvent: ${emailDetails.eventName}` : ""}${emailDetails?.roundName ? `\nRound: ${emailDetails.roundName}` : ""}${emailDetails?.startsAt ? `\n${emailDetails?.dateLabel || "Date and time"}: ${formatNotificationDateTime(emailDetails.startsAt)}` : ""}${emailDetails?.venue ? `\nVenue: ${emailDetails.venue}` : ""}${emailDetails?.meetingUrl ? `\nMeeting link: ${emailDetails.meetingUrl}` : ""}${detailsUrl ? `\n\nView details: ${detailsUrl}` : ""}`,
         html: buildNotificationEmailHtml({ title, message, detailsUrl, type, emailDetails }),
         idempotencyKey,
     });

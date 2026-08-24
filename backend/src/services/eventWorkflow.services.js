@@ -5,6 +5,7 @@ const eventMembershipModel = require("../models/eventMembership.model");
 const roundCandidateModel = require("../models/roundCandidate.model");
 const scheduleSlotModel = require("../models/scheduleSlot.model");
 const scheduleReservationModel = require("../models/scheduleReservation.model");
+const { enqueueSubmissionDeadlineReminders } = require("./roundReminder.services");
 
 const ROUND_TYPES = new Set([
   "test", "submission", "interview", "group_discussion", "presentation", "hackathon", "custom",
@@ -258,7 +259,7 @@ async function createCandidatesForRound({ event, round, registration, participan
   if (!participants.length) return [];
   const verticalId = registrationVerticalId(event, registration, round);
   if (round.evaluationScope === "participant") {
-    return Promise.all(participants.map(async (studentId) => {
+    const candidates = await Promise.all(participants.map(async (studentId) => {
       const candidate = await roundCandidateModel.findOneAndUpdate(
         { eventId: event._id, roundId: round._id, registrationId: registration._id, studentId },
         {
@@ -284,6 +285,8 @@ async function createCandidatesForRound({ event, round, registration, participan
       }
       return candidate;
     }));
+    await enqueueSubmissionDeadlineReminders(candidates, round, { reviveCompleted: true });
+    return candidates;
   }
   const candidate = await roundCandidateModel.findOneAndUpdate(
     { eventId: event._id, roundId: round._id, registrationId: registration._id, studentId: null },
@@ -310,6 +313,7 @@ async function createCandidatesForRound({ event, round, registration, participan
     candidate.decisionPublishedAt = null;
     await candidate.save();
   }
+  await enqueueSubmissionDeadlineReminders([candidate], round, { reviveCompleted: true });
   return [candidate];
 }
 

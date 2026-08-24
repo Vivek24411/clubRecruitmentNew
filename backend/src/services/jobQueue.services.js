@@ -9,6 +9,7 @@ const sessionRsvpModel = require("../models/sessionRsvp.model");
 const { sendNotificationEmail } = require("./student.services");
 const { sendPushNotification } = require("./firebaseMessaging.services");
 const { sessionStartAt } = require("../utils/sessionSchedule");
+const { backfillRoundReminders, deliverRoundReminder } = require("./roundReminder.services");
 
 const workerId = `${os.hostname()}:${process.pid}:${crypto.randomUUID().slice(0, 8)}`;
 const SESSION_REMINDER_LEAD_MS = 60 * 60 * 1000;
@@ -199,6 +200,7 @@ async function processJob(job) {
   try {
     if (job.type === "notification") await deliverNotification(job);
     if (job.type === "session_reminder") await deliverSessionReminder(job);
+    if (job.type === "round_reminder") await deliverRoundReminder(job, workerId);
     await jobModel.updateOne(
       { _id: job._id, lockedBy: workerId },
       { $set: { status: "completed", completedAt: new Date(), updatedAt: new Date() }, $unset: { lockedAt: 1, lockedBy: 1 } },
@@ -272,11 +274,27 @@ function startJobWorker(options = {}) {
   };
   const timer = setInterval(tick, intervalMs);
   timer.unref();
+  const roundReminderBackfillIntervalMs = Math.max(
+    Number(options.roundReminderBackfillIntervalMs ?? process.env.ROUND_REMINDER_BACKFILL_INTERVAL_MS) || 15 * 60 * 1000,
+    60 * 1000,
+  );
+  const roundReminderTimer = setInterval(() => {
+    backfillRoundReminders().catch((error) => {
+      console.error("Round reminder backfill failed:", error?.message || error);
+    });
+  }, roundReminderBackfillIntervalMs);
+  roundReminderTimer.unref();
   backfillSessionReminders().catch((error) => {
     console.error("Session reminder backfill failed:", error?.message || error);
   });
+  backfillRoundReminders().catch((error) => {
+    console.error("Round reminder backfill failed:", error?.message || error);
+  });
   tick();
-  return () => clearInterval(timer);
+  return () => {
+    clearInterval(timer);
+    clearInterval(roundReminderTimer);
+  };
 }
 
 module.exports = {
