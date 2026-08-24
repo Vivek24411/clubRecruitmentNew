@@ -142,7 +142,7 @@ export default function EditEvent() {
           />
           <Field label="Additional eligibility" id="eligibility" className="mt-5"><Textarea id="eligibility" rows="3" className="min-h-0" value={form.eligibility || ""} onChange={(event) => set("eligibility", event.target.value)} /></Field>
           <Field label="Contact details, one per line" id="contacts" className="mt-5"><Textarea id="contacts" rows="3" className="min-h-0" value={(form.ContactInfo || []).join("\n")} onChange={(event) => set("ContactInfo", event.target.value.split("\n").map((item) => item.trim()))} /></Field>
-          {deadlineChanged && form.deadlineNotificationsEnabled !== false && <label className="mt-5 flex items-start gap-3 rounded-sm border-l-2 border-accent bg-accent-tint/40 p-4 text-sm"><input className="mt-1" type="checkbox" checked={notifyRegistrants} onChange={(event) => setNotifyRegistrants(event.target.checked)} /><span>Email registered students about changed registration or submission deadlines when this save succeeds.</span></label>}
+          {deadlineChanged && form.deadlineNotificationsEnabled !== false && <label className="mt-5 flex items-start gap-3 rounded-sm border-l-2 border-accent bg-accent-tint/40 p-4 text-sm"><input className="mt-1" type="checkbox" checked={notifyRegistrants} onChange={(event) => setNotifyRegistrants(event.target.checked)} /><span>Email registered students and send browser notifications about changed registration or submission deadlines when this save succeeds.</span></label>}
         </Card>
         <Card className="p-5 sm:p-6">
           <VerticalBuilder
@@ -157,7 +157,7 @@ export default function EditEvent() {
             onMaxApplicationsChange={(value) => set("maxVerticalApplications", value)}
           />
         </Card>
-        <Card className="p-5 sm:p-6"><h2 className="display text-xl">Banner</h2><p className="mt-1.5 text-sm text-ink-3">Recommended: 1600 × 700 px. JPG, PNG, or WebP up to 20 MB; files above 10 MB are optimized automatically.</p>{form.eventBanner && !banner && <img src={form.eventBanner} alt="Current event banner" className="mt-5 aspect-[16/7] w-full rounded-sm border border-line bg-paper-2 object-cover" />}<Field label="Replace banner" id="banner" className="mt-5"><input id="banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setBanner(event.target.files[0] || null)} /></Field></Card>
+        <Card className="p-5 sm:p-6"><h2 className="display text-xl">Banner</h2><p className="mt-1.5 text-sm text-ink-3">Recommended: 1600 × 900 px (16:9). Keep important text away from the outer 5% edge. JPG, PNG, or WebP up to 20 MB; files above 10 MB are optimized automatically.</p>{form.eventBanner && !banner && <div className="relative mt-5 aspect-video w-full overflow-hidden rounded-sm border border-line bg-ink/90"><img src={form.eventBanner} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" /><img src={form.eventBanner} alt="Current event banner" className="relative h-full w-full object-contain" /></div>}<Field label="Replace banner" id="banner" className="mt-5"><input id="banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setBanner(event.target.files[0] || null)} /></Field></Card>
         <div className="flex flex-wrap gap-3"><Button type="submit" size="lg" loading={saving}>{saving ? "Saving..." : "Save event"}</Button><Button to={`/event/${eventId}`} variant="secondary" size="lg">Cancel</Button></div>
       </form>
     </Page>

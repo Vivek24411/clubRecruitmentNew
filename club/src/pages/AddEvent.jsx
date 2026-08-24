@@ -327,10 +327,10 @@ export default function AddEvent() {
 
         <Card className="p-5 sm:p-6">
           <h2 className="display text-xl">Event banner</h2>
-          <p className="mt-1.5 text-sm text-ink-3">Use a wide image, ideally 1600 × 700 px. Images above the provider&rsquo;s 10 MB limit are optimized automatically.</p>
+          <p className="mt-1.5 text-sm text-ink-3">Recommended: 1600 × 900 px (16:9). Keep important text away from the outer 5% edge. Images above the provider&rsquo;s 10 MB limit are optimized automatically.</p>
           <Field label="JPG, PNG, or WebP up to 20 MB" id="banner" className="mt-5" error={fieldErrors.banner}><input id="banner" name="banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={selectBanner} aria-invalid={Boolean(fieldErrors.banner)} className="block w-full text-sm file:mr-3 file:rounded-sm file:border file:border-line file:bg-surface file:px-4 file:py-2" /></Field>
-          {preview && <img src={preview} alt="Event banner preview" className="mt-5 aspect-[16/7] w-full rounded-sm border border-line bg-paper-2 object-cover" />}
-          <label className="mt-5 flex items-center gap-3 text-sm"><input type="checkbox" checked={form.deadlineNotificationsEnabled} onChange={(event) => set("deadlineNotificationsEnabled", event.target.checked)} />Allow deadline-change email notifications for this event</label>
+          {preview && <div className="relative mt-5 aspect-video w-full overflow-hidden rounded-sm border border-line bg-ink/90"><img src={preview} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" /><img src={preview} alt="Event banner preview" className="relative h-full w-full object-contain" /></div>}
+          <label className="mt-5 flex items-center gap-3 text-sm"><input type="checkbox" checked={form.deadlineNotificationsEnabled} onChange={(event) => set("deadlineNotificationsEnabled", event.target.checked)} />Allow deadline-change email and browser notifications for this event</label>
         </Card>
 
         <Button type="submit" size="lg" loading={submitting}>{submitting ? "Creating..." : form.status === "published" ? "Create and publish" : "Save draft"}</Button>

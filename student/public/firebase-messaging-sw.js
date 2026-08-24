@@ -38,7 +38,10 @@ if (firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.messagin
       body: data.body || "You have a new recruitment update.",
       icon: "/discovr-o.png",
       badge: "/discovr-o.png",
+      ...(data.image ? { image: data.image } : {}),
       tag: `${data.type || "notification"}:${data.link || "/notifications"}`,
+      renotify: true,
+      actions: [{ action: "open", title: "View details" }],
       data: { link: data.link || "/notifications" },
     });
   });

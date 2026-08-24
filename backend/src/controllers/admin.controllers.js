@@ -11,6 +11,7 @@ const registerationEventModel = require("../models/registerationEvent.model");
 const sessionRsvpModel = require("../models/sessionRsvp.model");
 const { writeAudit } = require("../services/audit.services");
 const { notifyStudent, notifyTeam, notifyRegistrations } = require("../services/notification.services");
+const { announcePublishedEvent, announcePublishedSession } = require("../services/publicationAnnouncement.services");
 const { enqueueSessionReminders } = require("../services/jobQueue.services");
 const { destroyUploadedFile } = require("../utils/uploads");
 const {
@@ -357,6 +358,7 @@ module.exports.moderateEvent = async (req, res) => {
     { new: true, runValidators: true }
   );
   if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
+  if (previous?.status !== "published" && event.status === "published") await announcePublishedEvent(event);
   if (previous?.status !== "cancelled" && event.status === "cancelled") {
     const registrations = await registerationEventModel.find({ eventId: event._id });
     await notifyRegistrations(registrations, {
@@ -378,6 +380,7 @@ module.exports.moderateSession = async (req, res) => {
     { new: true, runValidators: true }
   );
   if (!session) return res.status(404).json({ success: false, msg: "Session not found" });
+  if (previous?.status !== "published" && session.status === "published") await announcePublishedSession(session);
   if (previous?.status !== "cancelled" && session.status === "cancelled") {
     const activeRsvps = await sessionRsvpModel.find({ sessionId: session._id, status: { $in: ["confirmed", "waitlisted"] } });
     await Promise.all(activeRsvps.map((rsvp) => notifyStudent(rsvp.studentId, {

@@ -5,6 +5,7 @@ const roundCandidateModel = require("../models/roundCandidate.model");
 const scheduleSlotModel = require("../models/scheduleSlot.model");
 const studentModel = require("../models/student.model");
 const { sendNotificationEmail } = require("./student.services");
+const { sendPushNotification } = require("./firebaseMessaging.services");
 
 const SUBMISSION_DEADLINE_LEAD_MS = 6 * 60 * 60 * 1000;
 const INTERVIEW_LEAD_MS = 2 * 60 * 60 * 1000;
@@ -71,9 +72,9 @@ async function enqueueRoundReminder({ kind, sourceId, studentId, eventId, roundI
 
   const shouldRequeue = job.status === "failed"
     || (options.reviveCompleted && job.status === "completed");
-  if (shouldRequeue && !job.delivery?.emailAt) {
+  if (shouldRequeue && (!job.delivery?.emailAt || !job.delivery?.pushAt)) {
     return jobModel.findOneAndUpdate(
-      { _id: jobId, status: job.status, "delivery.emailAt": null },
+      { _id: jobId, status: job.status },
       {
         $set: {
           status: "queued",
@@ -196,6 +197,13 @@ async function markEmailHandled(job, workerId) {
   );
 }
 
+async function markPushHandled(job, workerId) {
+  await jobModel.updateOne(
+    { _id: job._id, lockedBy: workerId },
+    { $set: { "delivery.pushAt": new Date(), updatedAt: new Date() } },
+  );
+}
+
 async function deliverRoundReminder(job, workerId) {
   const { kind, studentId, eventId, roundId, candidateId, slotId, expectedAt } = job.payload || {};
   if (!["submission_deadline", "interview"].includes(kind)
@@ -239,17 +247,22 @@ async function deliverRoundReminder(job, workerId) {
 
   const student = await studentModel.findById(studentId).select("email notificationPreferences").lean();
   if (!student) return;
+  const notification = buildRoundReminderNotification({
+    kind,
+    event,
+    round,
+    clubName: event.clubId?.name || "the organising club",
+    slot,
+  });
+  if (!job.delivery?.pushAt) {
+    await sendPushNotification(studentId, notification);
+    await markPushHandled(job, workerId);
+  }
   if (!job.delivery?.emailAt) {
     if (student.notificationPreferences?.email !== false) {
       await sendNotificationEmail(
         student.email,
-        buildRoundReminderNotification({
-          kind,
-          event,
-          round,
-          clubName: event.clubId?.name || "the organising club",
-          slot,
-        }),
+        notification,
         { idempotencyKey: `job:${job._id}` },
       );
     }

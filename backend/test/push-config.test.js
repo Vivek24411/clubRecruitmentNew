@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { firebaseConfigured } = require("../src/services/firebaseMessaging.services");
+const { pushAppOrigin } = require("../src/controllers/push.controllers");
 
 const KEYS = ["PUSH_NOTIFICATIONS_ENABLED", "FIREBASE_PROJECT_ID", "FIREBASE_SERVICE_ACCOUNT_BASE64"];
 
@@ -22,5 +23,18 @@ test("Firebase push configuration rejects malformed or mismatched service accoun
       if (previous[key] === undefined) delete process.env[key];
       else process.env[key] = previous[key];
     }
+  }
+});
+
+test("push registrations accept only the configured official student origin", () => {
+  const previous = process.env.STUDENT_APP_ORIGIN;
+  try {
+    process.env.STUDENT_APP_ORIGIN = "https://discovr.iitr.ac.in";
+    assert.equal(pushAppOrigin({ get: () => "https://discovr.iitr.ac.in" }), "https://discovr.iitr.ac.in");
+    assert.equal(pushAppOrigin({ get: () => "https://discovr.devx6.live" }), null);
+    assert.equal(pushAppOrigin({ get: () => "" }), null);
+  } finally {
+    if (previous === undefined) delete process.env.STUDENT_APP_ORIGIN;
+    else process.env.STUDENT_APP_ORIGIN = previous;
   }
 });

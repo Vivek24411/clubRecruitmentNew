@@ -4,7 +4,7 @@ import { uploadDirect } from "../utils/directUpload";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { StudentContextData } from "../context/StudentContext";
-import { Button, Card, Field, Input, Meta, Monogram, Page, PageHeader, PasswordInput } from "../components/ui";
+import { Badge, Button, Card, Field, Input, Meta, Monogram, Page, PageHeader, PasswordInput } from "../components/ui";
 import { disablePushNotifications, enablePushNotifications, getPushNotificationState } from "../utils/pushNotifications";
 
 const PROGRAMME_LABELS = {
@@ -25,6 +25,27 @@ const PASSWORD_FIELDS = [
   ["newPassword", "New password", "new-password"],
   ["confirmPassword", "Confirm new password", "new-password"],
 ];
+
+const PUSH_STATUS_UI = {
+  enabled: { label: "Active on this device", tone: "ok" },
+  disabled: { label: "Not enabled", tone: "neutral" },
+  loading: { label: "Checking…", tone: "neutral" },
+  blocked: { label: "Blocked by browser", tone: "bad" },
+  unsupported: { label: "Not supported", tone: "warn" },
+  unconfigured: { label: "Not configured", tone: "warn" },
+  server_unconfigured: { label: "Server unavailable", tone: "bad" },
+  error: { label: "Needs attention", tone: "bad" },
+};
+
+function pushStatusMessage(pushState) {
+  if (pushState.status === "enabled") return "Ready to notify you even when Discovr is closed.";
+  if (pushState.status === "blocked") return "Open this site’s browser settings and change Notifications to Allow.";
+  if (pushState.status === "unsupported") return "This browser does not support web push notifications.";
+  if (pushState.status === "unconfigured") return "Firebase push notifications have not been configured for this deployment yet.";
+  if (pushState.status === "server_unconfigured") return pushState.message || "This browser is registered, but the Discovr server cannot deliver push notifications yet.";
+  if (pushState.status === "error") return pushState.message || "Browser notification setup needs attention.";
+  return "Enable once on each browser where you want to receive alerts.";
+}
 
 /** Checkbox styled to match the paper/ink system rather than the OS default. */
 function Check({ checked, onChange, label }) {
@@ -252,24 +273,31 @@ export default function Profile() {
                   label="Email updates"
                 />
               </div>
-              <div className="mt-5 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-ink">Browser push notifications</p>
-                  <p className="mt-1 text-xs leading-relaxed text-ink-3">
-                    {pushState.status === "enabled" && "Enabled on this browser. You can receive updates when Discovr is closed."}
-                    {pushState.status === "blocked" && "Blocked by your browser. Allow notifications in the site settings to enable them."}
-                    {pushState.status === "unsupported" && "This browser does not support web push notifications."}
-                    {pushState.status === "unconfigured" && "Firebase push notifications have not been configured for this deployment yet."}
-                    {pushState.status === "server_unconfigured" && (pushState.message || "This browser is registered, but the Discovr server cannot deliver push notifications yet.")}
-                    {pushState.status === "error" && pushState.message}
-                    {["disabled", "loading"].includes(pushState.status) && "Enable this once per browser to receive recruitment updates while the site is closed."}
-                  </p>
+              <div className="mt-5 overflow-hidden rounded-md border border-line bg-surface">
+                <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
+                  <div className="flex min-w-0 gap-3.5">
+                    <span className={`grid h-11 w-11 flex-none place-items-center rounded-full ${pushState.status === "enabled" ? "bg-ok-tint text-ok" : "bg-paper-2 text-ink-3"}`} aria-hidden="true">
+                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></svg>
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-ink">Browser push notifications</p>
+                        <Badge tone={PUSH_STATUS_UI[pushState.status]?.tone || "neutral"}>{PUSH_STATUS_UI[pushState.status]?.label || "Unknown"}</Badge>
+                      </div>
+                      <p className="mt-1.5 text-xs leading-relaxed text-ink-3">{pushStatusMessage(pushState)}</p>
+                    </div>
+                  </div>
+                  {pushState.status === "enabled" ? (
+                    <Button type="button" size="sm" variant="secondary" loading={pushWorking} disabled={pushWorking} onClick={() => changePushState(false)}>Disable</Button>
+                  ) : (
+                    <Button type="button" size="sm" variant="accent" loading={pushWorking} disabled={pushWorking || ["blocked", "unsupported", "unconfigured", "server_unconfigured", "loading"].includes(pushState.status)} onClick={() => changePushState(true)}>Enable on this device</Button>
+                  )}
                 </div>
-                {pushState.status === "enabled" ? (
-                  <Button type="button" size="sm" variant="secondary" loading={pushWorking} disabled={pushWorking} onClick={() => changePushState(false)}>Disable on this device</Button>
-                ) : (
-                  <Button type="button" size="sm" variant="secondary" loading={pushWorking} disabled={pushWorking || ["blocked", "unsupported", "unconfigured", "server_unconfigured", "loading"].includes(pushState.status)} onClick={() => changePushState(true)}>Enable browser notifications</Button>
-                )}
+                <div className="grid gap-2 border-t border-line bg-paper-2/55 px-4 py-3 text-xs text-ink-3 sm:grid-cols-3 sm:px-5">
+                  <span>✓ New events and sessions</span>
+                  <span>✓ Deadlines and decisions</span>
+                  <span>✓ Interviews and RSVP reminders</span>
+                </div>
               </div>
             </fieldset>
 

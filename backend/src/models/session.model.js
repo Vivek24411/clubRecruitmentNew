@@ -55,6 +55,10 @@ const sessionSchema = new mongoose.Schema({
     default: 'published',
     index: true,
   },
+  pushAnnouncementSentAt: {
+    type: Date,
+    default: null,
+  },
   capacity: {
     type: Number,
     default: null,

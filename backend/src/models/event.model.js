@@ -156,6 +156,7 @@ const eventSchema = new mongoose.Schema({
     index: true,
   },
   publishedAt: { type: Date, default: null },
+  pushAnnouncementSentAt: { type: Date, default: null },
   updatedAt: { type: Date, default: Date.now },
   createdAt: { type: Date, default: Date.now },
   eventBanner: { type: String, default: "" },

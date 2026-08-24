@@ -20,6 +20,7 @@ const jobModel = require("../models/job.model");
 const studentModel = require("../models/student.model");
 const { clearSessionCookie, setSessionCookie } = require("../utils/auth");
 const { notifyStudent, notifyTeam, notifyRegistrations } = require("../services/notification.services");
+const { announcePublishedEvent, announcePublishedSession } = require("../services/publicationAnnouncement.services");
 const { enqueueSessionReminder, enqueueSessionReminders } = require("../services/jobQueue.services");
 const {
   allEventRounds: reminderEventRounds,
@@ -322,6 +323,7 @@ module.exports.addSession = async (req, res) => {
     });
 
     await writeAudit({ actorRole: "club", actorId: req.club._id, action: "session.create", targetType: "session", targetId: session._id });
+    if (session.status === "published") await announcePublishedSession(session);
 
     return res.json({
       success: true,
@@ -584,6 +586,7 @@ module.exports.addEvent = async (req, res) => {
     });
 
     await writeAudit({ actorRole: "club", actorId: req.club._id, action: "event.create", targetType: "event", targetId: event._id, metadata: { status: event.status } });
+    if (event.status === "published") await announcePublishedEvent(event);
 
     return res.json({ success: true, msg: "Event added successfully", event });
   } catch (err) {
@@ -790,6 +793,7 @@ module.exports.updateEventStatus = async (req, res) => {
   if (event.status === "published" && !event.publishedAt) event.publishedAt = new Date();
   await event.save();
   if (previousStatus !== "published" && event.status === "published") {
+    await announcePublishedEvent(event);
     await Promise.all(reminderEventRounds(event).map((round) =>
       enqueueSubmissionDeadlineRemindersForRound(event, round, { reviveCompleted: true })));
   }
@@ -1021,6 +1025,7 @@ module.exports.updateSession = async (req, res) => {
       session,
     );
   }
+  if (becamePublished) await announcePublishedSession(session);
   await writeAudit({ actorRole: "club", actorId: req.club._id, action: "session.update", targetType: "session", targetId: session._id });
   const updatedSession = await sessionModel.findById(session._id);
   return res.json({ success: true, msg: promotedStudents.length ? `Session updated and ${promotedStudents.length} waitlisted RSVP(s) confirmed` : "Session updated successfully", session: updatedSession });

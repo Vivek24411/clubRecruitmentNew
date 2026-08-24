@@ -19,6 +19,13 @@ const pushRegistrationSchema = new mongoose.Schema({
     enum: ["fcm"],
     default: "fcm",
   },
+  appOrigin: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 300,
+    index: true,
+  },
   userAgent: {
     type: String,
     default: "",
@@ -39,6 +46,7 @@ const pushRegistrationSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 pushRegistrationSchema.index({ studentId: 1, updatedAt: -1 });
+pushRegistrationSchema.index({ appOrigin: 1, expiresAt: 1, studentId: 1 });
 pushRegistrationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 module.exports = mongoose.model("PushRegistration", pushRegistrationSchema);

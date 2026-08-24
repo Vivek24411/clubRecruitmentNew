@@ -62,9 +62,9 @@ async function enqueueSessionReminder(studentId, session, options = {}) {
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
-  if (["completed", "failed"].includes(job.status) && !job.delivery?.emailAt) {
+  if (["completed", "failed"].includes(job.status) && (!job.delivery?.emailAt || !job.delivery?.pushAt)) {
     return jobModel.findOneAndUpdate(
-      { _id: jobId, status: job.status, "delivery.emailAt": null },
+      { _id: jobId, status: job.status },
       {
         $set: {
           status: "queued",
@@ -87,17 +87,21 @@ async function enqueueSessionReminders(studentIds, session, options = {}) {
   return Promise.all(recipients.map((studentId) => enqueueSessionReminder(studentId, session, options)));
 }
 
-async function enqueueNotifications(studentIds, notification) {
+async function enqueueNotifications(studentIds, notification, options = {}) {
   const recipients = [...new Set((studentIds || []).filter(Boolean).map(String))];
   if (!recipients.length) return [];
+  const requestedChannels = Array.isArray(options.channels)
+    ? options.channels.filter((channel) => ["inApp", "email", "push"].includes(channel))
+    : [];
+  const channels = requestedChannels.length ? [...new Set(requestedChannels)] : ["inApp", "email", "push"];
   return jobModel.insertMany(recipients.map((studentId) => ({
     type: "notification",
-    payload: { studentId, notification },
+    payload: { studentId, notification, channels },
   })), { ordered: false });
 }
 
-async function enqueueNotification(studentId, notification) {
-  const [job] = await enqueueNotifications([studentId], notification);
+async function enqueueNotification(studentId, notification, options = {}) {
+  const [job] = await enqueueNotifications([studentId], notification, options);
   return job || null;
 }
 
@@ -121,6 +125,7 @@ async function claimJob() {
 
 async function deliverNotification(job) {
   const { studentId, notification } = job.payload || {};
+  const channels = new Set(Array.isArray(job.payload?.channels) ? job.payload.channels : ["inApp", "email", "push"]);
   if (!studentId || !notification) return;
   const eventLink = String(notification.link || "").match(/^\/event\/([a-f\d]{24})$/i);
   if (eventLink && !await eventModel.exists({
@@ -139,7 +144,7 @@ async function deliverNotification(job) {
     { _id: job._id, lockedBy: workerId },
     { $set: { [`delivery.${channel}At`]: new Date(), updatedAt: new Date() } },
   );
-  if (!job.delivery?.inAppAt) {
+  if (channels.has("inApp") && !job.delivery?.inAppAt) {
     if (student.notificationPreferences?.inApp !== false) {
       await notificationModel.updateOne(
         { deliveryKey },
@@ -149,15 +154,15 @@ async function deliverNotification(job) {
     }
     await markDelivered("inApp");
   }
-  if (!job.delivery?.emailAt) {
+  if (channels.has("push") && !job.delivery?.pushAt) {
+    await sendPushNotification(studentId, notification);
+    await markDelivered("push");
+  }
+  if (channels.has("email") && !job.delivery?.emailAt) {
     if (student.notificationPreferences?.email !== false) {
       await sendNotificationEmail(student.email, notification, { idempotencyKey: deliveryKey });
     }
     await markDelivered("email");
-  }
-  if (!job.delivery?.pushAt) {
-    await sendPushNotification(studentId, notification);
-    await markDelivered("push");
   }
 }
 
@@ -181,11 +186,19 @@ async function deliverSessionReminder(job) {
     || startsAt.toISOString() !== expectedStartsAt
   ) return;
 
+  const notification = buildSessionReminderNotification(session);
+  if (!job.delivery?.pushAt) {
+    await sendPushNotification(studentId, notification);
+    await jobModel.updateOne(
+      { _id: job._id, lockedBy: workerId },
+      { $set: { "delivery.pushAt": new Date(), updatedAt: new Date() } },
+    );
+  }
   if (!job.delivery?.emailAt) {
     if (student.notificationPreferences?.email !== false) {
       await sendNotificationEmail(
         student.email,
-        buildSessionReminderNotification(session),
+        notification,
         { idempotencyKey: `job:${job._id}` },
       );
     }

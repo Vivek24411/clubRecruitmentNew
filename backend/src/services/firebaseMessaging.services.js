@@ -55,7 +55,7 @@ function notificationLink(link) {
   const path = String(link || "/notifications");
   const safePath = path.startsWith("/") && !path.startsWith("//") ? path : "/notifications";
   const origin = String(process.env.STUDENT_APP_ORIGIN || "").replace(/\/$/, "");
-  return { path: safePath, absolute: origin ? `${origin}${safePath}` : "" };
+  return { path: safePath, origin, absolute: origin ? `${origin}${safePath}` : "" };
 }
 
 const INVALID_REGISTRATION_CODES = new Set([
@@ -67,16 +67,18 @@ const INVALID_REGISTRATION_CODES = new Set([
 async function sendPushNotification(studentId, notification) {
   const client = messagingClient();
   if (!client) return { configured: false, sent: 0, failed: 0 };
+  const target = notificationLink(notification.link);
 
   const registrations = await pushRegistrationModel.find({
     studentId,
+    appOrigin: target.origin,
     expiresAt: { $gt: new Date() },
   }).sort({ updatedAt: -1 }).limit(10).lean();
   if (!registrations.length) return { configured: true, sent: 0, failed: 0 };
 
-  const target = notificationLink(notification.link);
   const title = String(notification.title || "Discovr update").slice(0, 120);
   const body = String(notification.message || "You have a new recruitment update.").slice(0, 500);
+  const image = /^https:\/\//i.test(String(notification.image || "")) ? String(notification.image).slice(0, 2048) : "";
   let sent = 0;
   let failed = 0;
   const invalidIds = [];
@@ -92,6 +94,7 @@ async function sendPushNotification(studentId, notification) {
         body,
         link: target.path,
         type: String(notification.type || "general").slice(0, 80),
+        ...(image ? { image } : {}),
       },
       webpush: {
         headers: { Urgency: "high", TTL: "86400" },

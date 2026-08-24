@@ -124,7 +124,7 @@ export default function Event() {
       {/* ------------------------------------------------------------------ */}
       {/* Body                                                                */}
       {/* ------------------------------------------------------------------ */}
-      {event.eventBanner && <img src={event.eventBanner} alt="" className="mt-9 aspect-[16/7] max-h-[30rem] w-full rounded-md border border-line bg-paper-2 object-cover shadow-sm" />}
+      {event.eventBanner && <div className="relative mt-9 aspect-video w-full overflow-hidden rounded-md border border-line bg-ink/90 shadow-sm"><img src={event.eventBanner} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" /><div className="absolute inset-0 bg-ink/15" aria-hidden="true" /><img src={event.eventBanner} alt={`${event.title} banner`} className="relative h-full w-full object-contain" /></div>}
 
       <div className="mt-10 grid gap-8 lg:grid-cols-3">
         <div className="space-y-8 lg:col-span-2">

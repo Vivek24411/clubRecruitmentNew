@@ -50,12 +50,20 @@ export default function StudentLayout({ children }) {
     void syncPushRegistration().catch(() => {});
     const onPush = (event) => {
       const message = event.detail?.data || event.detail?.notification || {};
-      toast.info(message.body || message.title || "You have a new recruitment update");
+      const link = String(message.link || "/notifications");
+      toast.info(
+        <div className="min-w-0">
+          <p className="font-semibold text-ink">{message.title || "Discovr update"}</p>
+          {message.body && <p className="mt-1 text-sm leading-relaxed text-ink-3">{message.body}</p>}
+          <p className="mt-2 text-xs font-semibold text-accent">View details →</p>
+        </div>,
+        { autoClose: 9000, onClick: () => navigate(link.startsWith("/") && !link.startsWith("//") ? link : "/notifications") },
+      );
       window.dispatchEvent(new Event("notifications-updated"));
     };
     window.addEventListener("discovr-push-notification", onPush);
     return () => window.removeEventListener("discovr-push-notification", onPush);
-  }, [loggedInStudent]);
+  }, [loggedInStudent, navigate]);
 
   useEffect(() => {
     const onScroll = () => {

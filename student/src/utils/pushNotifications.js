@@ -184,6 +184,8 @@ export async function syncPushRegistration() {
     vapidKey,
     serviceWorkerRegistration: client.serviceWorkerRegistration,
   });
+  const installationId = currentInstallationId || localStorage.getItem(INSTALLATION_KEY) || "";
+  if (installationId) await uploadInstallation(installationId);
 }
 
 export async function disablePushNotifications() {
