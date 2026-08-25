@@ -142,7 +142,7 @@ export default function Events() {
       <PageHeader
         eyebrow="Discover"
         title="Events and opportunities"
-        description="Recruitment, competitions, hackathons, workshops, and other club opportunities."
+        description="Recruitment, competitions, hackathons, and other club opportunities."
       />
 
       {/* Summary strip */}
@@ -182,7 +182,7 @@ export default function Events() {
 
         <Field label="Club" id="category" className="md:w-40"><Select id="category" value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">All clubs</option>{categories.map((type) => <option key={type} value={type}>{type.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}</Select></Field>
 
-        <Field label="Type" id="eventType" className="md:w-44"><Select id="eventType" value={eventType} onChange={(event) => setEventType(event.target.value)}><option value="all">All types</option><option value="recruitment">Recruitment</option><option value="competition">Competition</option><option value="hackathon">Hackathon</option><option value="workshop">Workshop</option><option value="other">Other</option></Select></Field>
+        <Field label="Type" id="eventType" className="md:w-44"><Select id="eventType" value={eventType} onChange={(event) => setEventType(event.target.value)}><option value="all">All types</option><option value="recruitment">Recruitment</option><option value="competition">Competition</option><option value="hackathon">Hackathon</option><option value="other">Other</option></Select></Field>
 
         <Field label="Sort by" id="sort" className="md:w-52">
           <Select id="sort" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>

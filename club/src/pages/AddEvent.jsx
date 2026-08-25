@@ -13,6 +13,7 @@ const initialForm = {
   eventType: "recruitment",
   shortDescription: "",
   longDescription: "",
+  problemStatementUrl: "",
   registrationDeadlineAt: "",
   maxParticipants: "",
   registrationType: "individual",
@@ -31,7 +32,7 @@ const initialForm = {
 };
 
 const fieldNames = {
-  title: "Event title",
+  title: "Event name",
   eventType: "Event type",
   status: "Visibility",
   shortDescription: "Short description",
@@ -55,7 +56,7 @@ const fieldNames = {
 const fieldRequirements = {
   title: "Enter between 2 and 150 characters",
   shortDescription: "Enter between 2 and 500 characters",
-  longDescription: "Enter between 2 and 10,000 characters",
+  longDescription: "Enter no more than 10,000 characters",
   registrationDeadlineAt: "Choose a valid registration deadline",
   maxParticipants: "Enter a number between 1 and 10,000, or leave it empty",
   minTeamSize: "Enter a team size of at least 1",
@@ -217,14 +218,17 @@ export default function AddEvent() {
     }
     setSubmitting(true);
     try {
+      const primaryRegistration = form.verticalsEnabled ? form.verticals[0] : form;
       const normalized = {
         ...form,
-        minTeamSize: form.registrationType === "individual" ? 1 : form.minTeamSize,
-        maxTeamSize: form.registrationType === "individual" ? 1 : form.maxTeamSize,
+        registrationType: primaryRegistration?.registrationType || "individual",
+        minTeamSize: primaryRegistration?.registrationType === "individual" ? 1 : primaryRegistration?.minTeamSize || 1,
+        maxTeamSize: primaryRegistration?.registrationType === "individual" ? 1 : primaryRegistration?.maxTeamSize || 1,
+        problemStatementUrl: primaryRegistration?.problemStatementUrl || form.problemStatementUrl || "",
       };
       const directAsset = await uploadDirect(banner, { role: "club", kind: "eventBanner" });
       const payload = Object.fromEntries(
-        ["title", "eventType", "shortDescription", "longDescription", "maxParticipants", "registrationType", "minTeamSize", "maxTeamSize", "eligibility", "status", "eligibilityMode", "deadlineNotificationsEnabled"]
+        ["title", "eventType", "shortDescription", "longDescription", "problemStatementUrl", "maxParticipants", "registrationType", "minTeamSize", "maxTeamSize", "eligibility", "status", "eligibilityMode", "deadlineNotificationsEnabled"]
           .map((key) => [key, normalized[key]]),
       );
       payload.registrationDeadlineAt = new Date(normalized.registrationDeadlineAt).toISOString();
@@ -281,21 +285,19 @@ export default function AddEvent() {
         <Card className="p-5 sm:p-6">
           <h2 className="display text-xl">Event details</h2>
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
-            <Field label="Event title" id="title" className="sm:col-span-2" required error={fieldErrors.title}><Input id="title" name="title" minLength="2" maxLength="150" value={form.title} onChange={(event) => set("title", event.target.value)} required aria-invalid={Boolean(fieldErrors.title)} /></Field>
-            <Field label="Event type" id="eventType" error={fieldErrors.eventType}><Select id="eventType" name="eventType" value={form.eventType} onChange={(event) => set("eventType", event.target.value)} aria-invalid={Boolean(fieldErrors.eventType)}><option value="recruitment">Recruitment</option><option value="hackathon">Hackathon</option><option value="competition">Competition</option><option value="workshop">Workshop</option><option value="other">Other</option></Select></Field>
+            <Field label="Event name" id="title" className="sm:col-span-2" required error={fieldErrors.title}><Input id="title" name="title" minLength="2" maxLength="150" value={form.title} onChange={(event) => set("title", event.target.value)} required aria-invalid={Boolean(fieldErrors.title)} /></Field>
+            <Field label="Event type" id="eventType" error={fieldErrors.eventType}><Select id="eventType" name="eventType" value={form.eventType} onChange={(event) => set("eventType", event.target.value)} aria-invalid={Boolean(fieldErrors.eventType)}><option value="recruitment">Recruitment</option><option value="hackathon">Hackathon</option><option value="competition">Competition</option><option value="other">Other</option></Select></Field>
             <Field label="Visibility" id="status" error={fieldErrors.status}><Select id="status" name="status" value={form.status} onChange={(event) => set("status", event.target.value)} aria-invalid={Boolean(fieldErrors.status)}><option value="published">Published</option><option value="draft">Draft</option></Select></Field>
             <Field label="Short description" id="shortDescription" className="sm:col-span-2" required error={fieldErrors.shortDescription}><Input id="shortDescription" name="shortDescription" minLength="2" maxLength="500" value={form.shortDescription} onChange={(event) => set("shortDescription", event.target.value)} required aria-invalid={Boolean(fieldErrors.shortDescription)} /></Field>
-            <Field label="Full description" id="longDescription" className="sm:col-span-2" required error={fieldErrors.longDescription}><Textarea id="longDescription" name="longDescription" minLength="2" maxLength="10000" rows="6" value={form.longDescription} onChange={(event) => set("longDescription", event.target.value)} required aria-invalid={Boolean(fieldErrors.longDescription)} /></Field>
+            <Field label="Full description (optional)" id="longDescription" className="sm:col-span-2" error={fieldErrors.longDescription}><Textarea id="longDescription" name="longDescription" maxLength="10000" rows="6" value={form.longDescription} onChange={(event) => set("longDescription", event.target.value)} aria-invalid={Boolean(fieldErrors.longDescription)} /></Field>
           </div>
         </Card>
 
         <Card className="p-5 sm:p-6">
           <h2 className="display text-xl">Registration and eligibility</h2>
-          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Registration deadline" id="deadline" required className="lg:col-span-2" error={fieldErrors.registrationDeadlineAt}><DateTimeInput id="deadline" value={form.registrationDeadlineAt} onChange={(value) => set("registrationDeadlineAt", value)} required invalid={Boolean(fieldErrors.registrationDeadlineAt)} quickTimes={["17:00", "20:00", "23:00", "23:59"]} /></Field>
             <Field label="Overall participant limit (optional)" id="capacity" hint="Counts people, not teams: the captain and every accepted member count once. Pending invitations do not count." error={fieldErrors.maxParticipants}><Input id="capacity" name="maxParticipants" type="number" min="1" max="10000" value={form.maxParticipants} onChange={(event) => set("maxParticipants", event.target.value)} placeholder="Unlimited" aria-invalid={Boolean(fieldErrors.maxParticipants)} /></Field>
-            <Field label="Registration type" id="registrationType" error={fieldErrors.registrationType}><Select id="registrationType" name="registrationType" value={form.registrationType} onChange={(event) => set("registrationType", event.target.value)} aria-invalid={Boolean(fieldErrors.registrationType)}><option value="individual">Individual</option><option value="team">Team only</option><option value="optional_team">Individual or team</option></Select></Field>
-            {form.registrationType !== "individual" && <><Field label="Lower limit" id="minTeam" hint="Minimum students required in a team." error={fieldErrors.minTeamSize}><Input id="minTeam" name="minTeamSize" type="number" min="1" value={form.minTeamSize} onChange={(event) => set("minTeamSize", Number(event.target.value))} aria-invalid={Boolean(fieldErrors.minTeamSize)} /></Field><Field label="Upper limit" id="maxTeam" hint="Maximum students allowed in a team." error={fieldErrors.maxTeamSize}><Input id="maxTeam" name="maxTeamSize" type="number" min={form.minTeamSize} max="10000" value={form.maxTeamSize} onChange={(event) => set("maxTeamSize", Number(event.target.value))} aria-invalid={Boolean(fieldErrors.maxTeamSize)} /></Field></>}
           </div>
           <div id="programme-eligibility" className={fieldErrors.programmeEligibilityJSON ? "rounded-sm border border-bad/50" : ""}>
             <EligibilityBuilder
@@ -306,8 +308,8 @@ export default function AddEvent() {
             />
           </div>
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
-            <Field label="Additional eligibility" id="eligibility" error={fieldErrors.eligibility}><Textarea id="eligibility" name="eligibility" maxLength="2000" rows="3" className="min-h-0" value={form.eligibility} onChange={(event) => set("eligibility", event.target.value)} aria-invalid={Boolean(fieldErrors.eligibility)} /></Field>
-            <Field label="Contact emails or phone numbers" id="contact" error={fieldErrors.contactInfoJSON}><Textarea id="contact" name="contactInfoJSON" rows="3" className="min-h-0" value={form.ContactInfo.join("\n")} onChange={(event) => set("ContactInfo", event.target.value.split("\n").map((item) => item.trim()))} aria-invalid={Boolean(fieldErrors.contactInfoJSON)} /></Field>
+            <Field label="Additional eligibility (optional)" id="eligibility" error={fieldErrors.eligibility}><Textarea id="eligibility" name="eligibility" maxLength="2000" rows="3" className="min-h-0" value={form.eligibility} onChange={(event) => set("eligibility", event.target.value)} aria-invalid={Boolean(fieldErrors.eligibility)} /></Field>
+            <Field label="Contact emails or phone numbers (optional)" id="contact" error={fieldErrors.contactInfoJSON}><Textarea id="contact" name="contactInfoJSON" rows="3" className="min-h-0" value={form.ContactInfo.join("\n")} onChange={(event) => set("ContactInfo", event.target.value.split("\n").map((item) => item.trim()))} aria-invalid={Boolean(fieldErrors.contactInfoJSON)} /></Field>
           </div>
         </Card>
 
@@ -318,17 +320,21 @@ export default function AddEvent() {
             rounds={form.rounds}
             maxVerticalApplications={form.maxVerticalApplications}
             registrationType={form.registrationType}
+            minTeamSize={form.minTeamSize}
+            maxTeamSize={form.maxTeamSize}
+            problemStatementUrl={form.problemStatementUrl}
             onToggle={(value) => set("verticalsEnabled", value)}
             onVerticalsChange={(verticals) => set("verticals", verticals)}
             onRoundsChange={(rounds) => set("rounds", rounds)}
             onMaxApplicationsChange={(value) => set("maxVerticalApplications", value)}
+            onRegistrationChange={(key, value) => set(key, value)}
           />
         </Card>
 
         <Card className="p-5 sm:p-6">
           <h2 className="display text-xl">Event banner</h2>
-          <p className="mt-1.5 text-sm text-ink-3">Recommended: 1080 × 1080 px (1:1 Instagram post). The complete poster is shown without cropping across student and club pages. Images above the provider&rsquo;s 10 MB limit are optimized automatically.</p>
-          <Field label="JPG, PNG, or WebP up to 20 MB" id="banner" className="mt-5" error={fieldErrors.banner}><input id="banner" name="banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={selectBanner} aria-invalid={Boolean(fieldErrors.banner)} className="block w-full text-sm file:mr-3 file:rounded-sm file:border file:border-line file:bg-surface file:px-4 file:py-2" /></Field>
+          <p className="mt-1.5 text-sm text-ink-3">1080 × 1080 px (1:1 Instagram post).</p>
+          <Field label="Banner image (optional)" id="banner" className="mt-5" error={fieldErrors.banner}><input id="banner" name="banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={selectBanner} aria-invalid={Boolean(fieldErrors.banner)} className="block w-full text-sm file:mr-3 file:rounded-sm file:border file:border-line file:bg-surface file:px-4 file:py-2" /></Field>
           {preview && <div className="relative mx-auto mt-5 aspect-square w-full max-w-2xl overflow-hidden rounded-sm border border-line bg-ink/90"><img src={preview} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" /><img src={preview} alt="Event banner preview" className="relative h-full w-full object-contain" /></div>}
           <label className="mt-5 flex items-center gap-3 text-sm"><input type="checkbox" checked={form.deadlineNotificationsEnabled} onChange={(event) => set("deadlineNotificationsEnabled", event.target.checked)} />Allow deadline-change email and browser notifications for this event</label>
         </Card>

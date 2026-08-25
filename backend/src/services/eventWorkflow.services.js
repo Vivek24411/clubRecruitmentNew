@@ -76,11 +76,13 @@ function normalizeRounds(input) {
       ? round.submissionFields.slice(0, 12).map((field, fieldIndex) => ({
         key: cleanString(field?.key || `field_${fieldIndex + 1}`, 80).replace(/[^a-zA-Z0-9_-]/g, "_"),
         label: cleanString(field?.label || `Field ${fieldIndex + 1}`, 120),
-        type: ["text", "short_text", "long_text", "boolean", "url", "github", "file", "pdf", "video"].includes(field?.type) ? field.type : "short_text",
+        type: ["text", "short_text", "long_text", "boolean", "url", "drive_link", "github", "file", "pdf", "video"].includes(field?.type) ? field.type : "short_text",
         required: field?.required !== false,
         helpText: cleanString(field?.helpText, 300),
       }))
       : [];
+    const startsAt = cleanDate(round?.startsAt || (type === "submission" ? round?.submissionOpensAt : null));
+    const endsAt = cleanDate(round?.endsAt || (type === "submission" ? round?.submissionDeadlineAt : null));
     return {
       ...(mongoose.isValidObjectId(round?._id) ? { _id: round._id } : {}),
       order: index + 1,
@@ -91,17 +93,17 @@ function normalizeRounds(input) {
       instructions: cleanString(round?.instructions, 5000),
       evaluationScope,
       interviewMode,
-      scheduleMode,
-      startsAt: cleanDate(round?.startsAt),
-      endsAt: cleanDate(round?.endsAt),
+      scheduleMode: type === "submission" ? "common" : scheduleMode,
+      startsAt,
+      endsAt,
       venue: cleanString(round?.venue, 300),
       meetingUrl: cleanString(round?.meetingUrl, 2048),
       slotDurationMinutes: Math.min(Math.max(Number(round?.slotDurationMinutes) || 20, 5), 480),
       slotBufferMinutes: Math.min(Math.max(Number(round?.slotBufferMinutes) || 0, 0), 120),
       slotCapacity: Math.min(Math.max(Number(round?.slotCapacity) || 1, 1), 100),
       submissionEnabled,
-      submissionOpensAt: cleanDate(round?.submissionOpensAt),
-      submissionDeadlineAt: cleanDate(round?.submissionDeadlineAt),
+      submissionOpensAt: type === "submission" ? startsAt : cleanDate(round?.submissionOpensAt),
+      submissionDeadlineAt: type === "submission" ? endsAt : cleanDate(round?.submissionDeadlineAt),
       allowResubmission: round?.allowResubmission !== false,
       submissionFields,
     };
@@ -127,6 +129,7 @@ function normalizeVerticals(input, defaults = {}) {
       title: cleanString(vertical?.title || `Vertical ${index + 1}`, 120),
       shortDescription: cleanString(vertical?.shortDescription, 500),
       description: cleanString(vertical?.description, 5000),
+      problemStatementUrl: cleanString(vertical?.problemStatementUrl || defaults.problemStatementUrl, 2048),
       order: index + 1,
       isDefault: false,
       status: vertical?.status === "closed" ? "closed" : "open",

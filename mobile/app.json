@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "Discovr",
+    "slug": "discovr-student",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "../student/public/discovr-o.png",
+    "scheme": "discovr",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "icon": "../student/public/discovr-o.png",
+      "bundleIdentifier": "in.expediva.discovr",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "in.expediva.discovr",
+      "adaptiveIcon": {
+        "backgroundColor": "#F2F0E9",
+        "foregroundImage": "../student/public/discovr-o.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "../student/public/discovr-o.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F2F0E9",
+          "image": "../student/public/discovrlogo.png",
+          "imageWidth": 220
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Discovr to choose a student profile photo.",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2bfabc19-0f4f-4f1b-9163-1fad89c369fa"
+      }
+    }
+  }
+}

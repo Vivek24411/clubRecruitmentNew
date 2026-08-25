@@ -26,6 +26,42 @@ const STATUS_TONE = {
   cancelled: "bad",
 };
 
+const ROUND_TYPE_LABELS = {
+  test: "Test",
+  submission: "Submission",
+  interview: "Interview",
+  group_discussion: "Group discussion",
+  presentation: "Presentation",
+  hackathon: "Hackathon",
+  custom: "Custom",
+};
+
+function RoundDetail({ round, index }) {
+  const type = round.customType || ROUND_TYPE_LABELS[round.type] || round.Type || "Round";
+  const fields = round.submissionFields || [];
+  const submissionUsesRoundWindow = round.type === "submission";
+  return (
+    <li className="relative rounded-sm border border-line bg-surface p-4 sm:p-5">
+      <span className="absolute -left-9 top-4 grid h-7 w-7 place-items-center rounded-full border border-line bg-ink text-[0.6875rem] font-bold text-white">{index + 1}</span>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><p className="eyebrow">Round {index + 1}</p><p className="mt-1 font-semibold">{round.title || round.Type || `Round ${index + 1}`}</p></div>
+        <Badge tone="info">{type}</Badge>
+      </div>
+      {(round.Description || round.description) && <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{round.Description || round.description}</p>}
+      {round.instructions && <div className="mt-3 rounded-sm bg-paper-2 px-3.5 py-3"><p className="eyebrow">Instructions</p><p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{round.instructions}</p></div>}
+      <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+        {round.startsAt && <div><p className="eyebrow">{submissionUsesRoundWindow ? "Submissions open" : "Starts"}</p><p className="mt-1 font-medium text-ink-2">{formatDateTime(round.startsAt)}</p></div>}
+        {round.endsAt && <div><p className="eyebrow">{submissionUsesRoundWindow ? "Submission deadline" : "Ends"}</p><p className="mt-1 font-medium text-ink-2">{formatDateTime(round.endsAt)}</p></div>}
+        {!submissionUsesRoundWindow && round.submissionDeadlineAt && <div><p className="eyebrow">Submission deadline</p><p className="mt-1 font-medium text-ink-2">{formatDateTime(round.submissionDeadlineAt)}</p></div>}
+        {round.venue && <div><p className="eyebrow">Venue</p><p className="mt-1 font-medium text-ink-2">{round.venue}</p></div>}
+      </div>
+      {round.meetingUrl && <a href={round.meetingUrl} target="_blank" rel="noreferrer" className="link link-accent mt-3 inline-block break-all text-sm font-semibold">Open meeting link ↗</a>}
+      {round.interviewMode && <p className="mt-3 text-sm capitalize text-ink-3">{round.interviewMode} interview · {round.scheduleMode === "slots" ? `${round.slotDurationMinutes || 20}-minute slots` : "common schedule"}</p>}
+      {fields.length > 0 && <div className="mt-4 border-t border-line pt-4"><p className="eyebrow">Students submit</p><ul className="mt-2 flex flex-wrap gap-2">{fields.map((field) => <li key={field.key} className="rounded-full border border-line bg-paper-2 px-3 py-1.5 text-xs font-medium text-ink-2">{field.label}{field.required === false ? " · optional" : " · required"}</li>)}</ul></div>}
+    </li>
+  );
+}
+
 export default function Event() {
   const { clubProfile } = useContext(ClubContextData);
   const { eventId } = useParams();
@@ -81,6 +117,10 @@ export default function Event() {
   const effectiveStatus = event.status === "published"
     ? (eventIsOpen(event) ? "open" : "closed")
     : event.status;
+  const verticalCount = event.verticalsEnabled ? event.verticals?.length || 0 : 1;
+  const roundCount = event.verticals?.reduce((total, vertical) => total + (vertical.rounds?.length || 0), 0)
+    || event.roundDetails?.length
+    || 0;
 
   return (
     <Page width="5xl">
@@ -143,18 +183,11 @@ export default function Event() {
                 <Meta label="Final round ends" value={formatDateTime(eventEndsAt)} />
               )}
               <Meta label="Participant limit" value={event.maxParticipants ? `${event.maxParticipants} people` : "Unlimited"} />
-              <Meta label="Rounds" value={event.numberOfRounds} />
+              <Meta label="Verticals" value={verticalCount} />
+              <Meta label="Rounds" value={roundCount} />
               <Meta
                 label="Created"
                 value={event.createdAt ? formatDateTime(event.createdAt) : "—"}
-              />
-              <Meta
-                label="Registration"
-                value={
-                  <span className="capitalize">
-                    {event.registrationType?.replace("_", " ") || "Team"}
-                  </span>
-                }
               />
               <Meta label="Eligibility" value={eligibilitySummary(event)} />
               <Meta label="Branches/disciplines" value="All within the selected programmes" />
@@ -185,45 +218,34 @@ export default function Event() {
                 {(event.verticals?.length
                   ? event.verticals
                   : [{ _id: "legacy", title: "", rounds: event.roundDetails || [] }]
-                ).map((vertical) => (
-                  <div key={vertical._id}>
+                ).map((vertical, verticalIndex) => (
+                  <div key={vertical._id} className={event.verticalsEnabled ? "overflow-hidden rounded-md border-2 border-accent/20 bg-accent-tint/15" : ""}>
                     {event.verticalsEnabled && (
-                      <div className="mb-4 flex flex-wrap items-baseline gap-3">
-                        <h3 className="display text-lg">{vertical.title}</h3>
-                        {vertical.status === "closed" && <Badge tone="neutral">Closed</Badge>}
-                        <span className="text-sm text-ink-3">
-                          {vertical.registrationType === "individual"
-                            ? "Individual"
-                            : `Teams of ${vertical.minTeamSize}–${vertical.maxTeamSize}`}
-                        </span>
+                      <div className="border-b border-accent/20 bg-accent-tint/60 p-4 sm:p-5">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div><p className="eyebrow eyebrow-accent">Vertical {verticalIndex + 1} of {event.verticals.length}</p><h3 className="display mt-1 text-lg">{vertical.title}</h3></div>
+                          {vertical.status === "closed" && <Badge tone="neutral">Closed</Badge>}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-ink-2">
+                          <span className="rounded-full bg-surface px-3 py-1.5">{vertical.registrationType === "individual" ? "Individual registration" : vertical.registrationType === "optional_team" ? `Individual or teams · ${vertical.minTeamSize}–${vertical.maxTeamSize}` : `Teams of ${vertical.minTeamSize}–${vertical.maxTeamSize}`}</span>
+                          <span className="rounded-full bg-surface px-3 py-1.5">Registration deadline · {formatDateTime(vertical.registrationDeadlineAt || deadline)}</span>
+                          <span className="rounded-full bg-surface px-3 py-1.5">{vertical.rounds?.length || 0} rounds</span>
+                        </div>
                       </div>
                     )}
-                    {vertical.shortDescription && (
-                      <p className="mb-4 text-sm leading-relaxed text-ink-3">{vertical.shortDescription}</p>
-                    )}
-                    <ol className="relative space-y-6 pl-8">
+                    <div className={event.verticalsEnabled ? "p-4 sm:p-5" : ""}>
+                    {(vertical.shortDescription || vertical.description) && <div className="mb-5"><p className="eyebrow">What this vertical does</p>{vertical.shortDescription && <p className="mt-2 font-medium text-ink-2">{vertical.shortDescription}</p>}{vertical.description && <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink-3">{vertical.description}</p>}</div>}
+                    {(vertical.problemStatementUrl || (!event.verticalsEnabled && event.problemStatementUrl)) && <a href={vertical.problemStatementUrl || event.problemStatementUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm mb-5">Open problem statement ↗</a>}
+                    <ol className="relative space-y-4 pl-9">
                       <span
-                        className="absolute bottom-2 left-[0.6875rem] top-2 w-px bg-line"
+                        className="absolute bottom-2 left-[0.8125rem] top-2 w-px bg-line"
                         aria-hidden="true"
                       />
                       {(vertical.rounds || []).map((round, index) => (
-                        <li key={round._id || index} className="relative">
-                          <span className="absolute -left-8 grid h-6 w-6 place-items-center rounded-full border border-line bg-surface text-[0.6875rem] font-semibold text-ink-2">
-                            {index + 1}
-                          </span>
-                          <p className="font-semibold">
-                            {round.title || round.Type || round.type || `Round ${index + 1}`}
-                          </p>
-                          {(round.Description || round.description) && (
-                            <p className="mt-1.5 text-sm leading-relaxed text-ink-3">
-                              {round.Description || round.description}
-                            </p>
-                          )}
-                          {round.interviewMode && <p className="mt-1 text-xs capitalize text-ink-3">{round.interviewMode} interview</p>}
-                          {round.submissionDeadlineAt && <p className="mt-1 text-xs text-ink-3">Submission due {formatDateTime(round.submissionDeadlineAt)}</p>}
-                        </li>
+                        <RoundDetail key={round._id || index} round={round} index={index} />
                       ))}
                     </ol>
+                    </div>
                   </div>
                 ))}
               </div>

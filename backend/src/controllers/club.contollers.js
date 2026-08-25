@@ -496,6 +496,7 @@ module.exports.addEvent = async (req, res) => {
     maxTeamSize,
     status,
     eventType,
+    problemStatementUrl,
   } = req.body;
   
   // Handle ContactInfo array properly
@@ -525,6 +526,7 @@ module.exports.addEvent = async (req, res) => {
   const verticalsEnabled = req.body.verticalsEnabled === true || req.body.verticalsEnabled === "true";
   const requestedVerticals = normalizeVerticals(parsedArray(req.body.verticalsJSON), {
     registrationType: registrationType || "team",
+    problemStatementUrl,
   });
   const eligibilityMode = req.body.eligibilityMode === "all_iitr" ? "all_iitr" : "undergraduate";
   const legacyYears = parsedArray(req.body.eligibilityYearsJSON)
@@ -554,6 +556,7 @@ module.exports.addEvent = async (req, res) => {
       title,
       shortDescription,
       longDescription,
+      problemStatementUrl,
       registerationDeadline,
       maxParticipants: maxParticipants ? Number(maxParticipants) : null,
       maxTeamSize: Number(maxTeamSize || 1),
@@ -574,7 +577,7 @@ module.exports.addEvent = async (req, res) => {
       rounds,
       // The model seeds a hidden default vertical from `rounds` when the club
       // is not using verticals.
-      verticals: verticalsEnabled ? requestedVerticals : [],
+      verticals: requestedVerticals.length ? requestedVerticals : [],
       verticalsEnabled: verticalsEnabled && requestedVerticals.length > 1,
       maxVerticalApplications: req.body.maxVerticalApplications
         ? Number(req.body.maxVerticalApplications)
@@ -661,7 +664,7 @@ module.exports.updateEvent = async (req, res) => {
     round.submissionDeadlineAt ? new Date(round.submissionDeadlineAt).toISOString() : "",
   ]));
   const allowedFields = [
-    "title", "shortDescription", "longDescription", "eligibility", "ContactInfo",
+    "title", "shortDescription", "longDescription", "problemStatementUrl", "eligibility", "ContactInfo",
     "registrationType", "minTeamSize", "maxTeamSize",
     "numberOfRounds", "registerationDeadline", "eventType", "deadlineNotificationsEnabled",
   ];
@@ -709,6 +712,12 @@ module.exports.updateEvent = async (req, res) => {
       ? normalizeVerticals(parsedArray(req.body.verticalsJSON), { registrationType: event.registrationType })
       : [{
         ...(event.verticals?.[0]?.toObject ? event.verticals[0].toObject() : event.verticals?.[0] || {}),
+        title: event.title || "General",
+        registrationType: event.registrationType,
+        minTeamSize: event.minTeamSize,
+        maxTeamSize: event.maxTeamSize,
+        maxParticipants: event.maxParticipants,
+        problemStatementUrl: event.problemStatementUrl,
         rounds: normalizeRounds(parsedArray(req.body.roundsJSON)).map((round) => ({
           ...round,
           evaluationScope: (event.registrationType === "individual" || round.type === "test")
@@ -742,9 +751,11 @@ module.exports.updateEvent = async (req, res) => {
     }
 
     event.verticals = incoming;
-    event.verticalsEnabled = req.body.verticalsJSON !== undefined
-      ? incoming.length > 1
-      : event.verticalsEnabled;
+    event.verticalsEnabled = req.body.verticalsEnabled !== undefined
+      ? (req.body.verticalsEnabled === true || req.body.verticalsEnabled === "true") && incoming.length > 1
+      : req.body.verticalsJSON !== undefined
+        ? incoming.length > 1
+        : event.verticalsEnabled;
   }
   const oldBannerPublicId = event.eventBannerPublicId;
   if (req.file) {

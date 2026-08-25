@@ -21,7 +21,7 @@ import ShareQrModal from "../components/ShareQrModal";
 
 const SESSION_STATUSES = ["draft", "published", "cancelled", "completed", "archived"];
 const FIELD_LABELS = {
-  title: "Title",
+  title: "Session name",
   shortDescription: "Short description",
   longDescription: "Full description",
   date: "Date",
@@ -277,7 +277,7 @@ export default function Session() {
           {formError && <div role="alert" className="mt-4 rounded-sm border border-bad/30 bg-bad-tint px-4 py-3 text-sm font-medium text-bad">{formError}</div>}
 
           <div className="mt-6 space-y-5">
-            <Field label="Title" id="title" required error={fieldErrors.title}>
+            <Field label="Session name" id="title" required error={fieldErrors.title}>
               <Input
                 id="title"
                 value={session.title || ""}

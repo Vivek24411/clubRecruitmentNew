@@ -101,7 +101,7 @@ export default function Events() {
       <div className="mt-8 grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_12rem]">
         <label><span className="eyebrow">Search</span><Input className="mt-1.5" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Event title or description…" /></label>
         <label><span className="eyebrow">Status</span><Select className="mt-1.5" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option>{STATUSES.map((status) => <option key={status} value={status} className="capitalize">{status}</option>)}</Select></label>
-        <label><span className="eyebrow">Type</span><Select className="mt-1.5" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="all">All types</option><option value="recruitment">Recruitment</option><option value="hackathon">Hackathon</option><option value="competition">Competition</option><option value="workshop">Workshop</option><option value="other">Other</option></Select></label>
+        <label><span className="eyebrow">Type</span><Select className="mt-1.5" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="all">All types</option><option value="recruitment">Recruitment</option><option value="hackathon">Hackathon</option><option value="competition">Competition</option><option value="other">Other</option></Select></label>
       </div>
 
       <div className="mt-6">

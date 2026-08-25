@@ -71,6 +71,44 @@ test("mutating requests reject untrusted browser origins", () => {
   assert.equal(res.body.success, false);
 });
 
+test("native student login can omit Origin in production", () => {
+  const originalEnvironment = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  try {
+    const middleware = requireTrustedOrigin(["https://student.example"]);
+    const req = { method: "POST", path: "/student/login", headers: { "x-discovr-client": "mobile" } };
+    let continued = false;
+    middleware(req, {}, () => { continued = true; });
+    assert.equal(continued, true);
+  } finally {
+    if (originalEnvironment === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalEnvironment;
+  }
+});
+
+test("mobile marker never bypasses an untrusted browser Origin", () => {
+  const middleware = requireTrustedOrigin(["https://student.example"]);
+  const req = { method: "POST", path: "/student/login", headers: { origin: "https://evil.example", "x-discovr-client": "mobile" } };
+  const res = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+  middleware(req, res, () => assert.fail("untrusted browser origin should not continue"));
+  assert.equal(res.statusCode, 403);
+});
+
+test("anonymous native marker is limited to student authentication", () => {
+  const originalEnvironment = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  try {
+    const middleware = requireTrustedOrigin(["https://student.example"]);
+    const req = { method: "POST", path: "/admin/login", headers: { "x-discovr-client": "mobile" } };
+    const res = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+    middleware(req, res, () => assert.fail("non-student endpoint should not continue"));
+    assert.equal(res.statusCode, 403);
+  } finally {
+    if (originalEnvironment === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalEnvironment;
+  }
+});
+
 test("rate limiter returns 429 after the configured allowance", () => {
   const middleware = rateLimit({ windowMs: 1000, max: 1, keyPrefix: `test-${Date.now()}` });
   const req = { ip: "127.0.0.77", socket: {} };

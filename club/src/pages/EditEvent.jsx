@@ -30,7 +30,9 @@ export default function EditEvent() {
         originalRoundDeadlines.current = Object.fromEntries(allRounds(data.event).map((round) => [round._id, round.submissionDeadlineAt || ""]));
         setForm({
           ...data.event,
+          eventType: data.event.eventType === "workshop" ? "other" : data.event.eventType,
           ...eligibilityForForm(data.event),
+          problemStatementUrl: data.event.problemStatementUrl || verticals[0]?.problemStatementUrl || "",
           registrationDeadlineAt: data.event.registrationDeadlineAt ? new Date(new Date(data.event.registrationDeadlineAt).getTime() - new Date(data.event.registrationDeadlineAt).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "",
           // The hidden default vertical is what a non-vertical event edits.
           rounds: verticals[0]?.rounds || normalizeRoundsForForm(data.event.rounds || []),
@@ -64,11 +66,18 @@ export default function EditEvent() {
     setSaving(true);
     try {
       const directAsset = await uploadDirect(banner, { role: "club", kind: "eventBanner" });
+      const primaryRegistration = form.verticalsEnabled ? form.verticals[0] : form;
+      const registrationType = primaryRegistration?.registrationType || "individual";
       const payload = Object.fromEntries(
-        ["title", "eventType", "shortDescription", "longDescription", "maxParticipants", "registrationType", "minTeamSize", "maxTeamSize", "eligibility", "eligibilityMode", "deadlineNotificationsEnabled"]
+        ["title", "eventType", "shortDescription", "longDescription", "maxParticipants", "eligibility", "eligibilityMode", "deadlineNotificationsEnabled"]
           .map((key) => [key, form[key] ?? ""]),
       );
+      payload.registrationType = registrationType;
+      payload.minTeamSize = registrationType === "individual" ? 1 : primaryRegistration?.minTeamSize || 1;
+      payload.maxTeamSize = registrationType === "individual" ? 1 : primaryRegistration?.maxTeamSize || 1;
+      payload.problemStatementUrl = primaryRegistration?.problemStatementUrl || form.problemStatementUrl || "";
       payload.registrationDeadlineAt = form.registrationDeadlineAt ? new Date(form.registrationDeadlineAt).toISOString() : "";
+      payload.verticalsEnabled = form.verticalsEnabled;
       payload.numberOfRounds = form.rounds.length;
       payload.roundsJSON = JSON.stringify(form.rounds.map((round) => ({
         ...round,
@@ -120,19 +129,17 @@ export default function EditEvent() {
       <form onSubmit={save} className="mt-9 space-y-6">
         <Card className="p-5 sm:p-6">
           <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Title" id="title" className="sm:col-span-2" required><Input id="title" value={form.title || ""} onChange={(event) => set("title", event.target.value)} required /></Field>
-            <Field label="Event type" id="eventType"><Select id="eventType" value={form.eventType || "recruitment"} onChange={(event) => set("eventType", event.target.value)}><option value="recruitment">Recruitment</option><option value="hackathon">Hackathon</option><option value="competition">Competition</option><option value="workshop">Workshop</option><option value="other">Other</option></Select></Field>
+            <Field label="Event name" id="title" className="sm:col-span-2" required><Input id="title" value={form.title || ""} onChange={(event) => set("title", event.target.value)} required /></Field>
+            <Field label="Event type" id="eventType"><Select id="eventType" value={form.eventType || "recruitment"} onChange={(event) => set("eventType", event.target.value)}><option value="recruitment">Recruitment</option><option value="hackathon">Hackathon</option><option value="competition">Competition</option><option value="other">Other</option></Select></Field>
             <Field label="Registration deadline" id="deadline" className="sm:col-span-2"><DateTimeInput id="deadline" value={form.registrationDeadlineAt || ""} onChange={(value) => set("registrationDeadlineAt", value)} quickTimes={["17:00", "20:00", "23:00", "23:59"]} /></Field>
             <Field label="Short description" id="shortDescription" className="sm:col-span-2"><Input id="shortDescription" value={form.shortDescription || ""} onChange={(event) => set("shortDescription", event.target.value)} /></Field>
-            <Field label="Full description" id="longDescription" className="sm:col-span-2"><Textarea id="longDescription" rows="6" value={form.longDescription || ""} onChange={(event) => set("longDescription", event.target.value)} /></Field>
+            <Field label="Full description (optional)" id="longDescription" className="sm:col-span-2"><Textarea id="longDescription" rows="6" value={form.longDescription || ""} onChange={(event) => set("longDescription", event.target.value)} /></Field>
           </div>
         </Card>
         <Card className="p-5 sm:p-6">
           <h2 className="display text-xl">Registration</h2>
-          <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Type" id="registrationType"><Select id="registrationType" value={form.registrationType || "individual"} onChange={(event) => set("registrationType", event.target.value)}><option value="individual">Individual</option><option value="team">Team</option><option value="optional_team">Individual or team</option></Select></Field>
+          <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Overall participant limit (optional)" id="capacity" hint="Counts people, not teams: the captain and every accepted member count once. Pending invitations do not count."><Input id="capacity" type="number" min="1" max="10000" value={form.maxParticipants ?? ""} onChange={(event) => set("maxParticipants", event.target.value)} placeholder="Unlimited" /></Field>
-            {form.registrationType !== "individual" && <><Field label="Minimum team" id="minTeam"><Input id="minTeam" type="number" min="1" value={form.minTeamSize || 1} onChange={(event) => set("minTeamSize", Number(event.target.value))} /></Field><Field label="Maximum team" id="maxTeam"><Input id="maxTeam" type="number" min={form.minTeamSize || 1} value={form.maxTeamSize || 1} onChange={(event) => set("maxTeamSize", Number(event.target.value))} /></Field></>}
           </div>
           <EligibilityBuilder
             mode={form.eligibilityMode}
@@ -140,8 +147,8 @@ export default function EditEvent() {
             onModeChange={(value) => set("eligibilityMode", value)}
             onRulesChange={(value) => set("programmeEligibility", value)}
           />
-          <Field label="Additional eligibility" id="eligibility" className="mt-5"><Textarea id="eligibility" rows="3" className="min-h-0" value={form.eligibility || ""} onChange={(event) => set("eligibility", event.target.value)} /></Field>
-          <Field label="Contact details, one per line" id="contacts" className="mt-5"><Textarea id="contacts" rows="3" className="min-h-0" value={(form.ContactInfo || []).join("\n")} onChange={(event) => set("ContactInfo", event.target.value.split("\n").map((item) => item.trim()))} /></Field>
+          <Field label="Additional eligibility (optional)" id="eligibility" className="mt-5"><Textarea id="eligibility" rows="3" className="min-h-0" value={form.eligibility || ""} onChange={(event) => set("eligibility", event.target.value)} /></Field>
+          <Field label="Contact details, one per line (optional)" id="contacts" className="mt-5"><Textarea id="contacts" rows="3" className="min-h-0" value={(form.ContactInfo || []).join("\n")} onChange={(event) => set("ContactInfo", event.target.value.split("\n").map((item) => item.trim()))} /></Field>
           {deadlineChanged && form.deadlineNotificationsEnabled !== false && <label className="mt-5 flex items-start gap-3 rounded-sm border-l-2 border-accent bg-accent-tint/40 p-4 text-sm"><input className="mt-1" type="checkbox" checked={notifyRegistrants} onChange={(event) => setNotifyRegistrants(event.target.checked)} /><span>Email registered students and send browser notifications about changed registration or submission deadlines when this save succeeds.</span></label>}
         </Card>
         <Card className="p-5 sm:p-6">
@@ -151,13 +158,17 @@ export default function EditEvent() {
             rounds={form.rounds}
             maxVerticalApplications={form.maxVerticalApplications}
             registrationType={form.registrationType}
+            minTeamSize={form.minTeamSize}
+            maxTeamSize={form.maxTeamSize}
+            problemStatementUrl={form.problemStatementUrl}
             onToggle={(value) => set("verticalsEnabled", value)}
             onVerticalsChange={(verticals) => set("verticals", verticals)}
             onRoundsChange={(rounds) => set("rounds", rounds)}
             onMaxApplicationsChange={(value) => set("maxVerticalApplications", value)}
+            onRegistrationChange={(key, value) => set(key, value)}
           />
         </Card>
-        <Card className="p-5 sm:p-6"><h2 className="display text-xl">Banner</h2><p className="mt-1.5 text-sm text-ink-3">Recommended: 1080 × 1080 px (1:1 Instagram post). The complete poster is shown without cropping across student and club pages. JPG, PNG, or WebP up to 20 MB; files above 10 MB are optimized automatically.</p>{form.eventBanner && !banner && <div className="relative mx-auto mt-5 aspect-square w-full max-w-2xl overflow-hidden rounded-sm border border-line bg-ink/90"><img src={form.eventBanner} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" /><img src={form.eventBanner} alt="Current event banner" className="relative h-full w-full object-contain" /></div>}<Field label="Replace banner" id="banner" className="mt-5"><input id="banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setBanner(event.target.files[0] || null)} /></Field></Card>
+        <Card className="p-5 sm:p-6"><h2 className="display text-xl">Event banner</h2><p className="mt-1.5 text-sm text-ink-3">1080 × 1080 px (1:1 Instagram post).</p>{form.eventBanner && !banner && <div className="relative mx-auto mt-5 aspect-square w-full max-w-2xl overflow-hidden rounded-sm border border-line bg-ink/90"><img src={form.eventBanner} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl" /><img src={form.eventBanner} alt="Current event banner" className="relative h-full w-full object-contain" /></div>}<Field label="Replace banner (optional)" id="banner" className="mt-5"><input id="banner" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setBanner(event.target.files[0] || null)} /></Field></Card>
         <div className="flex flex-wrap gap-3"><Button type="submit" size="lg" loading={saving}>{saving ? "Saving..." : "Save event"}</Button><Button to={`/event/${eventId}`} variant="secondary" size="lg">Cancel</Button></div>
       </form>
     </Page>

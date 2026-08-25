@@ -11,7 +11,9 @@ function cloudinaryStorage({ folder, resourceType = "image", transformImages = f
         unique_filename: true,
       };
       if (transformImages && file.mimetype.startsWith("image/")) {
-        options.transformation = [{ width: 1800, height: 1200, crop: "limit", quality: "auto" }];
+        options.transformation = [file.fieldname === "eventBanner" || file.fieldname === "sessionThumbnail"
+          ? { width: 1080, height: 1080, crop: "pad", gravity: "center", background: "auto:predominant", quality: "auto" }
+          : { width: 1800, height: 1200, crop: "limit", quality: "auto" }];
       }
       const uploadStream = cloudinary.uploader.upload_stream(options, (error, result) => {
         if (error) return callback(error);

@@ -33,7 +33,7 @@ export default function AddSession() {
   const invalidShown = useRef(false);
 
   const fieldLabel = (name) => ({
-    title: "Session title",
+    title: "Session name",
     shortDescription: "Short description",
     longDescription: "Detailed description",
     date: "Date",
@@ -109,7 +109,7 @@ export default function AddSession() {
           <h2 className="display text-xl">About</h2>
           <div className="mt-6 space-y-5">
             {/* This was previously a date input by mistake — it is free text. */}
-            <Field label="Session title" id="title" required>
+            <Field label="Session name" id="title" required>
               <Input
                 id="title"
                 name="title"

@@ -36,6 +36,15 @@ const PROGRAMME_LABELS = {
   phd: "PhD",
 };
 const YEAR_LABELS = ["", "First", "Second", "Third", "Fourth", "Fifth"];
+const ROUND_TYPE_LABELS = {
+  test: "Test",
+  submission: "Submission",
+  interview: "Interview",
+  group_discussion: "Group discussion",
+  presentation: "Presentation",
+  hackathon: "Hackathon",
+  custom: "Custom",
+};
 
 function programmeEligibility(event) {
   if (event.programmeEligibility?.length) return event.programmeEligibility;
@@ -45,27 +54,29 @@ function programmeEligibility(event) {
 /** Vertical timeline of selection rounds, with a connecting spine. */
 function RoundTimeline({ rounds }) {
   return (
-    <ol className="relative mt-6 space-y-6 pl-8">
+    <ol className="relative mt-6 space-y-4 pl-9">
       {/* The spine sits behind the numbered markers. */}
-      <span className="absolute bottom-2 left-[0.6875rem] top-2 w-px bg-line" aria-hidden="true" />
+      <span className="absolute bottom-2 left-[0.8125rem] top-2 w-px bg-line" aria-hidden="true" />
       {rounds.map((round, index) => (
-        <li key={index} className="relative">
-          <span className="absolute -left-8 grid h-6 w-6 place-items-center rounded-full border border-line bg-surface text-[0.6875rem] font-semibold text-ink-2">
+        <li key={round._id || index} className="relative rounded-sm border border-line bg-surface p-4 sm:p-5">
+          <span className="absolute -left-9 top-4 grid h-7 w-7 place-items-center rounded-full border border-line bg-ink text-[0.6875rem] font-bold text-white">
             {index + 1}
           </span>
-          <p className="font-semibold">
-            {round.title || round.Type || round.type || `Round ${index + 1}`}
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="eyebrow">Round {index + 1}</p><p className="mt-1 font-semibold">{round.title || round.Type || `Round ${index + 1}`}</p></div><Badge tone="info">{round.customType || ROUND_TYPE_LABELS[round.type] || round.Type || "Round"}</Badge></div>
           {(round.Description || round.description) && (
-            <p className="mt-1.5 text-sm leading-relaxed text-ink-3">
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-ink-2">
               {round.Description || round.description}
             </p>
           )}
-          {round.submissionDeadlineAt && (
-            <p className="mt-2 text-sm font-medium text-ink-2">
-              Submission deadline: {formatDateTime(round.submissionDeadlineAt)}
-            </p>
-          )}
+          {round.instructions && <div className="mt-3 rounded-sm bg-paper-2 px-3.5 py-3"><p className="eyebrow">Instructions</p><p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{round.instructions}</p></div>}
+          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+            {round.startsAt && <div><p className="eyebrow">{round.type === "submission" ? "Submissions open" : "Starts"}</p><p className="mt-1 font-medium text-ink-2">{formatDateTime(round.startsAt)}</p></div>}
+            {round.endsAt && <div><p className="eyebrow">{round.type === "submission" ? "Submission deadline" : "Ends"}</p><p className="mt-1 font-medium text-ink-2">{formatDateTime(round.endsAt)}</p></div>}
+            {round.type !== "submission" && round.submissionDeadlineAt && <div><p className="eyebrow">Submission deadline</p><p className="mt-1 font-medium text-ink-2">{formatDateTime(round.submissionDeadlineAt)}</p></div>}
+            {round.venue && <div><p className="eyebrow">Venue</p><p className="mt-1 font-medium text-ink-2">{round.venue}</p></div>}
+          </div>
+          {round.meetingUrl && <a href={round.meetingUrl} target="_blank" rel="noreferrer" className="link link-accent mt-3 inline-block break-all text-sm font-semibold">Open meeting link ↗</a>}
+          {(round.submissionFields || []).length > 0 && <div className="mt-4 border-t border-line pt-4"><p className="eyebrow">What you need to submit</p><ul className="mt-2 flex flex-wrap gap-2">{round.submissionFields.map((field) => <li key={field.key} className="rounded-full border border-line bg-paper-2 px-3 py-1.5 text-xs font-medium text-ink-2">{field.label}{field.required === false ? " · optional" : " · required"}</li>)}</ul></div>}
         </li>
       ))}
     </ol>
@@ -206,10 +217,10 @@ export default function Event() {
   const shownVerticals = verticals.length
     ? verticals
     : (event.verticals || []).map((vertical) => ({ ...vertical, show: 0, invitations: [], canApply: false }));
-  const primaryVertical = shownVerticals[0];
   const hasApplication = shownVerticals.some((vertical) => vertical.show === 1 || vertical.show === 2);
-  const isTeamEvent = (primaryVertical?.registrationType || event.registrationType) !== "individual";
-  const maxTeam = primaryVertical?.maxTeamSize || event.maxTeamSize || 1;
+  const totalRoundCount = event.verticals?.reduce((total, vertical) => total + (vertical.rounds?.length || 0), 0)
+    || event.roundDetails?.length
+    || 0;
   const daysLeft = daysUntil(deadline);
 
   const applicationStatusBadge = !platformOpen
@@ -238,6 +249,7 @@ export default function Event() {
               <span className="text-sm font-semibold">{event.clubId.name}</span>
             </Link>
           )}
+          <Badge tone="info" className="capitalize">{(event.eventType || "event").replaceAll("_", " ")}</Badge>
           {eventOpen ? <Badge tone="ok" live>Event open</Badge> : <Badge tone="neutral">Event closed</Badge>}
           {applicationStatusBadge}
           {applicationsOpen && daysLeft !== null && daysLeft >= 0 && daysLeft <= 7 && (
@@ -275,32 +287,17 @@ export default function Event() {
         <div className="space-y-8 lg:col-span-2">
           <section className="reveal" style={{ "--d": "120ms" }}>
             <h2 className="display text-xl">About this opportunity</h2>
-            {event.longDescription && (
-              <p className="mt-4 whitespace-pre-wrap leading-[1.75] text-ink-2">
-                {event.longDescription}
-              </p>
-            )}
+            <p className="mt-4 whitespace-pre-wrap leading-[1.75] text-ink-2">{event.longDescription || event.shortDescription}</p>
 
             <MetaGrid className="mt-8 border-t border-line pt-6">
               <Meta label="Application deadline" value={formatDateTime(deadline)} />
               {eventEndsAt && eventEndsAt.getTime() !== deadline?.getTime() && (
                 <Meta label="Final round ends" value={formatDateTime(eventEndsAt)} />
               )}
-              <Meta
-                label="Application"
-                value={
-                  <span className="capitalize">
-                    {event.registrationType?.replace("_", " ") || "Team"}
-                  </span>
-                }
-              />
-              <Meta
-                label="Team size"
-                value={isTeamEvent ? `${event.minTeamSize || 1}–${maxTeam} members` : "Individual"}
-              />
+              {verticalsEnabled && <Meta label="Verticals" value={event.verticals.length} />}
               <Meta
                 label="Rounds"
-                value={event.numberOfRounds || event.roundDetails?.length || "Not specified"}
+                value={totalRoundCount || "Not specified"}
               />
               {event.maxParticipants && (
                 <Meta label="Participant limit" value={`${event.maxParticipants} people`} />
@@ -367,23 +364,23 @@ export default function Event() {
                 {(event.verticals?.length
                   ? event.verticals
                   : [{ _id: "legacy", rounds: event.roundDetails || [] }]
-                ).map((vertical) => (
-                  <div key={vertical._id}>
+                ).map((vertical, verticalIndex) => (
+                  <div key={vertical._id} className={verticalsEnabled ? "overflow-hidden rounded-md border-2 border-accent/20 bg-accent-tint/15" : ""}>
                     {verticalsEnabled && (
-                      <div className="mt-6 flex flex-wrap items-baseline gap-3">
-                        <h3 className="display text-lg">{vertical.title}</h3>
-                        {vertical.status === "closed" && <Badge tone="neutral">Closed</Badge>}
-                        <span className="text-sm text-ink-3">
-                          {vertical.registrationType === "individual"
-                            ? "Individual"
-                            : `Teams of ${vertical.minTeamSize}–${vertical.maxTeamSize}`}
-                        </span>
+                      <div className="border-b border-accent/20 bg-accent-tint/60 p-4 sm:p-5">
+                        <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="eyebrow eyebrow-accent">Vertical {verticalIndex + 1} of {event.verticals.length}</p><h3 className="display mt-1 text-lg">{vertical.title}</h3></div>{vertical.status === "closed" && <Badge tone="neutral">Closed</Badge>}</div>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-ink-2">
+                          <span className="rounded-full bg-surface px-3 py-1.5">{vertical.registrationType === "individual" ? "Individual registration" : vertical.registrationType === "optional_team" ? `Individual or teams · ${vertical.minTeamSize}–${vertical.maxTeamSize}` : `Teams of ${vertical.minTeamSize}–${vertical.maxTeamSize}`}</span>
+                          <span className="rounded-full bg-surface px-3 py-1.5">Registration deadline · {formatDateTime(vertical.registrationDeadlineAt || deadline)}</span>
+                          <span className="rounded-full bg-surface px-3 py-1.5">{vertical.rounds?.length || 0} rounds</span>
+                        </div>
                       </div>
                     )}
-                    {vertical.description && (
-                      <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{vertical.description}</p>
-                    )}
-                    <RoundTimeline rounds={vertical.rounds || []} />
+                    <div className={verticalsEnabled ? "p-4 sm:p-5" : ""}>
+                      {(vertical.shortDescription || vertical.description) && <div className="mt-1"><p className="eyebrow">What this vertical does</p>{vertical.shortDescription && <p className="mt-2 font-medium text-ink-2">{vertical.shortDescription}</p>}{vertical.description && <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink-2">{vertical.description}</p>}</div>}
+                      {(vertical.problemStatementUrl || (!verticalsEnabled && event.problemStatementUrl)) && <a href={vertical.problemStatementUrl || event.problemStatementUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm mt-4">Open problem statement ↗</a>}
+                      <RoundTimeline rounds={vertical.rounds || []} />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -439,7 +436,8 @@ export default function Event() {
                   action(endpoint, payload, confirmation, vertical._id)}
                 onSignIn={() => rememberEventAndNavigate("/login")}
                 onRegister={() => rememberEventAndNavigate("/register")}
-                showHeading={verticalsEnabled}
+                showHeading
+                verticalNumber={verticalsEnabled ? index + 1 : null}
               />
             </Card>
           ))}

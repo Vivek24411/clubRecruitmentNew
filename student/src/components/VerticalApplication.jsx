@@ -36,6 +36,7 @@ export default function VerticalApplication({
   onSignIn,
   onRegister,
   showHeading,
+  verticalNumber,
 }) {
   const [memberEmail, setMemberEmail] = useState("");
   const [teamName, setTeamName] = useState("");
@@ -66,11 +67,13 @@ export default function VerticalApplication({
       {showHeading && (
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line pb-4">
           <div className="min-w-0">
-            <h2 className="display text-lg">{vertical.title}</h2>
+            <p className="eyebrow eyebrow-accent">{verticalNumber ? `Vertical ${verticalNumber}` : "Registration"}</p>
+            <h2 className="display mt-1 text-lg">{verticalNumber ? vertical.title : "Application details"}</h2>
             <p className="mt-1 text-xs text-ink-3">
               {isTeamVertical ? `Teams of ${minTeam}–${maxTeam}` : "Individual"}
               {vertical.numberOfRounds ? ` · ${vertical.numberOfRounds} round${vertical.numberOfRounds === 1 ? "" : "s"}` : ""}
             </p>
+            {vertical.deadlineAt && <p className="mt-1 text-xs font-medium text-ink-2">Registration deadline · {formatDateTime(vertical.deadlineAt)}</p>}
           </div>
           {registration
             ? <Badge tone={statusTone(studentStatus)} className="capitalize">{studentStatus?.replace("_", " ")}</Badge>

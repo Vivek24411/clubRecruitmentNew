@@ -5,6 +5,7 @@ import { Badge, Button, Card, Field, Input, SkeletonList, Textarea } from "./ui"
 import { uploadDirect } from "../utils/directUpload";
 
 const tone = { advanced: "ok", rejected: "bad", waitlisted: "warn", submitted: "info", under_review: "warn", scheduled: "info", eligible: "neutral", active: "accent", withdrawn: "neutral", revoked: "neutral", missed: "bad" };
+const roundTypeLabel = { test: "Test", submission: "Submission", interview: "Interview", group_discussion: "Group discussion", presentation: "Presentation", hackathon: "Hackathon", custom: "Custom" };
 const format = (value) => value ? new Date(value).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : null;
 const MEGABYTE = 1024 * 1024;
 const fileSize = (bytes) => bytes ? `${(bytes / MEGABYTE).toFixed(bytes >= 10 * MEGABYTE ? 0 : 1)} MB` : "";
@@ -93,7 +94,7 @@ function SubmissionForm({ eventId, round, candidate, existing, onSaved }) {
           ) : field.type === "short_text" ? (
             <Input id={`${candidate._id}-${field.key}`} type="text" required={field.required} value={answers[field.key] || ""} onChange={(event) => setAnswers({ ...answers, [field.key]: event.target.value })} />
           ) : (
-            <Input id={`${candidate._id}-${field.key}`} type="url" required={field.required} value={answers[field.key] || ""} onChange={(event) => setAnswers({ ...answers, [field.key]: event.target.value })} placeholder={field.type === "github" ? "https://github.com/..." : "https://"} />
+            <Input id={`${candidate._id}-${field.key}`} type="url" required={field.required} value={answers[field.key] || ""} onChange={(event) => setAnswers({ ...answers, [field.key]: event.target.value })} placeholder={field.type === "github" ? "https://github.com/..." : field.type === "drive_link" ? "https://drive.google.com/..." : "https://"} />
           )}
         </Field>
       ))}
@@ -160,25 +161,28 @@ function ApplicationProgress({ application, rounds, eventId, showTitle, onSaved 
       <div className="space-y-4">
         {rounds.map((round) => {
           const roundCandidates = candidatesByRound.get(round._id) || [];
-          const hasPublishedDetails = Boolean(round.description || round.instructions || round.startsAt || round.venue || round.meetingUrl || round.submissionDeadlineAt);
+          const hasPublishedDetails = Boolean(round.description || round.instructions || round.startsAt || round.endsAt || round.venue || round.meetingUrl || round.submissionDeadlineAt || round.submissionFields?.length);
           return (
             <Card key={round._id} className={`overflow-hidden ${!roundCandidates.length ? "opacity-65" : ""}`}>
               <div className="p-4 sm:p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <p className="eyebrow">Round {round.order}</p>
                     <h3 className="display mt-1 text-lg">{round.title}</h3>
-                    {hasPublishedDetails ? <p className="mt-2 text-sm text-ink-3">{round.description || round.instructions || "Schedule details are available below."}</p> : roundCandidates.length > 0 ? <p className="mt-2 text-sm text-ink-3">Details will be shared by the club.</p> : null}
+                    {round.description && <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink-3">{round.description}</p>}
+                    {!hasPublishedDetails && roundCandidates.length > 0 ? <p className="mt-2 text-sm text-ink-3">Details will be shared by the club.</p> : null}
                   </div>
-                  {!roundCandidates.length && <Badge>Locked</Badge>}
+                  <div className="flex flex-wrap gap-2"><Badge tone="info">{round.customType || roundTypeLabel[round.type] || "Round"}</Badge>{!roundCandidates.length && <Badge>Locked</Badge>}</div>
                 </div>
-                {round.scheduleMode === "common" && round.startsAt && <div className="mt-4 rounded-sm bg-paper-2 px-4 py-3 text-sm"><strong>{format(round.startsAt)}</strong>{round.venue && <span className="text-ink-3"> at {round.venue}</span>}{round.meetingUrl && <a className="link mt-1 block" href={round.meetingUrl} target="_blank" rel="noreferrer">Open meeting link ↗</a>}</div>}
-                {round.submissionDeadlineAt && (
+                {round.instructions && <div className="mt-4 rounded-sm bg-paper-2 px-4 py-3 text-sm"><p className="eyebrow">Instructions</p><p className="mt-1.5 whitespace-pre-wrap leading-relaxed text-ink-2">{round.instructions}</p></div>}
+                {(round.startsAt || round.endsAt || round.venue || round.meetingUrl) && <div className="mt-4 grid gap-3 rounded-sm bg-paper-2 px-4 py-3 text-sm sm:grid-cols-2">{round.startsAt && <div><p className="eyebrow">{round.type === "submission" ? "Submissions open" : "Starts"}</p><strong className="mt-1 block">{format(round.startsAt)}</strong></div>}{round.endsAt && <div><p className="eyebrow">{round.type === "submission" ? "Submission deadline" : "Ends"}</p><strong className="mt-1 block">{format(round.endsAt)}</strong></div>}{round.venue && <div><p className="eyebrow">Venue</p><p className="mt-1 font-medium">{round.venue}</p></div>}{round.meetingUrl && <div><p className="eyebrow">Online access</p><a className="link mt-1 block break-all" href={round.meetingUrl} target="_blank" rel="noreferrer">Open meeting link ↗</a></div>}</div>}
+                {round.type !== "submission" && round.submissionDeadlineAt && (
                   <div className="mt-3 rounded-sm border-l-2 border-accent bg-accent-tint/40 px-4 py-3 text-sm">
                     <p className="eyebrow eyebrow-accent">Submission deadline</p>
                     <p className="mt-1 font-semibold">{format(round.submissionDeadlineAt)}</p>
                   </div>
                 )}
+                {(round.submissionFields || []).length > 0 && <div className="mt-4"><p className="eyebrow">What you need to submit</p><div className="mt-2 flex flex-wrap gap-2">{round.submissionFields.map((field) => <span key={field.key} className="rounded-full border border-line bg-paper-2 px-3 py-1.5 text-xs font-medium text-ink-2">{field.label}{field.required === false ? " · optional" : " · required"}</span>)}</div></div>}
               </div>
               {roundCandidates.map((candidate) => {
                 const slot = slotByCandidate.get(candidate._id);

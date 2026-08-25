@@ -18,7 +18,7 @@ const submissionFieldSchema = new mongoose.Schema({
   label: { type: String, required: true, trim: true, maxlength: 120 },
   type: {
     type: String,
-    enum: ["text", "short_text", "long_text", "boolean", "url", "github", "file", "pdf", "video"],
+    enum: ["text", "short_text", "long_text", "boolean", "url", "drive_link", "github", "file", "pdf", "video"],
     default: "url",
   },
   required: { type: Boolean, default: true },
@@ -54,7 +54,14 @@ const roundSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 roundSchema.pre("validate", function(next) {
-  if (this.type === "submission" || this.type === "hackathon") this.submissionEnabled = true;
+  if (this.type === "submission") {
+    this.submissionEnabled = true;
+    this.scheduleMode = "common";
+    this.submissionOpensAt = this.startsAt || null;
+    this.submissionDeadlineAt = this.endsAt || null;
+  } else if (this.type === "hackathon") {
+    this.submissionEnabled = true;
+  }
   if (this.type === "test") this.evaluationScope = "participant";
   if (this.type === "interview") {
     this.interviewMode = this.interviewMode || "individual";
@@ -75,6 +82,7 @@ const verticalSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true, maxlength: 120 },
   shortDescription: { type: String, default: "", maxlength: 500 },
   description: { type: String, default: "", maxlength: 5000 },
+  problemStatementUrl: { type: String, default: "", trim: true, maxlength: 2048 },
   order: { type: Number, required: true, min: 1, max: 20 },
   isDefault: { type: Boolean, default: false },
   status: { type: String, enum: ["open", "closed"], default: "open" },
@@ -106,7 +114,8 @@ const eventSchema = new mongoose.Schema({
     default: "recruitment",
   },
   shortDescription: { type: String, required: true, maxlength: 500 },
-  longDescription: { type: String, required: true, maxlength: 10000 },
+  longDescription: { type: String, default: "", maxlength: 10000 },
+  problemStatementUrl: { type: String, default: "", trim: true, maxlength: 2048 },
   registerationDeadline: { type: String, maxlength: 10 },
   registrationDeadlineAt: { type: Date, default: null },
   // Event-level team settings seed each new vertical. The workflow engine reads
@@ -192,6 +201,7 @@ eventSchema.pre("validate", function(next) {
       minTeamSize: this.minTeamSize,
       maxTeamSize: this.maxTeamSize,
       maxParticipants: this.maxParticipants,
+      problemStatementUrl: this.problemStatementUrl,
       rounds: (this.rounds || []).map((round) => (round.toObject ? round.toObject() : round)),
     }];
   }

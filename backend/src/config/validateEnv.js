@@ -44,6 +44,10 @@ function validateEnv() {
       throw new Error("STUDENT_APP_ORIGIN must be a public HTTPS origin when email delivery or production mode is enabled");
     }
   }
+  if (process.env.EMAIL_APP_ORIGIN
+    && (!exactHttpOrigin(process.env.EMAIL_APP_ORIGIN) || !isPublicHttpsOrigin(process.env.EMAIL_APP_ORIGIN))) {
+    throw new Error("EMAIL_APP_ORIGIN must be an exact public HTTPS origin");
+  }
   if (process.env.TRUST_PROXY_HOPS && (!Number.isInteger(Number(process.env.TRUST_PROXY_HOPS)) || Number(process.env.TRUST_PROXY_HOPS) < 0)) {
     throw new Error("TRUST_PROXY_HOPS must be a non-negative integer");
   }

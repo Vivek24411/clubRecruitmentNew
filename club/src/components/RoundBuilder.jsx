@@ -34,12 +34,12 @@ const emptyRound = (order) => ({
   submissionFields: [],
 });
 
-const emptyApplicationFormRound = (order, registrationType) => ({
-  ...emptyRound(order),
-  title: "Application form",
-  type: "submission",
-  evaluationScope: registrationType === "individual" ? "participant" : "application",
-  submissionEnabled: true,
+const defaultSubmissionField = (number = 1) => ({
+  key: `field_${number}`,
+  label: "",
+  type: "short_text",
+  required: true,
+  helpText: "",
 });
 
 export function toLocalDateTime(value) {
@@ -54,10 +54,14 @@ export function normalizeRoundsForForm(rounds = []) {
     ...emptyRound(index + 1),
     ...round,
     order: index + 1,
-    startsAt: toLocalDateTime(round.startsAt),
-    endsAt: toLocalDateTime(round.endsAt),
+    scheduleMode: round.type === "submission" ? "common" : round.scheduleMode,
+    startsAt: toLocalDateTime(round.startsAt || (round.type === "submission" ? round.submissionOpensAt : null)),
+    endsAt: toLocalDateTime(round.endsAt || (round.type === "submission" ? round.submissionDeadlineAt : null)),
     submissionOpensAt: toLocalDateTime(round.submissionOpensAt),
     submissionDeadlineAt: toLocalDateTime(round.submissionDeadlineAt),
+    submissionFields: ["submission", "hackathon"].includes(round.type) && !(round.submissionFields || []).length
+      ? [defaultSubmissionField()]
+      : (round.submissionFields || []),
   }));
 }
 
@@ -66,18 +70,22 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
   const setType = (type) => {
     const submissionEnabled = type === "submission" || type === "hackathon";
     const interviewMode = type === "interview" ? (round.interviewMode || "individual") : null;
-    set("type", type);
     onChange(index, {
       ...round,
       type,
       submissionEnabled,
+      submissionFields: submissionEnabled && !(round.submissionFields || []).length
+        ? [defaultSubmissionField()]
+        : (round.submissionFields || []),
       interviewMode,
       evaluationScope: !teamEvent || type === "test"
         ? "participant"
         : type === "interview" && interviewMode === "individual"
           ? "participant"
           : round.evaluationScope || "application",
-      scheduleMode: type === "interview" ? "slots" : round.scheduleMode,
+      scheduleMode: type === "interview" ? "slots" : type === "submission" ? "common" : round.scheduleMode,
+      startsAt: type === "submission" ? (round.startsAt || round.submissionOpensAt || "") : round.startsAt,
+      endsAt: type === "submission" ? (round.endsAt || round.submissionDeadlineAt || "") : round.endsAt,
     });
   };
   const addField = () => {
@@ -87,7 +95,7 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
     while (usedKeys.has(`field_${nextNumber}`)) nextNumber += 1;
     set("submissionFields", [
       ...fields,
-      { key: `field_${nextNumber}`, label: "", type: "short_text", required: true, helpText: "" },
+      defaultSubmissionField(nextNumber),
     ]);
   };
   const updateField = (fieldIndex, changes) => set(
@@ -100,7 +108,7 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
   );
 
   return (
-    <section className="border-t border-line pt-6 first:border-0 first:pt-0">
+    <section className="animate-scale-in rounded-sm border border-line bg-surface p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="grid h-7 w-7 place-items-center rounded-full bg-ink text-xs font-bold text-white">{index + 1}</span>
@@ -127,10 +135,10 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
             <Input id={`custom-type-${index}`} value={round.customType || ""} onChange={(event) => set("customType", event.target.value)} required />
           </Field>
         )}
-        <Field label="Short description" id={`round-description-${index}`} className="sm:col-span-2">
+        <Field label="Short description (optional)" id={`round-description-${index}`} className="sm:col-span-2">
           <Textarea id={`round-description-${index}`} rows="2" className="min-h-0" value={round.description || ""} onChange={(event) => set("description", event.target.value)} />
         </Field>
-        <Field label="Instructions" id={`round-instructions-${index}`} className="sm:col-span-2">
+        <Field label="Instructions (optional)" id={`round-instructions-${index}`} className="sm:col-span-2">
           <Textarea id={`round-instructions-${index}`} rows="3" className="min-h-0" value={round.instructions || ""} onChange={(event) => set("instructions", event.target.value)} />
         </Field>
       </div>
@@ -169,20 +177,22 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
 
       {round.type !== "interview" && (
         <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="Schedule" id={`schedule-mode-${index}`}>
-            <Select id={`schedule-mode-${index}`} value={round.scheduleMode || "none"} onChange={(event) => set("scheduleMode", event.target.value)}>
-              <option value="none">No fixed schedule</option>
-              <option value="common">Same time for everyone</option>
-              <option value="slots">Different participant slots</option>
-            </Select>
-          </Field>
-          {round.scheduleMode !== "none" && (
+          {round.type !== "submission" && (
+            <Field label="Schedule" id={`schedule-mode-${index}`}>
+              <Select id={`schedule-mode-${index}`} value={round.scheduleMode || "none"} onChange={(event) => set("scheduleMode", event.target.value)}>
+                <option value="none">No fixed schedule</option>
+                <option value="common">Same time for everyone</option>
+                <option value="slots">Different participant slots</option>
+              </Select>
+            </Field>
+          )}
+          {(round.type === "submission" || round.scheduleMode !== "none") && (
             <>
-              <Field label="Starts" id={`starts-${index}`}>
-                <DateTimeInput id={`starts-${index}`} value={round.startsAt || ""} onChange={(value) => set("startsAt", value)} />
+              <Field label={round.type === "submission" ? "Submission opens" : "Starts (optional)"} id={`starts-${index}`} required={round.type === "submission"}>
+                <DateTimeInput id={`starts-${index}`} value={round.startsAt || ""} onChange={(value) => set("startsAt", value)} required={round.type === "submission"} />
               </Field>
-              <Field label="Ends" id={`ends-${index}`}>
-                <DateTimeInput id={`ends-${index}`} value={round.endsAt || ""} onChange={(value) => set("endsAt", value)} />
+              <Field label={round.type === "submission" ? "Submission deadline" : "Ends (optional)"} id={`ends-${index}`} required={round.type === "submission"}>
+                <DateTimeInput id={`ends-${index}`} value={round.endsAt || ""} onChange={(value) => set("endsAt", value)} required={round.type === "submission"} quickTimes={round.type === "submission" ? ["17:00", "20:00", "23:00", "23:59"] : undefined} />
               </Field>
             </>
           )}
@@ -191,10 +201,10 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
 
       {(round.scheduleMode !== "none" || round.type === "interview") && (
         <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Venue" id={`venue-${index}`}>
+          <Field label="Venue (optional)" id={`venue-${index}`}>
             <Input id={`venue-${index}`} value={round.venue || ""} onChange={(event) => set("venue", event.target.value)} />
           </Field>
-          <Field label="Meeting link" id={`meeting-${index}`}>
+          <Field label="Meeting link (optional)" id={`meeting-${index}`}>
             <Input id={`meeting-${index}`} type="url" value={round.meetingUrl || ""} onChange={(event) => set("meetingUrl", event.target.value)} placeholder="https://" />
           </Field>
           {round.scheduleMode === "slots" && (
@@ -212,33 +222,29 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
 
       {(round.submissionEnabled || ["submission", "hackathon"].includes(round.type)) && (
         <div className="mt-6 rounded-sm border border-line bg-paper-2/50 p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
             <div>
-              <h4 className="font-semibold">Submission form</h4>
-              <p className="mt-1 text-sm text-ink-3">Links and text are stored directly. Images, PDFs, and videos upload to Cloudinary.</p>
+              <p className="eyebrow eyebrow-accent">Participant inputs</p>
+              <h4 className="mt-1 font-semibold">Submission form</h4>
+              <p className="mt-1 text-sm text-ink-3">Add the exact answers or files students need to submit.</p>
             </div>
-            <Button type="button" variant="secondary" size="sm" disabled={(round.submissionFields || []).length >= 12} onClick={addField}>Add field</Button>
           </div>
-          <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Opens" id={`submission-open-${index}`}>
-              <DateTimeInput id={`submission-open-${index}`} value={round.submissionOpensAt || ""} onChange={(value) => set("submissionOpensAt", value)} />
-              <div className="mt-2 flex flex-wrap gap-2">
-                <Button type="button" variant="ghost" size="sm" disabled={!round.startsAt} onClick={() => set("submissionOpensAt", round.startsAt)}>Use round start</Button>
-                <Button type="button" variant="ghost" size="sm" disabled={!round.endsAt} onClick={() => set("submissionOpensAt", round.endsAt)}>Use round end</Button>
-              </div>
-            </Field>
-            <Field label="Deadline" id={`submission-deadline-${index}`} required>
-              <DateTimeInput id={`submission-deadline-${index}`} value={round.submissionDeadlineAt || ""} onChange={(value) => set("submissionDeadlineAt", value)} required quickTimes={["17:00", "20:00", "23:00", "23:59"]} />
-              <div className="mt-2 flex flex-wrap gap-2">
-                <Button type="button" variant="ghost" size="sm" disabled={!round.startsAt} onClick={() => set("submissionDeadlineAt", round.startsAt)}>Use round start</Button>
-                <Button type="button" variant="ghost" size="sm" disabled={!round.endsAt} onClick={() => set("submissionDeadlineAt", round.endsAt)}>Use round end</Button>
-              </div>
-            </Field>
-            <label className="flex items-end gap-3 pb-3 text-sm font-medium">
-              <input type="checkbox" checked={round.allowResubmission !== false} onChange={(event) => set("allowResubmission", event.target.checked)} />
-              Allow edits before deadline
-            </label>
-          </div>
+          {round.type !== "submission" && (
+            <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <Field label="Submissions open (optional)" id={`submission-open-${index}`}>
+                <DateTimeInput id={`submission-open-${index}`} value={round.submissionOpensAt || ""} onChange={(value) => set("submissionOpensAt", value)} />
+              </Field>
+            </div>
+              <Field label="Submission deadline" id={`submission-deadline-${index}`} required>
+                <DateTimeInput id={`submission-deadline-${index}`} value={round.submissionDeadlineAt || ""} onChange={(value) => set("submissionDeadlineAt", value)} required quickTimes={["17:00", "20:00", "23:00", "23:59"]} />
+              </Field>
+            </div>
+          )}
+          <label className="mt-4 flex items-center gap-3 text-sm font-medium">
+            <input type="checkbox" checked={round.allowResubmission !== false} onChange={(event) => set("allowResubmission", event.target.checked)} />
+            Allow edits before the deadline
+          </label>
           <div className="mt-5 space-y-4">
             {(round.submissionFields || []).map((field, fieldIndex) => (
               <div key={`submission-field-${index}-${fieldIndex}`} className="grid gap-3 border-t border-line pt-4 sm:grid-cols-[1fr_12rem_auto]">
@@ -251,6 +257,7 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
                     <option value="long_text">Long answer</option>
                     <option value="boolean">Checkbox</option>
                     <option value="url">Website link</option>
+                    <option value="drive_link">Google Drive link</option>
                     <option value="github">GitHub repository</option>
                     {field.type === "text" && <option value="text">Text answer (legacy)</option>}
                     <option value="file">Image/file</option>
@@ -267,6 +274,16 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
                 </Field>
               </div>
             ))}
+            <Button
+              type="button"
+              variant="secondary"
+              block
+              className="border-dashed"
+              disabled={(round.submissionFields || []).length >= 12}
+              onClick={addField}
+            >
+              + Add another input
+            </Button>
           </div>
         </div>
       )}
@@ -288,18 +305,14 @@ export default function RoundBuilder({ rounds, onChange, registrationType }) {
   };
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div>
         <div>
           <h2 className="display text-xl">Event rounds</h2>
           <p className="mt-1.5 text-sm text-ink-3">Build any sequence of common activities, submissions, and participant slots.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {rounds.length === 0 && <Button type="button" variant="accent" onClick={() => onChange([emptyApplicationFormRound(1, registrationType)])}>Start with application form</Button>}
-          <Button type="button" variant="secondary" onClick={() => onChange([...rounds, emptyRound(rounds.length + 1)])}>Add round</Button>
-        </div>
       </div>
       {rounds.length ? (
-        <div className="mt-6 space-y-7">
+        <div className="mt-6 space-y-4">
           {rounds.map((round, index) => (
             <RoundEditor
               key={round._id || `round-${index}`}
@@ -314,8 +327,11 @@ export default function RoundBuilder({ rounds, onChange, registrationType }) {
           ))}
         </div>
       ) : (
-        <p className="mt-6 rounded-sm border border-dashed border-line-2 px-5 py-8 text-center text-sm text-ink-3">No rounds yet. Add a regular activity, or begin with a required/optional application form whose responses appear in Manage Applications.</p>
+        <p className="mt-6 rounded-sm border border-dashed border-line-2 px-5 py-8 text-center text-sm text-ink-3">No rounds yet. Add the first round, then choose its type.</p>
       )}
+      <Button type="button" variant="accent" className="mt-4" onClick={() => onChange([...rounds, emptyRound(rounds.length + 1)])}>
+        {rounds.length ? "+ Add round below" : "+ Add first round"}
+      </Button>
     </div>
   );
 }

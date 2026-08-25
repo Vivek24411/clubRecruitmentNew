@@ -2,6 +2,7 @@ const { Resend } = require('resend');
 const { buildPublicAppUrl } = require('../utils/appOrigin');
 
 const DEFAULT_FROM_EMAIL = 'Discovr <noreply@expediva.in>';
+const DEFAULT_EMAIL_APP_ORIGIN = 'https://discovr.iitr.ac.in';
 let resendClient;
 
 function brandedFromEmail(configuredValue) {
@@ -14,8 +15,12 @@ function brandedFromEmail(configuredValue) {
 function emailLogoUrl() {
     const configured = String(process.env.EMAIL_LOGO_URL || '').trim();
     if (/^https:\/\//i.test(configured)) return configured;
-    return buildPublicAppUrl('/discovrlogo.png', process.env.STUDENT_APP_ORIGIN)
+    return buildPublicAppUrl('/discovrlogo.png', emailAppOrigin())
         || 'https://discovr.iitr.ac.in/discovrlogo.png';
+}
+
+function emailAppOrigin() {
+    return String(process.env.EMAIL_APP_ORIGIN || DEFAULT_EMAIL_APP_ORIGIN).trim();
 }
 
 function buildEmailBrandHeader(label) {
@@ -200,9 +205,9 @@ module.exports.sendOtp = async (email, otp) => {
 module.exports.sendNotificationEmail = async (email, { title, message, link, type, emailDetails }, { idempotencyKey } = {}) => {
     if (!process.env.RESEND_API_KEY) return;
     const hasInternalLink = link?.startsWith('/') && !link.startsWith('//');
-    const detailsUrl = buildPublicAppUrl(link, process.env.STUDENT_APP_ORIGIN);
+    const detailsUrl = buildPublicAppUrl(link, emailAppOrigin());
     if (hasInternalLink && !detailsUrl) {
-        throw new Error('STUDENT_APP_ORIGIN must be a public HTTPS origin before notification emails can be sent');
+        throw new Error('EMAIL_APP_ORIGIN must be a public HTTPS origin before notification emails can be sent');
     }
     await sendEmail({
         to: email,
@@ -224,6 +229,7 @@ module.exports.checkEmailDomain = (email) => {
 
 module.exports.brandedFromEmail = brandedFromEmail;
 module.exports.emailLogoUrl = emailLogoUrl;
+module.exports.emailAppOrigin = emailAppOrigin;
 module.exports.buildOtpEmailHtml = buildOtpEmailHtml;
 module.exports.buildNotificationEmailHtml = buildNotificationEmailHtml;
 module.exports.formatNotificationDateTime = formatNotificationDateTime;

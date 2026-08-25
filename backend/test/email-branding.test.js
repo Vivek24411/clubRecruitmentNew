@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const {
   buildNotificationEmailHtml,
   buildOtpEmailHtml,
+  emailAppOrigin,
   emailLogoUrl,
 } = require("../src/services/student.services");
 
@@ -35,6 +36,22 @@ test("Discovr emails use the live logo and blue app branding", () => {
     else process.env.STUDENT_APP_ORIGIN = previousOrigin;
     if (previousLogo === undefined) delete process.env.EMAIL_LOGO_URL;
     else process.env.EMAIL_LOGO_URL = previousLogo;
+  }
+});
+
+test("email links use the canonical IITR app even while a legacy push origin remains configured", () => {
+  const previousStudentOrigin = process.env.STUDENT_APP_ORIGIN;
+  const previousEmailOrigin = process.env.EMAIL_APP_ORIGIN;
+  process.env.STUDENT_APP_ORIGIN = "https://discovr.devx6.live";
+  delete process.env.EMAIL_APP_ORIGIN;
+  try {
+    assert.equal(emailAppOrigin(), "https://discovr.iitr.ac.in");
+    assert.equal(emailLogoUrl(), "https://discovr.iitr.ac.in/discovrlogo.png");
+  } finally {
+    if (previousStudentOrigin === undefined) delete process.env.STUDENT_APP_ORIGIN;
+    else process.env.STUDENT_APP_ORIGIN = previousStudentOrigin;
+    if (previousEmailOrigin === undefined) delete process.env.EMAIL_APP_ORIGIN;
+    else process.env.EMAIL_APP_ORIGIN = previousEmailOrigin;
   }
 });
 

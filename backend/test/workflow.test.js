@@ -78,6 +78,16 @@ test("event records normalize programme rules and discard legacy branch eligibil
   assert.equal(event.allowPassedOut, false);
 });
 
+test("event full descriptions are optional", async () => {
+  const event = new eventModel({
+    clubId: new mongoose.Types.ObjectId(),
+    title: "Short event",
+    shortDescription: "The listing summary is enough",
+  });
+  await event.validate();
+  assert.equal(event.longDescription, "");
+});
+
 test("registration attempts are historical rather than uniquely locked per student", () => {
   const attemptIndex = registerationEventModel.schema.indexes().find(([keys]) =>
     keys.eventId === 1 && keys.studentId === 1);
@@ -187,6 +197,34 @@ test("application-form rounds preserve short, long, and checkbox questions", () 
   assert.equal(round.submissionEnabled, true);
   assert.deepEqual(round.submissionFields.map((field) => field.type), ["short_text", "long_text", "boolean"]);
   assert.deepEqual(round.submissionFields.map((field) => field.required), [true, false, true]);
+});
+
+test("submission rounds share one round window and accept Drive-link inputs", () => {
+  const [round] = normalizeRounds([{
+    title: "Submit the task",
+    type: "submission",
+    startsAt: "2026-09-02T10:00:00.000Z",
+    endsAt: "2026-09-04T18:00:00.000Z",
+    submissionOpensAt: "2026-09-01T10:00:00.000Z",
+    submissionDeadlineAt: "2026-09-10T18:00:00.000Z",
+    submissionFields: [{ key: "drive", label: "Drive folder", type: "drive_link" }],
+  }]);
+  assert.equal(round.scheduleMode, "common");
+  assert.equal(round.submissionOpensAt.toISOString(), round.startsAt.toISOString());
+  assert.equal(round.submissionDeadlineAt.toISOString(), round.endsAt.toISOString());
+  assert.equal(round.submissionFields[0].type, "drive_link");
+});
+
+test("vertical normalization preserves an optional problem-statement link", () => {
+  const [vertical] = normalizeVerticals([{
+    title: "Product",
+    registrationType: "team",
+    minTeamSize: 2,
+    maxTeamSize: 4,
+    problemStatementUrl: "https://drive.google.com/example",
+    rounds: [],
+  }]);
+  assert.equal(vertical.problemStatementUrl, "https://drive.google.com/example");
 });
 
 test("common tests always evaluate each participant independently", () => {

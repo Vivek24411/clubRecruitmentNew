@@ -29,6 +29,14 @@ const validOptionalCapacity = (value) => {
   const capacity = Number(value);
   return Number.isInteger(capacity) && capacity >= 1;
 };
+const validOptionalHttpUrl = (value) => {
+  if (!value) return true;
+  try {
+    return ["http:", "https:"].includes(new URL(String(value)).protocol);
+  } catch {
+    return false;
+  }
+};
 const validVerticals = (value) => {
   try {
     const verticals = JSON.parse(value);
@@ -38,6 +46,7 @@ const validVerticals = (value) => {
       || typeof vertical.title !== 'string'
       || vertical.title.trim().length < 2
       || vertical.title.length > 120
+      || !validOptionalHttpUrl(vertical.problemStatementUrl)
       || (vertical.rounds !== undefined && (!Array.isArray(vertical.rounds) || vertical.rounds.length > 20)))) {
       throw new Error();
     }
@@ -157,7 +166,8 @@ router.post('/addEvent',clubAuth,
   upload.bannerUpload.single('eventBanner'),attachDirectAsset('eventBanner'),[
   body("title").isString().trim().isLength({ min: 2, max: 150 }),
   body("shortDescription").isString().trim().isLength({ min: 2, max: 500 }),
-  body("longDescription").isString().isLength({ min: 2, max: 10000 }),
+  body("longDescription").optional().isString().isLength({ max: 10000 }),
+  body("problemStatementUrl").optional({ checkFalsy: true }).custom(validOptionalHttpUrl).withMessage("Problem statement link must be a valid http(s) URL"),
   body("registerationDeadline").optional({ checkFalsy: true }).isISO8601({ strict: true }),
   body("registrationDeadlineAt").optional({ checkFalsy: true }).isISO8601(),
   body().custom((value) => value.registrationDeadlineAt || value.registerationDeadline).withMessage("Registration deadline is required"),
@@ -169,7 +179,7 @@ router.post('/addEvent',clubAuth,
   body('minTeamSize').optional().isInt({ min: 1 }),
   body('maxTeamSize').optional().isInt({ min: 1, max: 10000 }),
   body('status').optional().isIn(['draft', 'published']),
-  body('eventType').optional().isIn(['recruitment', 'hackathon', 'competition', 'workshop', 'other']),
+  body('eventType').optional().isIn(['recruitment', 'hackathon', 'competition', 'other']),
   body('eligibilityMode').optional().isIn(['undergraduate', 'all_iitr']),
   body('programmeEligibilityJSON').optional().isString().isLength({ max: 2000 }).custom(validProgrammeEligibility),
   body('eligibilityYearsJSON').optional().isString().isLength({ max: 100 }),
@@ -210,6 +220,7 @@ router.patch('/events/:eventId', clubAuth, upload.bannerUpload.single('eventBann
   body('title').optional().isString().trim().isLength({ min: 2, max: 150 }),
   body('shortDescription').optional().isString().isLength({ max: 500 }),
   body('longDescription').optional().isString().isLength({ max: 10000 }),
+  body('problemStatementUrl').optional({ checkFalsy: true }).custom(validOptionalHttpUrl).withMessage("Problem statement link must be a valid http(s) URL"),
   body('eligibility').optional().isString().isLength({ max: 2000 }),
   body('registerationDeadline').optional({ checkFalsy: true }).isISO8601({ strict: true }),
   body('registrationDeadlineAt').optional({ checkFalsy: true }).isISO8601(),
@@ -218,7 +229,7 @@ router.patch('/events/:eventId', clubAuth, upload.bannerUpload.single('eventBann
   body('registrationType').optional().isIn(['individual', 'team', 'optional_team']),
   body('minTeamSize').optional().isInt({ min: 1 }),
   body('maxTeamSize').optional().isInt({ min: 1, max: 10000 }),
-  body('eventType').optional().isIn(['recruitment', 'hackathon', 'competition', 'workshop', 'other']),
+  body('eventType').optional().isIn(['recruitment', 'hackathon', 'competition', 'other']),
   body('verticalsEnabled').optional().isBoolean(),
   body('verticalsJSON').optional().isString().isLength({ max: 400000 }).custom(validVerticals),
   body('maxVerticalApplications').optional({ checkFalsy: true, nullable: true }).isInt({ min: 1, max: 20 }),

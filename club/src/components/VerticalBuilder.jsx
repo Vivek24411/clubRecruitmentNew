@@ -6,6 +6,7 @@ const emptyVertical = (order) => ({
   title: "",
   shortDescription: "",
   description: "",
+  problemStatementUrl: "",
   order,
   status: "open",
   registrationType: "individual",
@@ -36,6 +37,7 @@ export function serializeVertical(vertical) {
     title: vertical.title,
     shortDescription: vertical.shortDescription || "",
     description: vertical.description || "",
+    problemStatementUrl: vertical.problemStatementUrl || "",
     order: vertical.order,
     status: vertical.status || "open",
     registrationType: vertical.registrationType,
@@ -55,15 +57,40 @@ export function serializeVertical(vertical) {
   };
 }
 
+function RegistrationTypeFields({ registrationType, minTeamSize, maxTeamSize, idPrefix, set }) {
+  return (
+    <>
+      <Field label="Registration type" id={`${idPrefix}-regtype`}>
+        <Select id={`${idPrefix}-regtype`} value={registrationType} onChange={(event) => set("registrationType", event.target.value)}>
+          <option value="individual">Individual</option>
+          <option value="team">Team only</option>
+          <option value="optional_team">Individual or team</option>
+        </Select>
+      </Field>
+      {registrationType !== "individual" && (
+        <>
+          <Field label="Minimum team size" id={`${idPrefix}-min`}>
+            <Input id={`${idPrefix}-min`} type="number" min="1" value={minTeamSize} onChange={(event) => set("minTeamSize", Number(event.target.value))} />
+          </Field>
+          <Field label="Maximum team size" id={`${idPrefix}-max`}>
+            <Input id={`${idPrefix}-max`} type="number" min={minTeamSize} value={maxTeamSize} onChange={(event) => set("maxTeamSize", Number(event.target.value))} />
+          </Field>
+        </>
+      )}
+    </>
+  );
+}
+
 function VerticalEditor({ vertical, index, total, onChange, onRemove, onMove }) {
   const set = (key, value) => onChange(index, { ...vertical, [key]: value });
 
   return (
-    <section className="rounded-sm border border-line bg-paper-2/40 p-4 sm:p-5">
+    <section className="animate-scale-in overflow-hidden rounded-md border-2 border-accent/25 bg-accent-tint/20 shadow-sm">
+      <div className="border-b border-accent/20 bg-accent-tint/65 px-4 py-4 sm:px-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="grid h-7 w-7 place-items-center rounded-full bg-ink text-xs font-bold text-white">{index + 1}</span>
-          <h3 className="display text-lg">{vertical.title || `Vertical ${index + 1}`}</h3>
+          <span className="grid h-9 w-9 place-items-center rounded-sm bg-accent text-sm font-bold text-white">{String(index + 1).padStart(2, "0")}</span>
+          <div><p className="eyebrow eyebrow-accent">Vertical {index + 1}</p><h3 className="display mt-0.5 text-lg">{vertical.title || `Untitled vertical`}</h3></div>
         </div>
         <div className="flex items-center gap-2">
           <button type="button" className="btn btn-secondary btn-sm" disabled={index === 0} onClick={() => onMove(index, -1)}>Up</button>
@@ -71,8 +98,10 @@ function VerticalEditor({ vertical, index, total, onChange, onRemove, onMove }) 
           <button type="button" className="btn btn-danger btn-sm" onClick={() => onRemove(index)}>Remove</button>
         </div>
       </div>
+      </div>
 
-      <div className="mt-5 grid gap-5 sm:grid-cols-2">
+      <div className="p-4 sm:p-5">
+      <div className="grid gap-5 sm:grid-cols-2">
         <Field label="Vertical name" id={`vertical-title-${index}`} required>
           <Input id={`vertical-title-${index}`} value={vertical.title} onChange={(event) => set("title", event.target.value)} placeholder="Technology" required />
         </Field>
@@ -82,46 +111,34 @@ function VerticalEditor({ vertical, index, total, onChange, onRemove, onMove }) 
             <option value="closed">Closed</option>
           </Select>
         </Field>
-        <Field label="One-line summary" id={`vertical-short-${index}`} className="sm:col-span-2">
+        <Field label="One-line summary (optional)" id={`vertical-short-${index}`} className="sm:col-span-2">
           <Input id={`vertical-short-${index}`} maxLength="500" value={vertical.shortDescription} onChange={(event) => set("shortDescription", event.target.value)} />
         </Field>
-        <Field label="What this vertical does" id={`vertical-description-${index}`} className="sm:col-span-2">
+        <Field label="What this vertical does (optional)" id={`vertical-description-${index}`} className="sm:col-span-2">
           <Textarea id={`vertical-description-${index}`} rows="3" className="min-h-0" value={vertical.description} onChange={(event) => set("description", event.target.value)} />
         </Field>
       </div>
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="Registration type" id={`vertical-regtype-${index}`}>
-          <Select id={`vertical-regtype-${index}`} value={vertical.registrationType} onChange={(event) => set("registrationType", event.target.value)}>
-            <option value="individual">Individual</option>
-            <option value="team">Team only</option>
-            <option value="optional_team">Individual or team</option>
-          </Select>
-        </Field>
-        {vertical.registrationType !== "individual" && (
-          <>
-            <Field label="Lower limit" id={`vertical-min-${index}`}>
-              <Input id={`vertical-min-${index}`} type="number" min="1" value={vertical.minTeamSize} onChange={(event) => set("minTeamSize", Number(event.target.value))} />
-            </Field>
-            <Field label="Upper limit" id={`vertical-max-${index}`}>
-              <Input id={`vertical-max-${index}`} type="number" min={vertical.minTeamSize} value={vertical.maxTeamSize} onChange={(event) => set("maxTeamSize", Number(event.target.value))} />
-            </Field>
-          </>
-        )}
+        <RegistrationTypeFields registrationType={vertical.registrationType} minTeamSize={vertical.minTeamSize} maxTeamSize={vertical.maxTeamSize} idPrefix={`vertical-${index}`} set={set} />
         <Field label="Participant limit (optional)" id={`vertical-capacity-${index}`} hint="Counts people in this vertical only.">
           <Input id={`vertical-capacity-${index}`} type="number" min="1" max="10000" value={vertical.maxParticipants} onChange={(event) => set("maxParticipants", event.target.value)} placeholder="Unlimited" />
         </Field>
-        <Field label="Own deadline (optional)" id={`vertical-deadline-${index}`} hint="Leave empty to use the event deadline.">
+        <Field label="Own registration deadline (optional)" id={`vertical-deadline-${index}`} hint="Leave empty to use the event registration deadline.">
           <DateTimeInput id={`vertical-deadline-${index}`} value={vertical.registrationDeadlineAt} onChange={(value) => set("registrationDeadlineAt", value)} quickTimes={["17:00", "20:00", "23:00", "23:59"]} />
+        </Field>
+        <Field label="Problem statement Drive link (optional)" id={`vertical-problem-${index}`} className="sm:col-span-2 lg:col-span-4" hint="Students will see this as a clickable link.">
+          <Input id={`vertical-problem-${index}`} type="url" value={vertical.problemStatementUrl || ""} onChange={(event) => set("problemStatementUrl", event.target.value)} placeholder="https://drive.google.com/..." />
         </Field>
       </div>
 
-      <div className="mt-6 border-t border-line pt-5">
+      <div className="mt-6 rounded-sm border border-line bg-paper-2/60 p-4 sm:p-5">
         <RoundBuilder
           rounds={vertical.rounds}
           onChange={(rounds) => set("rounds", rounds)}
           registrationType={vertical.registrationType}
         />
+      </div>
       </div>
     </section>
   );
@@ -133,10 +150,14 @@ export default function VerticalBuilder({
   rounds,
   maxVerticalApplications,
   registrationType,
+  minTeamSize,
+  maxTeamSize,
+  problemStatementUrl,
   onToggle,
   onVerticalsChange,
   onRoundsChange,
   onMaxApplicationsChange,
+  onRegistrationChange,
 }) {
   const update = (index, vertical) => {
     const next = [...verticals];
@@ -156,9 +177,20 @@ export default function VerticalBuilder({
   // Turning verticals on seeds the first vertical with the rounds already
   // built, so nothing the club typed is lost.
   const toggle = (value) => {
-    if (value && !verticals.length) {
+    if (value && verticals.length < 2) {
+      const current = verticals[0] || {};
       onVerticalsChange([
-        { ...emptyVertical(1), registrationType, rounds },
+        {
+          ...emptyVertical(1),
+          ...current,
+          title: current.title && !current.isDefault ? current.title : "",
+          isDefault: false,
+          registrationType,
+          minTeamSize,
+          maxTeamSize,
+          problemStatementUrl,
+          rounds: current.rounds?.length ? current.rounds : rounds,
+        },
         emptyVertical(2),
       ]);
     }
@@ -217,7 +249,7 @@ export default function VerticalBuilder({
             className="mt-6"
             onClick={() => onVerticalsChange([...verticals, emptyVertical(verticals.length + 1)])}
           >
-            Add vertical
+            + Add vertical
           </Button>
           {verticals.length < 2 && (
             <p className="mt-4 rounded-sm border-l-2 border-warn bg-warn-tint/40 px-4 py-3 text-sm text-ink-2">
@@ -226,9 +258,30 @@ export default function VerticalBuilder({
           )}
         </>
       ) : (
-        <div className="mt-6">
-          <RoundBuilder rounds={rounds} onChange={onRoundsChange} registrationType={registrationType} />
-        </div>
+        <section className="mt-6 overflow-hidden rounded-md border-2 border-accent/25 bg-accent-tint/20">
+          <div className="border-b border-accent/20 bg-accent-tint/65 px-4 py-4 sm:px-5">
+            <p className="eyebrow eyebrow-accent">Application setup</p>
+            <h3 className="display mt-1 text-lg">General registration</h3>
+            <p className="mt-1 text-sm text-ink-3">These settings apply to the event&rsquo;s single application track.</p>
+          </div>
+          <div className="p-4 sm:p-5">
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              <RegistrationTypeFields
+                registrationType={registrationType}
+                minTeamSize={minTeamSize}
+                maxTeamSize={maxTeamSize}
+                idPrefix="event-registration"
+                set={onRegistrationChange}
+              />
+              <Field label="Problem statement Drive link (optional)" id="problemStatementUrl" className="sm:col-span-2 lg:col-span-3" hint="Students will see this as a clickable link.">
+                <Input id="problemStatementUrl" name="problemStatementUrl" type="url" value={problemStatementUrl || ""} onChange={(event) => onRegistrationChange("problemStatementUrl", event.target.value)} placeholder="https://drive.google.com/..." />
+              </Field>
+            </div>
+            <div className="mt-6 rounded-sm border border-line bg-paper-2/60 p-4 sm:p-5">
+              <RoundBuilder rounds={rounds} onChange={onRoundsChange} registrationType={registrationType} />
+            </div>
+          </div>
+        </section>
       )}
     </div>
   );

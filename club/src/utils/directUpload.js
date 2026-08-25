@@ -13,6 +13,47 @@ function canvasBlob(canvas, type, quality) {
   });
 }
 
+async function squarePosterImage(file) {
+  if (typeof createImageBitmap !== "function") return file;
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+    const edge = 1080;
+    const canvas = document.createElement("canvas");
+    canvas.width = edge;
+    canvas.height = edge;
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) return file;
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+
+    if (bitmap.width !== bitmap.height) {
+      const coverScale = Math.max(edge / bitmap.width, edge / bitmap.height) * 1.08;
+      const coverWidth = bitmap.width * coverScale;
+      const coverHeight = bitmap.height * coverScale;
+      context.save();
+      context.filter = "blur(28px) brightness(0.72)";
+      context.drawImage(bitmap, (edge - coverWidth) / 2, (edge - coverHeight) / 2, coverWidth, coverHeight);
+      context.restore();
+      context.fillStyle = "rgba(8, 28, 42, 0.18)";
+      context.fillRect(0, 0, edge, edge);
+    } else {
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, edge, edge);
+    }
+
+    const containScale = Math.min(edge / bitmap.width, edge / bitmap.height);
+    const width = bitmap.width * containScale;
+    const height = bitmap.height * containScale;
+    context.drawImage(bitmap, (edge - width) / 2, (edge - height) / 2, width, height);
+    const blob = await canvasBlob(canvas, "image/webp", 0.92);
+    const name = file.name.replace(/\.[^.]+$/, "") || "poster";
+    return new File([blob], `${name}-square.webp`, { type: "image/webp", lastModified: file.lastModified });
+  } finally {
+    bitmap?.close?.();
+  }
+}
+
 async function optimizeImage(file, maxBytes) {
   if (file.size <= maxBytes) return file;
 
@@ -68,9 +109,12 @@ export async function uploadDirect(file, { role, kind }) {
     throw new Error("This file type or size is not allowed");
   }
   const providerLimit = config.providerMaxBytes || Math.min(config.maxBytes, TEN_MEGABYTES);
-  const uploadFile = config.resourceType === "image"
-    ? await optimizeImage(file, providerLimit)
+  const preparedFile = config.resourceType === "image" && ["eventBanner", "sessionThumbnail"].includes(kind)
+    ? await squarePosterImage(file)
     : file;
+  const uploadFile = config.resourceType === "image"
+    ? await optimizeImage(preparedFile, providerLimit)
+    : preparedFile;
 
   const form = new FormData();
   form.append("file", uploadFile);
