@@ -18,12 +18,26 @@ const submissionFieldSchema = new mongoose.Schema({
   label: { type: String, required: true, trim: true, maxlength: 120 },
   type: {
     type: String,
-    enum: ["text", "short_text", "long_text", "boolean", "url", "drive_link", "github", "file", "pdf", "video"],
+    enum: ["text", "short_text", "long_text", "boolean", "select", "url", "drive_link", "github", "file", "pdf", "video"],
     default: "url",
   },
   required: { type: Boolean, default: true },
   helpText: { type: String, default: "", maxlength: 300 },
+  options: {
+    type: [{ type: String, trim: true, maxlength: 120 }],
+    default: [],
+  },
 }, { _id: false });
+
+submissionFieldSchema.pre("validate", function(next) {
+  if (this.type !== "select") {
+    this.options = [];
+    return next();
+  }
+  this.options = [...new Set((this.options || []).map((option) => String(option).trim()).filter(Boolean))].slice(0, 30);
+  if (this.options.length < 2) return next(new Error(`Dropdown field "${this.label}" needs at least two options`));
+  next();
+});
 
 const roundSchema = new mongoose.Schema({
   order: { type: Number, required: true, min: 1, max: 20 },
@@ -231,6 +245,15 @@ eventSchema.pre("validate", function(next) {
         round.evaluationScope = "participant";
       }
     });
+    const firstRound = vertical.rounds?.[0];
+    if (firstRound?.type === "submission") {
+      const legacyDeadline = this.registerationDeadline
+        ? new Date(`${this.registerationDeadline}T23:59:59.999+05:30`)
+        : null;
+      const applicationDeadline = vertical.registrationDeadlineAt || this.registrationDeadlineAt || legacyDeadline;
+      firstRound.endsAt = applicationDeadline;
+      firstRound.submissionDeadlineAt = applicationDeadline;
+    }
     vertical.numberOfRounds = vertical.rounds?.length || 0;
   }
 

@@ -11,6 +11,7 @@ const { notifyStudent } = require("../services/notification.services");
 const { enqueueInterviewRemindersForSlot } = require("../services/roundReminder.services");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryAsset, destroyUploadedFile } = require("../utils/uploads");
+const { saveRoundSubmission } = require("../services/roundSubmission.services");
 const {
   advanceCandidate,
   autoScheduleCandidates,
@@ -853,73 +854,22 @@ module.exports.submitRoundWork = async (req, res) => {
     return res.status(400).json({ success: false, msg: "The submission deadline has passed" });
   }
 
-  let answers;
-  let fileKeys;
   try {
-    answers = JSON.parse(req.body.answersJSON || "[]");
-    fileKeys = JSON.parse(req.body.fileKeysJSON || "[]");
-    if (!Array.isArray(answers) || !Array.isArray(fileKeys)) throw new Error();
-  } catch {
+    const saved = await saveRoundSubmission({
+      event,
+      round,
+      candidate,
+      studentId: req.student._id,
+      answersJSON: req.body.answersJSON,
+      fileKeysJSON: req.body.fileKeysJSON,
+      uploadedFiles: req.files || [],
+    });
+    await writeAudit({ actorRole: "student", actorId: req.student._id, action: "round.submit", targetType: "submission", targetId: saved.submission._id });
+    return res.json({ success: true, msg: saved.existing ? "Submission updated" : "Submission received", submission: saved.submission });
+  } catch (error) {
     await Promise.all((req.files || []).map(destroyUploadedFile));
-    return res.status(400).json({ success: false, msg: "Submission data is invalid" });
+    return res.status(error.status || 500).json({ success: false, msg: error.status ? error.message : "Could not save the submission" });
   }
-  const cleanAnswers = answers.slice(0, 20).map((answer) => ({
-    key: String(answer.key || "").slice(0, 80),
-    value: String(answer.value || "").slice(0, 10000),
-  }));
-  const answerMap = new Map(cleanAnswers.map((answer) => [answer.key, answer.value.trim()]));
-  const files = (req.files || []).map((file, index) => ({
-    fieldKey: String(fileKeys[index] || "attachment").slice(0, 80),
-    url: file.path,
-    publicId: file.filename,
-    resourceType: file.resourceType || (file.mimetype?.startsWith("video/") ? "video" : file.mimetype === "application/pdf" ? "raw" : "image"),
-    format: file.format || "",
-    originalName: file.originalName || file.originalname || "",
-    mimeType: file.mimetype || "",
-    bytes: file.size || 0,
-  }));
-  const existing = await roundSubmissionModel.findOne({ candidateId: candidate._id });
-  if (existing && !round.allowResubmission) {
-    await Promise.all(files.map((file) => destroyCloudinaryAsset(file.publicId, file.resourceType)));
-    return res.status(409).json({ success: false, msg: "This round allows only one submission" });
-  }
-  const existingFilesByField = new Map((existing?.files || []).map((file) => [file.fieldKey, file]));
-  const uploadedFields = new Set(files.map((file) => file.fieldKey));
-  const missing = round.submissionFields.filter((field) => field.required && (
-    ["file", "pdf", "video"].includes(field.type)
-      ? !uploadedFields.has(field.key) && !existingFilesByField.has(field.key)
-      : field.type === "boolean"
-        ? answerMap.get(field.key) !== "true"
-        : !answerMap.get(field.key)
-  ));
-  if (missing.length) {
-    await Promise.all(files.map((file) => destroyCloudinaryAsset(file.publicId, file.resourceType)));
-    return res.status(400).json({ success: false, msg: `Complete required field: ${missing[0].label}` });
-  }
-
-  const retainedFiles = (existing?.files || []).filter((file) => !uploadedFields.has(file.fieldKey));
-  const submission = await roundSubmissionModel.findOneAndUpdate(
-    { candidateId: candidate._id },
-    {
-      eventId: event._id,
-      roundId: round._id,
-      registrationId: candidate.registrationId,
-      candidateId: candidate._id,
-      submittedBy: req.student._id,
-      answers: cleanAnswers,
-      files: [...retainedFiles.map((file) => file.toObject ? file.toObject() : file), ...files],
-      revision: (existing?.revision || 0) + 1,
-      status: "submitted",
-      submittedAt: now,
-    },
-    { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
-  );
-  const replaced = (existing?.files || []).filter((file) => uploadedFields.has(file.fieldKey));
-  await Promise.all(replaced.map((file) => destroyCloudinaryAsset(file.publicId, file.resourceType)));
-  candidate.status = "submitted";
-  await candidate.save();
-  await writeAudit({ actorRole: "student", actorId: req.student._id, action: "round.submit", targetType: "submission", targetId: submission._id });
-  return res.json({ success: true, msg: existing ? "Submission updated" : "Submission received", submission });
 };
 
 module.exports.addWalkInAttendance = async (req, res) => {

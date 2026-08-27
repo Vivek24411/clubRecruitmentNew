@@ -9,7 +9,7 @@ import type { DiscovrEvent, EventVertical, StudentSummary } from '@/types/api';
 
 export type TeamAction = (endpoint: string, payload: Record<string, unknown>, options?: { title: string; message: string; confirmLabel?: string; destructive?: boolean }) => Promise<void>;
 
-export function EventTeamPanel({ event, vertical, platformOpen, working, action }: { event: DiscovrEvent; vertical: EventVertical; platformOpen: boolean; working: boolean; action: TeamAction }) {
+export function EventTeamPanel({ event, vertical, platformOpen, working, action, startOwnApplication }: { event: DiscovrEvent; vertical: EventVertical; platformOpen: boolean; working: boolean; action: TeamAction; startOwnApplication?: React.ReactNode }) {
   const registration = vertical.detail;
   const [teamName, setTeamName] = useState(registration?.teamName || '');
   const [memberEmail, setMemberEmail] = useState('');
@@ -23,7 +23,7 @@ export function EventTeamPanel({ event, vertical, platformOpen, working, action 
   if (vertical.show === 3) return <View style={styles.panel}>
     <Text style={styles.panelTitle}>Team invitations</Text><Text style={styles.body}>Accept a team invitation or start your own application.</Text>
     {(vertical.invitations || []).map((offer) => <View key={offer._id} style={styles.invitation}><View style={styles.memberMain}><Avatar uri={offer.studentId?.profilePicture} name={offer.studentId?.name || 'Captain'} size={40} /><View style={styles.memberText}><Text style={styles.memberName}>{offer.teamName || `${offer.studentId?.name || 'Student'}’s team`}</Text><Text style={styles.memberMeta}>Captain: {offer.studentId?.name || 'Student'}</Text></View></View><View style={styles.actions}><Button label="Accept" disabled={!canEdit || working} onPress={() => void action('acceptMemberOffer', { registrationId: offer._id }, { title: 'Join this team?', message: 'This invitation will become your application for this vertical.', confirmLabel: 'Join team' })} /><Button label="Decline" variant="secondary" disabled={working} onPress={() => void action('declineMemberOffer', { registrationId: offer._id })} /></View></View>)}
-    <Button label="Start my own application" variant="secondary" disabled={!vertical.canApply || working} onPress={() => void action('registerEvent', { verticalId: vertical._id })} />
+    {startOwnApplication || <Button label="Start my own application" variant="secondary" disabled={!vertical.canApply || working} onPress={() => void action('registerEvent', { verticalId: vertical._id })} />}
   </View>;
 
   if (!registration || !registrationId) return null;

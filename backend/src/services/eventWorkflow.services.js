@@ -76,9 +76,12 @@ function normalizeRounds(input) {
       ? round.submissionFields.slice(0, 12).map((field, fieldIndex) => ({
         key: cleanString(field?.key || `field_${fieldIndex + 1}`, 80).replace(/[^a-zA-Z0-9_-]/g, "_"),
         label: cleanString(field?.label || `Field ${fieldIndex + 1}`, 120),
-        type: ["text", "short_text", "long_text", "boolean", "url", "drive_link", "github", "file", "pdf", "video"].includes(field?.type) ? field.type : "short_text",
+        type: ["text", "short_text", "long_text", "boolean", "select", "url", "drive_link", "github", "file", "pdf", "video"].includes(field?.type) ? field.type : "short_text",
         required: field?.required !== false,
         helpText: cleanString(field?.helpText, 300),
+        options: field?.type === "select"
+          ? [...new Set((Array.isArray(field?.options) ? field.options : []).map((option) => cleanString(option, 120)).filter(Boolean))].slice(0, 30)
+          : [],
       }))
       : [];
     const startsAt = cleanDate(round?.startsAt || (type === "submission" ? round?.submissionOpensAt : null));
@@ -165,6 +168,21 @@ async function ensureEventVerticals(eventOrId) {
   // The model hook seeds a hidden default vertical from event.rounds, so a
   // bare save is enough to bring a pre-vertical event up to date.
   if (!event.verticals?.length) stale = true;
+  for (const vertical of event.verticals || []) {
+    const firstRound = vertical.rounds?.[0];
+    if (firstRound?.type !== "submission") continue;
+    const legacyDeadline = event.registerationDeadline
+      ? new Date(`${event.registerationDeadline}T23:59:59.999+05:30`)
+      : null;
+    const sharedDeadline = vertical.registrationDeadlineAt || event.registrationDeadlineAt || legacyDeadline;
+    const currentDeadline = firstRound.submissionDeadlineAt || firstRound.endsAt || null;
+    if (String(sharedDeadline || "") !== String(currentDeadline || "")
+      || String(sharedDeadline || "") !== String(firstRound.endsAt || "")) {
+      firstRound.endsAt = sharedDeadline;
+      firstRound.submissionDeadlineAt = sharedDeadline;
+      stale = true;
+    }
+  }
   if (stale) await event.save();
   return event;
 }

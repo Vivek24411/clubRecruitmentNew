@@ -3,6 +3,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import VerticalBuilder, { serializeVertical } from "../components/VerticalBuilder";
+import { findInvalidDropdownField } from "../components/RoundBuilder";
 import EligibilityBuilder from "../components/EligibilityBuilder";
 import { allProgrammeRules } from "../utils/eligibility";
 import { Button, Card, DateTimeInput, Field, Input, Page, PageHeader, Select, Textarea } from "../components/ui";
@@ -216,6 +217,17 @@ export default function AddEvent() {
       showErrors([{ field: "roundsJSON", message: "Add at least one event round" }]);
       return;
     }
+    const configuredRounds = form.verticalsEnabled
+      ? form.verticals.flatMap((vertical) => vertical.rounds || [])
+      : form.rounds;
+    const invalidDropdown = findInvalidDropdownField(configuredRounds);
+    if (invalidDropdown) {
+      showErrors([{
+        field: form.verticalsEnabled ? "verticalsJSON" : "roundsJSON",
+        message: `Dropdown field “${invalidDropdown.field.label || "Untitled field"}” in ${invalidDropdown.round.title} needs at least two options`,
+      }]);
+      return;
+    }
     setSubmitting(true);
     try {
       const primaryRegistration = form.verticalsEnabled ? form.verticals[0] : form;
@@ -296,7 +308,7 @@ export default function AddEvent() {
         <Card className="p-5 sm:p-6">
           <h2 className="display text-xl">Registration and eligibility</h2>
           <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Registration deadline" id="deadline" required className="lg:col-span-2" error={fieldErrors.registrationDeadlineAt}><DateTimeInput id="deadline" value={form.registrationDeadlineAt} onChange={(value) => set("registrationDeadlineAt", value)} required invalid={Boolean(fieldErrors.registrationDeadlineAt)} quickTimes={["17:00", "20:00", "23:00", "23:59"]} /></Field>
+            <Field label="Registration deadline" id="deadline" required className="lg:col-span-2" error={fieldErrors.registrationDeadlineAt} hint="When Round 1 is an application form, this is also its submission deadline."><DateTimeInput id="deadline" value={form.registrationDeadlineAt} onChange={(value) => set("registrationDeadlineAt", value)} required invalid={Boolean(fieldErrors.registrationDeadlineAt)} quickTimes={["17:00", "20:00", "23:00", "23:59"]} /></Field>
             <Field label="Overall participant limit (optional)" id="capacity" hint="Counts people, not teams: the captain and every accepted member count once. Pending invitations do not count." error={fieldErrors.maxParticipants}><Input id="capacity" name="maxParticipants" type="number" min="1" max="10000" value={form.maxParticipants} onChange={(event) => set("maxParticipants", event.target.value)} placeholder="Unlimited" aria-invalid={Boolean(fieldErrors.maxParticipants)} /></Field>
           </div>
           <div id="programme-eligibility" className={fieldErrors.programmeEligibilityJSON ? "rounded-sm border border-bad/50" : ""}>
@@ -323,6 +335,7 @@ export default function AddEvent() {
             minTeamSize={form.minTeamSize}
             maxTeamSize={form.maxTeamSize}
             problemStatementUrl={form.problemStatementUrl}
+            registrationDeadlineAt={form.registrationDeadlineAt}
             onToggle={(value) => set("verticalsEnabled", value)}
             onVerticalsChange={(verticals) => set("verticals", verticals)}
             onRoundsChange={(rounds) => set("rounds", rounds)}

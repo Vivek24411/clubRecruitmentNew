@@ -40,6 +40,7 @@ const defaultSubmissionField = (number = 1) => ({
   type: "short_text",
   required: true,
   helpText: "",
+  options: [],
 });
 
 export function toLocalDateTime(value) {
@@ -65,7 +66,17 @@ export function normalizeRoundsForForm(rounds = []) {
   }));
 }
 
-function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, total }) {
+export function findInvalidDropdownField(rounds = []) {
+  for (const round of rounds) {
+    const field = (round.submissionFields || []).find((item) => item.type === "select"
+      && new Set((item.options || []).map((option) => option.trim()).filter(Boolean)).size < 2);
+    if (field) return { round, field };
+  }
+  return null;
+}
+
+function RoundEditor({ round, index, teamEvent, registrationDeadlineAt, onChange, onRemove, onMove, total }) {
+  const isInitialApplicationForm = index === 0 && round.type === "submission";
   const set = (key, value) => onChange(index, { ...round, [key]: value });
   const setType = (type) => {
     const submissionEnabled = type === "submission" || type === "hackathon";
@@ -191,9 +202,20 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
               <Field label={round.type === "submission" ? "Submission opens" : "Starts (optional)"} id={`starts-${index}`} required={round.type === "submission"}>
                 <DateTimeInput id={`starts-${index}`} value={round.startsAt || ""} onChange={(value) => set("startsAt", value)} required={round.type === "submission"} />
               </Field>
-              <Field label={round.type === "submission" ? "Submission deadline" : "Ends (optional)"} id={`ends-${index}`} required={round.type === "submission"}>
-                <DateTimeInput id={`ends-${index}`} value={round.endsAt || ""} onChange={(value) => set("endsAt", value)} required={round.type === "submission"} quickTimes={round.type === "submission" ? ["17:00", "20:00", "23:00", "23:59"] : undefined} />
-              </Field>
+              {isInitialApplicationForm ? (
+                <div className="rounded-sm border-l-2 border-accent bg-accent-tint/40 px-4 py-3 text-sm text-ink-2">
+                  <p className="font-semibold">Application submission deadline</p>
+                  <p className="mt-1">
+                    {registrationDeadlineAt
+                      ? new Date(registrationDeadlineAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+                      : "Set the registration deadline above. It is also this round’s submission deadline."}
+                  </p>
+                </div>
+              ) : (
+                <Field label={round.type === "submission" ? "Submission deadline" : "Ends (optional)"} id={`ends-${index}`} required={round.type === "submission"}>
+                  <DateTimeInput id={`ends-${index}`} value={round.endsAt || ""} onChange={(value) => set("endsAt", value)} required={round.type === "submission"} quickTimes={round.type === "submission" ? ["17:00", "20:00", "23:00", "23:59"] : undefined} />
+                </Field>
+              )}
             </>
           )}
         </div>
@@ -256,6 +278,7 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
                     <option value="short_text">Short answer</option>
                     <option value="long_text">Long answer</option>
                     <option value="boolean">Checkbox</option>
+                    <option value="select">Dropdown</option>
                     <option value="url">Website link</option>
                     <option value="drive_link">Google Drive link</option>
                     <option value="github">GitHub repository</option>
@@ -272,6 +295,20 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
                 <Field label="Help text (optional)" id={`field-help-${index}-${fieldIndex}`} className="sm:col-span-2">
                   <Input id={`field-help-${index}-${fieldIndex}`} value={field.helpText || ""} onChange={(event) => updateField(fieldIndex, { helpText: event.target.value })} maxLength={300} placeholder="Explain what the applicant should enter" />
                 </Field>
+                {field.type === "select" && (
+                  <Field label="Dropdown options" id={`field-options-${index}-${fieldIndex}`} className="sm:col-span-2" hint="Enter one option per line. At least two options are required." required>
+                    <Textarea
+                      id={`field-options-${index}-${fieldIndex}`}
+                      rows="4"
+                      className="min-h-0"
+                      value={(field.options || []).join("\n")}
+                      onChange={(event) => updateField(fieldIndex, {
+                        options: event.target.value.split("\n").map((option) => option.trimStart()).slice(0, 30),
+                      })}
+                      required
+                    />
+                  </Field>
+                )}
               </div>
             ))}
             <Button
@@ -291,7 +328,7 @@ function RoundEditor({ round, index, teamEvent, onChange, onRemove, onMove, tota
   );
 }
 
-export default function RoundBuilder({ rounds, onChange, registrationType }) {
+export default function RoundBuilder({ rounds, onChange, registrationType, registrationDeadlineAt }) {
   const update = (index, round) => {
     const next = [...rounds];
     next[index] = round;
@@ -320,6 +357,7 @@ export default function RoundBuilder({ rounds, onChange, registrationType }) {
               index={index}
               total={rounds.length}
               teamEvent={registrationType !== "individual"}
+              registrationDeadlineAt={registrationDeadlineAt}
               onChange={update}
               onMove={move}
               onRemove={(removeIndex) => onChange(rounds.filter((_, itemIndex) => itemIndex !== removeIndex).map((item, itemIndex) => ({ ...item, order: itemIndex + 1 })))}

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { formatDateTime } from "../utils/date";
 import { Badge, Button, Field, Input, Monogram } from "./ui";
+import { SubmissionForm } from "./EventWorkflow";
 
 function StudentAvatar({ student }) {
   if (student?.profilePicture) {
@@ -37,6 +38,7 @@ export default function VerticalApplication({
   onRegister,
   showHeading,
   verticalNumber,
+  onApplicationSubmitted,
 }) {
   const [memberEmail, setMemberEmail] = useState("");
   const [teamName, setTeamName] = useState("");
@@ -53,6 +55,8 @@ export default function VerticalApplication({
   const memberCount = 1 + (registration?.membersAccepted?.length || 0);
   const registrationId = registration?._id;
   const open = platformOpen && vertical.canApply;
+  const firstRound = vertical.rounds?.[0];
+  const startsWithApplicationForm = firstRound?.type === "submission" && firstRound.submissionEnabled !== false;
   // Team edits stay available after applying, until the vertical itself closes.
   const canEdit = platformOpen
     && vertical.status !== "closed"
@@ -73,7 +77,7 @@ export default function VerticalApplication({
               {isTeamVertical ? `Teams of ${minTeam}–${maxTeam}` : "Individual"}
               {vertical.numberOfRounds ? ` · ${vertical.numberOfRounds} round${vertical.numberOfRounds === 1 ? "" : "s"}` : ""}
             </p>
-            {vertical.deadlineAt && <p className="mt-1 text-xs font-medium text-ink-2">Registration deadline · {formatDateTime(vertical.deadlineAt)}</p>}
+            {vertical.deadlineAt && <p className="mt-1 text-xs font-medium text-ink-2">{startsWithApplicationForm ? "Application deadline" : "Registration deadline"} · {formatDateTime(vertical.deadlineAt)}</p>}
           </div>
           {registration
             ? <Badge tone={statusTone(studentStatus)} className="capitalize">{studentStatus?.replace("_", " ")}</Badge>
@@ -88,9 +92,9 @@ export default function VerticalApplication({
       {!loggedInStudent && (
         <>
           <p className="mt-4 text-sm leading-relaxed text-ink-3">
-            Sign in with your student account to apply and track every selection round.
+            Sign in with your student account to {startsWithApplicationForm ? "complete the application form" : "apply"} and track every selection round.
           </p>
-          <Button block size="lg" className="mt-5" onClick={onSignIn}>Sign in to apply</Button>
+          <Button block size="lg" className="mt-5" onClick={onSignIn}>{startsWithApplicationForm ? "Sign in to complete form" : "Sign in to apply"}</Button>
           <button
             type="button"
             onClick={onRegister}
@@ -109,20 +113,34 @@ export default function VerticalApplication({
               ? "The platform recruitment cycle is currently closed."
               : vertical.blockedReason
                 ? vertical.blockedReason
+                : startsWithApplicationForm
+                  ? isTeamVertical
+                    ? "Complete the form below. Submitting it registers your application and creates your team with you as captain."
+                    : "Complete the form below. Submitting it also registers you for the event."
                 : isTeamVertical
                   ? "Register as captain, then invite teammates by their institute email."
                   : "Submit an individual application."}
           </p>
-          <Button
-            block
-            size="lg"
-            className="mt-5"
-            disabled={!open || busy}
-            loading={pending}
-            onClick={() => action("registerEvent", { verticalId: vertical._id })}
-          >
-            {pending ? "Submitting…" : open ? "Apply now" : "Applications closed"}
-          </Button>
+          {startsWithApplicationForm && open ? (
+            <SubmissionForm
+              eventId={event._id}
+              verticalId={vertical._id}
+              round={firstRound}
+              initialApplication
+              onSaved={onApplicationSubmitted}
+            />
+          ) : (
+            <Button
+              block
+              size="lg"
+              className="mt-5"
+              disabled={!open || busy}
+              loading={pending}
+              onClick={() => action("registerEvent", { verticalId: vertical._id })}
+            >
+              {pending ? "Submitting…" : open ? "Apply now" : "Applications closed"}
+            </Button>
+          )}
           {vertical.deadlineAt && open && (
             <p className="mt-3 text-center text-xs text-ink-3">Closes {formatDateTime(vertical.deadlineAt)}</p>
           )}
@@ -332,13 +350,20 @@ export default function VerticalApplication({
               </li>
             ))}
           </ul>
-          <button
-            disabled={!open || busy}
-            onClick={() => action("registerEvent", { verticalId: vertical._id })}
-            className="link link-accent mt-5 text-sm font-semibold disabled:opacity-40"
-          >
-            Start my own application
-          </button>
+          {startsWithApplicationForm && open ? (
+            <div className="mt-5 border-t border-line pt-5">
+              <p className="mb-3 text-sm font-semibold">Or submit your own application</p>
+              <SubmissionForm eventId={event._id} verticalId={vertical._id} round={firstRound} initialApplication onSaved={onApplicationSubmitted} />
+            </div>
+          ) : (
+            <button
+              disabled={!open || busy}
+              onClick={() => action("registerEvent", { verticalId: vertical._id })}
+              className="link link-accent mt-5 text-sm font-semibold disabled:opacity-40"
+            >
+              Start my own application
+            </button>
+          )}
         </>
       )}
     </div>

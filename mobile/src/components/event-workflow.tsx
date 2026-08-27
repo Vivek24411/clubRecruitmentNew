@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as DocumentPicker from 'expo-document-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
-import { Linking, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useMemo, useState } from 'react';
 
 import { Avatar, Badge, Button, Card, ErrorState, Field, LoadingState, MetaRow } from '@/components/ui';
@@ -25,6 +25,14 @@ function inferMimeType(name: string, provided?: string | null) {
   if (provided) return provided;
   const extension = name.split('.').pop()?.toLowerCase();
   return ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', pdf: 'application/pdf', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' } as Record<string, string>)[extension || ''] || 'application/octet-stream';
+}
+
+type SubmissionField = NonNullable<EventRound['submissionFields']>[number];
+
+export function InitialApplicationForm({ eventId, verticalId, round, onSaved }: {
+  eventId: string; verticalId: string; round: EventRound; onSaved: () => Promise<void>;
+}) {
+  return <SubmissionForm eventId={eventId} verticalId={verticalId} round={round} initialApplication onSaved={onSaved} />;
 }
 
 export function EventWorkflowPanel({ eventId }: { eventId: string }) {
@@ -94,13 +102,16 @@ function SubmissionReadOnly({ submission }: { submission: RoundSubmission }) {
   </View>;
 }
 
-function SubmissionForm({ eventId, round, candidate, existing, onSaved }: { eventId: string; round: EventRound; candidate: RoundCandidate; existing?: RoundSubmission; onSaved: () => Promise<void> }) {
+function SubmissionForm({ eventId, round, candidate, existing, onSaved, verticalId, initialApplication = false }: {
+  eventId: string; round: EventRound; candidate?: RoundCandidate; existing?: RoundSubmission;
+  onSaved: () => Promise<void>; verticalId?: string; initialApplication?: boolean;
+}) {
   const { toast } = useFeedback();
   const initial = useMemo(() => Object.fromEntries((existing?.answers || []).map((answer) => [answer.key, answer.value])), [existing]);
   const [answers, setAnswers] = useState<Record<string, string>>(initial);
   const [files, setFiles] = useState<Record<string, LocalUpload | undefined>>({});
   const [working, setWorking] = useState(false);
-  async function chooseFile(field: NonNullable<EventRound['submissionFields']>[number]) {
+  async function chooseFile(field: SubmissionField) {
     const mimeTypes = field.type === 'video' ? ['video/mp4', 'video/webm', 'video/quicktime'] : field.type === 'pdf' ? ['application/pdf'] : ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
     const result = await DocumentPicker.getDocumentAsync({ type: mimeTypes, copyToCacheDirectory: true, multiple: false });
     if (result.canceled) return;
@@ -123,15 +134,19 @@ function SubmissionForm({ eventId, round, candidate, existing, onSaved }: { even
     for (const field of fields) {
       const existingFile = existing?.files?.some((file) => file.fieldKey === field.key);
       if (field.required && ['file', 'pdf', 'video'].includes(field.type) && !files[field.key] && !existingFile) { toast(`${field.label} is required.`, 'error'); return; }
-      if (field.required && !['file', 'pdf', 'video'].includes(field.type) && !answers[field.key]?.trim()) { toast(`${field.label} is required.`, 'error'); return; }
+      if (field.required && field.type === 'boolean' && answers[field.key] !== 'true') { toast(`${field.label} is required.`, 'error'); return; }
+      if (field.required && !['file', 'pdf', 'video', 'boolean'].includes(field.type) && !answers[field.key]?.trim()) { toast(`${field.label} is required.`, 'error'); return; }
     }
     setWorking(true);
     try {
       const entries = Object.entries(files).filter((entry): entry is [string, LocalUpload] => Boolean(entry[1]));
       const directAssets = await Promise.all(entries.map(([, file]) => uploadDirect(file, 'submission')));
-      const response = await apiRequest<{ success: boolean; msg?: string }>(`/student/events/${encodeURIComponent(eventId)}/rounds/${encodeURIComponent(round._id)}/submission`, {
-        method: 'PUT', timeoutMs: 120_000,
-        body: { candidateId: candidate._id, answersJSON: JSON.stringify(Object.entries(answers).map(([key, value]) => ({ key, value }))), fileKeysJSON: JSON.stringify(entries.map(([key]) => key)), directAssets },
+      const endpoint = initialApplication
+        ? `/student/events/${encodeURIComponent(eventId)}/application`
+        : `/student/events/${encodeURIComponent(eventId)}/rounds/${encodeURIComponent(round._id)}/submission`;
+      const response = await apiRequest<{ success: boolean; msg?: string }>(endpoint, {
+        method: initialApplication ? 'POST' : 'PUT', timeoutMs: 120_000,
+        body: { ...(candidate?._id ? { candidateId: candidate._id } : {}), ...(verticalId ? { verticalId } : {}), answersJSON: JSON.stringify(Object.entries(answers).map(([key, value]) => ({ key, value }))), fileKeysJSON: JSON.stringify(entries.map(([key]) => key)), directAssets },
       });
       toast(response.msg || 'Submission saved.', 'success'); setFiles({}); await onSaved();
     } catch (error) { toast(error instanceof Error ? error.message : 'Could not submit your work.', 'error'); }
@@ -139,10 +154,27 @@ function SubmissionForm({ eventId, round, candidate, existing, onSaved }: { even
   }
 
   const beforeOpen = Boolean(round.submissionOpensAt && new Date(round.submissionOpensAt) > new Date());
-  return <View style={styles.submissionForm}><Text style={styles.submissionTitle}>{existing ? 'Update submission' : 'Submit your work'}</Text>{(round.submissionFields || []).map((field) => ['file', 'pdf', 'video'].includes(field.type)
+  return <View style={styles.submissionForm}><Text style={styles.submissionTitle}>{initialApplication ? 'Application form' : existing ? 'Update submission' : 'Submit your work'}</Text>{(round.submissionFields || []).map((field) => ['file', 'pdf', 'video'].includes(field.type)
     ? <View key={field.key} style={styles.fileField}><Text style={styles.fileLabel}>{field.label}{field.required ? ' *' : ''}</Text>{field.helpText ? <Text style={styles.fileHelp}>{field.helpText}</Text> : null}<Button label={files[field.key]?.name || `Choose ${field.type === 'video' ? 'video' : field.type === 'pdf' ? 'PDF' : 'file'}`} variant="secondary" icon="attach-outline" onPress={() => void chooseFile(field)} /></View>
+    : field.type === 'select'
+      ? <DropdownField key={field.key} field={field} value={answers[field.key] || ''} onChange={(value) => setAnswers((current) => ({ ...current, [field.key]: value }))} />
+    : field.type === 'boolean'
+      ? <Pressable key={field.key} accessibilityRole="checkbox" accessibilityState={{ checked: answers[field.key] === 'true' }} onPress={() => setAnswers((current) => ({ ...current, [field.key]: String(current[field.key] !== 'true') }))} style={styles.checkboxField}><View style={[styles.checkbox, answers[field.key] === 'true' && styles.checkboxSelected]}>{answers[field.key] === 'true' ? <MaterialCommunityIcons name="check" size={16} color={palette.white} /> : null}</View><View style={styles.checkboxCopy}><Text style={styles.fileLabel}>{field.label}{field.required ? ' *' : ''}</Text>{field.helpText ? <Text style={styles.fileHelp}>{field.helpText}</Text> : null}</View></Pressable>
     : <Field key={field.key} label={field.label} value={answers[field.key] || ''} onChangeText={(value) => setAnswers((current) => ({ ...current, [field.key]: value }))} multiline={['text', 'long_text'].includes(field.type)} keyboardType={['url', 'drive_link', 'github'].includes(field.type) ? 'url' : 'default'} autoCapitalize="none" placeholder={field.type === 'github' ? 'https://github.com/…' : field.type === 'drive_link' ? 'https://drive.google.com/…' : field.type === 'url' ? 'https://…' : field.helpText || ''} />)}
-    {beforeOpen ? <Text style={styles.warning}>Submissions open {formatDateTime(round.submissionOpensAt)}.</Text> : null}<Button label={existing ? 'Update submission' : 'Submit work'} loading={working} disabled={beforeOpen} icon="cloud-upload-outline" onPress={() => void submit()} />
+    {beforeOpen ? <Text style={styles.warning}>Applications open {formatDateTime(round.submissionOpensAt)}.</Text> : null}<Button label={initialApplication ? 'Submit application' : existing ? 'Update submission' : 'Submit work'} loading={working} disabled={beforeOpen} icon="cloud-upload-outline" onPress={() => void submit()} />
+  </View>;
+}
+
+function DropdownField({ field, value, onChange }: { field: SubmissionField; value: string; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return <View style={styles.dropdownField}>
+    <Text style={styles.fileLabel}>{field.label}{field.required ? ' *' : ''}</Text>
+    {field.helpText ? <Text style={styles.fileHelp}>{field.helpText}</Text> : null}
+    <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setOpen((current) => !current)} style={styles.dropdownButton}>
+      <Text style={[styles.dropdownValue, !value && styles.dropdownPlaceholder]}>{value || 'Choose an option'}</Text>
+      <MaterialCommunityIcons name={open ? 'chevron-up' : 'chevron-down'} size={21} color={palette.muted} />
+    </Pressable>
+    {open ? <View style={styles.dropdownOptions}>{(field.options || []).map((option) => <Pressable key={option} onPress={() => { onChange(option); setOpen(false); }} style={[styles.dropdownOption, value === option && styles.dropdownOptionSelected]}><Text style={styles.dropdownOptionText}>{option}</Text>{value === option ? <MaterialCommunityIcons name="check" size={17} color={palette.accentDark} /> : null}</Pressable>)}</View> : null}
   </View>;
 }
 
@@ -156,4 +188,6 @@ const styles = StyleSheet.create({
   slot: { padding: spacing.md, borderRadius: radius.sm, borderLeftWidth: 3, borderLeftColor: palette.accent, backgroundColor: palette.accentMist, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, slotText: { flex: 1 }, slotTitle: { color: palette.ink, fontFamily: typography.semibold, fontSize: 13 }, slotMeta: { color: palette.muted, fontFamily: typography.regular, fontSize: 11.5 },
   submission: { padding: spacing.md, borderRadius: radius.sm, backgroundColor: palette.paper, gap: spacing.sm }, submissionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }, submissionTitle: { color: palette.ink, fontFamily: typography.semibold, fontSize: 15 }, submissionTime: { color: palette.muted, fontFamily: typography.mono, fontSize: 9 }, answer: { padding: spacing.sm, borderRadius: radius.sm, backgroundColor: palette.surface, gap: 4 }, answerKey: { color: palette.muted, fontFamily: typography.mono, fontSize: 9 }, answerValue: { color: palette.inkSoft, fontFamily: typography.regular, fontSize: 13, lineHeight: 19 },
   submissionForm: { padding: spacing.md, borderRadius: radius.sm, backgroundColor: palette.accentMist, gap: spacing.md }, fileField: { gap: 6 }, fileLabel: { color: palette.inkSoft, fontFamily: typography.medium, fontSize: 13 }, fileHelp: { color: palette.muted, fontFamily: typography.regular, fontSize: 11.5, lineHeight: 17 }, warning: { color: palette.warning, fontFamily: typography.medium, fontSize: 12 },
+  checkboxField: { minHeight: 54, padding: spacing.md, borderWidth: 1, borderColor: palette.lineStrong, borderRadius: radius.sm, backgroundColor: palette.surface, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm }, checkbox: { width: 23, height: 23, borderRadius: 5, borderWidth: 1, borderColor: palette.lineStrong, backgroundColor: palette.white, alignItems: 'center', justifyContent: 'center' }, checkboxSelected: { borderColor: palette.accentDark, backgroundColor: palette.accent }, checkboxCopy: { flex: 1, gap: 4 },
+  dropdownField: { gap: 6 }, dropdownButton: { minHeight: 52, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: palette.lineStrong, borderRadius: radius.sm, backgroundColor: palette.white, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, dropdownValue: { flex: 1, color: palette.ink, fontFamily: typography.regular, fontSize: 15 }, dropdownPlaceholder: { color: palette.faint }, dropdownOptions: { borderWidth: 1, borderColor: palette.lineStrong, borderRadius: radius.sm, backgroundColor: palette.surface, overflow: 'hidden' }, dropdownOption: { minHeight: 46, paddingHorizontal: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: palette.line, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, dropdownOptionSelected: { backgroundColor: palette.accentMist }, dropdownOptionText: { flex: 1, color: palette.inkSoft, fontFamily: typography.regular, fontSize: 14 },
 });

@@ -27,6 +27,7 @@ const eventModel = require("../src/models/event.model");
 const scheduleSlotModel = require("../src/models/scheduleSlot.model");
 const scheduleReservationModel = require("../src/models/scheduleReservation.model");
 const roundCandidateModel = require("../src/models/roundCandidate.model");
+const { prepareRoundSubmission } = require("../src/services/roundSubmission.services");
 const sessionModel = require("../src/models/session.model");
 const studentModel = require("../src/models/student.model");
 
@@ -184,7 +185,7 @@ test("round normalization supports team and individual interview modes", () => {
   assert.deepEqual(rounds.map((round) => round.order), [1, 2, 3]);
 });
 
-test("application-form rounds preserve short, long, and checkbox questions", () => {
+test("application-form rounds preserve text, checkbox, and dropdown questions", () => {
   const [round] = normalizeRounds([{
     title: "Application form",
     type: "submission",
@@ -192,11 +193,30 @@ test("application-form rounds preserve short, long, and checkbox questions", () 
       { key: "name", label: "Preferred name", type: "short_text", required: true },
       { key: "motivation", label: "Why do you want to join?", type: "long_text", required: false },
       { key: "consent", label: "I confirm these details", type: "boolean", required: true },
+      { key: "domain", label: "Preferred domain", type: "select", options: ["Design", "Technology", "Design", ""] },
     ],
   }]);
   assert.equal(round.submissionEnabled, true);
-  assert.deepEqual(round.submissionFields.map((field) => field.type), ["short_text", "long_text", "boolean"]);
-  assert.deepEqual(round.submissionFields.map((field) => field.required), [true, false, true]);
+  assert.deepEqual(round.submissionFields.map((field) => field.type), ["short_text", "long_text", "boolean", "select"]);
+  assert.deepEqual(round.submissionFields.map((field) => field.required), [true, false, true, true]);
+  assert.deepEqual(round.submissionFields[3].options, ["Design", "Technology"]);
+});
+
+test("dropdown submissions only accept a configured option", () => {
+  const round = {
+    submissionFields: [{ key: "domain", label: "Preferred domain", type: "select", required: true, options: ["Design", "Technology"] }],
+  };
+  assert.throws(() => prepareRoundSubmission({
+    round,
+    answersJSON: JSON.stringify([{ key: "domain", value: "Finance" }]),
+    fileKeysJSON: "[]",
+  }), /valid option/);
+  const prepared = prepareRoundSubmission({
+    round,
+    answersJSON: JSON.stringify([{ key: "domain", value: "Design" }]),
+    fileKeysJSON: "[]",
+  });
+  assert.equal(prepared.cleanAnswers[0].value, "Design");
 });
 
 test("submission rounds share one round window and accept Drive-link inputs", () => {
@@ -352,6 +372,26 @@ test("every event carries at least one vertical holding its rounds", async () =>
     event.verticals[0].rounds.map((round) => String(round._id)),
     event.rounds.map((round) => String(round._id)),
   );
+});
+
+test("a first-round application form shares the registration deadline", async () => {
+  const deadline = new Date("2026-10-01T18:30:00.000Z");
+  const event = new eventModel({
+    clubId: new mongoose.Types.ObjectId(),
+    title: "Application-first recruitment",
+    shortDescription: "The form is the registration step",
+    registrationDeadlineAt: deadline,
+    rounds: normalizeRounds([{
+      title: "Application form",
+      type: "submission",
+      startsAt: "2026-09-01T00:00:00.000Z",
+      endsAt: "2026-09-20T00:00:00.000Z",
+      submissionFields: [{ key: "motivation", label: "Motivation", type: "long_text" }],
+    }]),
+  });
+  await event.validate();
+  assert.equal(event.verticals[0].rounds[0].endsAt.toISOString(), deadline.toISOString());
+  assert.equal(event.verticals[0].rounds[0].submissionDeadlineAt.toISOString(), deadline.toISOString());
 });
 
 test("each vertical carries independent rounds and team rules", async () => {

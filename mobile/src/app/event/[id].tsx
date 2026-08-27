@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 
 import { EventTeamPanel, TeamAction } from '@/components/event-team';
-import { EventWorkflowPanel } from '@/components/event-workflow';
+import { EventWorkflowPanel, InitialApplicationForm } from '@/components/event-workflow';
 import { Badge, Button, Card, ErrorState, Heading, LoadingState, MetaRow, RemoteImage, Screen } from '@/components/ui';
 import { palette, radius, spacing, typography } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
@@ -70,7 +70,7 @@ export default function EventDetailScreen() {
       <RemoteImage uri={event.eventBanner || event.clubId?.clubBanner} style={styles.heroImage} />
       <View style={styles.titleBlock}><Badge tone="accent">{titleCase(event.eventType || 'event')}</Badge><Text style={styles.club}>{event.clubId?.name}</Text><Heading size="xl">{event.title}</Heading>{event.shortDescription ? <Text style={styles.lead}>{event.shortDescription}</Text> : null}</View>
       <Card style={styles.metaCard}>
-        {eventDeadline(event) ? <MetaRow icon="time-outline">Apply by {formatDateTime(eventDeadline(event))}</MetaRow> : null}
+        {eventDeadline(event) ? <MetaRow icon="time-outline">Application deadline · {formatDateTime(eventDeadline(event))}</MetaRow> : null}
         {event.verticalsEnabled && event.verticals?.length ? <MetaRow icon="layers-outline">{event.verticals.length} vertical{event.verticals.length === 1 ? '' : 's'}</MetaRow> : null}
         {totalRounds ? <MetaRow icon="git-branch-outline">{totalRounds} recruitment round{totalRounds === 1 ? '' : 's'}</MetaRow> : null}
       </Card>
@@ -90,10 +90,18 @@ export default function EventDetailScreen() {
                 const status = vertical.detail?.studentOverallStatus || vertical.detail?.overallStatus || 'submitted';
                 const blockedReason = !platformOpen ? 'Recruitment registrations are currently paused.' : vertical.blockedReason || vertical.eligibilityReason;
                 const isTeam = vertical.registrationType !== 'individual';
+                const firstRound = vertical.rounds?.[0];
+                const startsWithApplicationForm = firstRound?.type === 'submission' && firstRound.submissionEnabled !== false;
+                const initialApplicationForm = startsWithApplicationForm && firstRound && canApply ? <InitialApplicationForm
+                  eventId={id!}
+                  verticalId={vertical._id}
+                  round={firstRound}
+                  onSaved={async () => { await Promise.all([detailsQuery.reload(), query.reload()]); }}
+                /> : undefined;
                 return <Card key={vertical._id} style={styles.applicationCard}>
-                  <View style={styles.applicationHeader}><View style={styles.applicationHeading}>{event.verticalsEnabled ? <Text style={styles.roundNumber}>Vertical {applicationVerticals.indexOf(vertical) + 1}</Text> : null}<Text style={styles.applicationTitle}>{event.verticalsEnabled ? vertical.title : 'Application details'}</Text><Text style={styles.applicationMeta}>{isTeam ? `Team · ${vertical.minTeamSize || 1}–${vertical.maxTeamSize || 1} members` : 'Individual application'}</Text>{vertical.deadlineAt ? <Text style={styles.applicationMeta}>Registration deadline · {formatDateTime(vertical.deadlineAt)}</Text> : null}</View>{applied ? <Badge tone="success">{titleCase(status)}</Badge> : invited ? <Badge tone="info">Invited</Badge> : null}</View>
-                  {applied || invited ? <EventTeamPanel event={event} vertical={vertical} platformOpen={platformOpen} working={Boolean(workingVertical)} action={(endpoint, payload, options) => runAction(vertical, endpoint, payload, options)} />
-                    : <><Text style={styles.body}>{blockedReason || (isTeam ? 'Apply as captain, then invite teammates using their IITR email.' : 'Submit your application for this event.')}</Text><Button label={workingVertical === vertical._id ? 'Submitting…' : 'Apply now'} loading={workingVertical === vertical._id} disabled={!canApply || Boolean(workingVertical)} onPress={() => void confirmApply(vertical)} icon="arrow-forward" />{vertical.deadlineAt && canApply ? <Text style={styles.deadline}>Closes {formatDateTime(vertical.deadlineAt)}</Text> : null}</>}
+                  <View style={styles.applicationHeader}><View style={styles.applicationHeading}>{event.verticalsEnabled ? <Text style={styles.roundNumber}>Vertical {applicationVerticals.indexOf(vertical) + 1}</Text> : null}<Text style={styles.applicationTitle}>{event.verticalsEnabled ? vertical.title : 'Application details'}</Text><Text style={styles.applicationMeta}>{isTeam ? `Team · ${vertical.minTeamSize || 1}–${vertical.maxTeamSize || 1} members` : 'Individual application'}</Text>{vertical.deadlineAt ? <Text style={styles.applicationMeta}>{startsWithApplicationForm ? 'Application deadline' : 'Registration deadline'} · {formatDateTime(vertical.deadlineAt)}</Text> : null}</View>{applied ? <Badge tone="success">{titleCase(status)}</Badge> : invited ? <Badge tone="info">Invited</Badge> : null}</View>
+                  {applied || invited ? <EventTeamPanel event={event} vertical={vertical} platformOpen={platformOpen} working={Boolean(workingVertical)} action={(endpoint, payload, options) => runAction(vertical, endpoint, payload, options)} startOwnApplication={initialApplicationForm} />
+                    : <><Text style={styles.body}>{blockedReason || (startsWithApplicationForm ? isTeam ? 'Complete the form below. Submitting it registers your application and creates your team with you as captain.' : 'Complete the form below. Submitting it also registers you for the event.' : isTeam ? 'Apply as captain, then invite teammates using their IITR email.' : 'Submit your application for this event.')}</Text>{initialApplicationForm || <Button label={workingVertical === vertical._id ? 'Submitting…' : 'Apply now'} loading={workingVertical === vertical._id} disabled={!canApply || Boolean(workingVertical)} onPress={() => void confirmApply(vertical)} icon="arrow-forward" />}{vertical.deadlineAt && canApply ? <Text style={styles.deadline}>Closes {formatDateTime(vertical.deadlineAt)}</Text> : null}</>}
                 </Card>;
               })}
       </View>

@@ -86,6 +86,20 @@ function parsedArray(value, fallback = []) {
   }
 }
 
+function eventFormConfigurationError(verticals, eventDeadline) {
+  for (const vertical of verticals || []) {
+    const firstRound = vertical.rounds?.[0];
+    if (firstRound?.type === "submission" && !(vertical.registrationDeadlineAt || eventDeadline)) {
+      return `${vertical.title || "Application"} needs an application deadline`;
+    }
+    for (const round of vertical.rounds || []) {
+      const invalidDropdown = (round.submissionFields || []).find((field) => field.type === "select" && (field.options || []).length < 2);
+      if (invalidDropdown) return `Dropdown field "${invalidDropdown.label}" in ${round.title} needs at least two options`;
+    }
+  }
+  return "";
+}
+
 module.exports.clubLogin = async (req, res) => {
   const error = validationResult(req);
 
@@ -537,6 +551,18 @@ module.exports.addEvent = async (req, res) => {
     legacyYears,
   );
 
+  const effectiveVerticals = requestedVerticals.length
+    ? requestedVerticals
+    : [{ title: title || "General", registrationDeadlineAt: null, rounds }];
+  const formConfigurationError = eventFormConfigurationError(
+    effectiveVerticals,
+    registrationDeadlineAt || registerationDeadline,
+  );
+  if (formConfigurationError) {
+    await destroyUploadedFile(req.file);
+    return res.status(400).json({ success: false, msg: formConfigurationError });
+  }
+
 
   let eventBanner = "";
   let eventBannerPublicId = "";
@@ -727,6 +753,11 @@ module.exports.updateEvent = async (req, res) => {
       }];
 
     const retainedVerticalIds = new Set(incoming.filter((vertical) => vertical._id).map((vertical) => String(vertical._id)));
+    const formConfigurationError = eventFormConfigurationError(incoming, event.registrationDeadlineAt);
+    if (formConfigurationError) {
+      await destroyUploadedFile(req.file);
+      return res.status(400).json({ success: false, msg: formConfigurationError });
+    }
     const removedVerticals = (event.verticals || []).filter((vertical) => !retainedVerticalIds.has(String(vertical._id)));
     if (removedVerticals.length) {
       const blocked = await registerationEventModel.exists({

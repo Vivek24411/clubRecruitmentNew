@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { Badge, Button, Card, Field, Input, SkeletonList, Textarea } from "./ui";
+import { Badge, Button, Card, Field, Input, Select, SkeletonList, Textarea } from "./ui";
 import { uploadDirect } from "../utils/directUpload";
 
 const tone = { advanced: "ok", rejected: "bad", waitlisted: "warn", submitted: "info", under_review: "warn", scheduled: "info", eligible: "neutral", active: "accent", withdrawn: "neutral", revoked: "neutral", missed: "bad" };
@@ -22,11 +22,12 @@ function pickedFileError(file) {
   return "";
 }
 
-function SubmissionForm({ eventId, round, candidate, existing, onSaved }) {
+export function SubmissionForm({ eventId, round, candidate, existing, onSaved, verticalId, initialApplication = false }) {
   const initialAnswers = Object.fromEntries((existing?.answers || []).map((answer) => [answer.key, answer.value]));
   const [answers, setAnswers] = useState(initialAnswers);
   const [files, setFiles] = useState({});
   const [saving, setSaving] = useState(false);
+  const inputId = candidate?._id || verticalId || "application";
   const canSubmit = !round.submissionOpensAt || new Date(round.submissionOpensAt) <= new Date();
   const beforeDeadline = !round.submissionDeadlineAt || new Date(round.submissionDeadlineAt) >= new Date();
 
@@ -50,16 +51,20 @@ function SubmissionForm({ eventId, round, candidate, existing, onSaved }) {
       const directAssets = await Promise.all(entries.map(([, file]) =>
         uploadDirect(file, { role: "student", kind: "submission" })));
       const payload = {
-        candidateId: candidate._id,
+        ...(candidate?._id ? { candidateId: candidate._id } : {}),
+        ...(verticalId ? { verticalId } : {}),
         answersJSON: JSON.stringify(Object.entries(answers).map(([key, value]) => ({ key, value }))),
         fileKeysJSON: JSON.stringify(entries.map(([key]) => key)),
         directAssets,
       };
-      const { data } = await axios.put(`${import.meta.env.VITE_BASE_URI}/student/events/${eventId}/rounds/${round._id}/submission`, payload);
+      const url = initialApplication
+        ? `${import.meta.env.VITE_BASE_URI}/student/events/${eventId}/application`
+        : `${import.meta.env.VITE_BASE_URI}/student/events/${eventId}/rounds/${round._id}/submission`;
+      const { data } = await axios({ method: initialApplication ? "post" : "put", url, data: payload });
       if (!data.success) throw new Error(data.msg);
       toast.success(data.msg);
       setFiles({});
-      onSaved();
+      await onSaved?.();
     } catch (error) {
       toast.error(error.response?.data?.msg || error.message || "Could not submit work");
     } finally {
@@ -70,11 +75,11 @@ function SubmissionForm({ eventId, round, candidate, existing, onSaved }) {
   return (
     <form onSubmit={submit} className="mt-5 space-y-4 border-t border-line pt-5">
       {(round.submissionFields || []).map((field) => (
-        <Field key={field.key} label={field.label} id={`${candidate._id}-${field.key}`} required={field.required} hint={[field.helpText, ["file", "pdf", "video"].includes(field.type) ? uploadHint(field.type) : ""].filter(Boolean).join(" ")}>
+        <Field key={field.key} label={field.label} id={`${inputId}-${field.key}`} required={field.required} hint={[field.helpText, ["file", "pdf", "video"].includes(field.type) ? uploadHint(field.type) : ""].filter(Boolean).join(" ")}>
           {["file", "pdf", "video"].includes(field.type) ? (
             <>
               <input
-                id={`${candidate._id}-${field.key}`}
+                id={`${inputId}-${field.key}`}
                 type="file"
                 required={field.required && !existing?.files?.some((file) => file.fieldKey === field.key)}
                 accept={field.type === "video" ? "video/mp4,video/webm,video/quicktime" : field.type === "pdf" ? "application/pdf" : "image/jpeg,image/png,image/webp,application/pdf"}
@@ -86,20 +91,25 @@ function SubmissionForm({ eventId, round, candidate, existing, onSaved }) {
             </>
           ) : field.type === "boolean" ? (
             <label className="flex items-start gap-3 rounded-sm border border-line bg-surface px-4 py-3 text-sm text-ink-2">
-              <input id={`${candidate._id}-${field.key}`} type="checkbox" required={field.required} checked={answers[field.key] === "true"} onChange={(event) => setAnswers({ ...answers, [field.key]: String(event.target.checked) })} className="mt-0.5" />
+              <input id={`${inputId}-${field.key}`} type="checkbox" required={field.required} checked={answers[field.key] === "true"} onChange={(event) => setAnswers({ ...answers, [field.key]: String(event.target.checked) })} className="mt-0.5" />
               <span>Select to confirm</span>
             </label>
+          ) : field.type === "select" ? (
+            <Select id={`${inputId}-${field.key}`} required={field.required} value={answers[field.key] || ""} onChange={(event) => setAnswers({ ...answers, [field.key]: event.target.value })}>
+              <option value="">Choose an option</option>
+              {(field.options || []).map((option) => <option key={option} value={option}>{option}</option>)}
+            </Select>
           ) : ["text", "long_text"].includes(field.type) ? (
-            <Textarea id={`${candidate._id}-${field.key}`} rows="4" required={field.required} value={answers[field.key] || ""} onChange={(event) => setAnswers({ ...answers, [field.key]: event.target.value })} />
+            <Textarea id={`${inputId}-${field.key}`} rows="4" required={field.required} value={answers[field.key] || ""} onChange={(event) => setAnswers({ ...answers, [field.key]: event.target.value })} />
           ) : field.type === "short_text" ? (
-            <Input id={`${candidate._id}-${field.key}`} type="text" required={field.required} value={answers[field.key] || ""} onChange={(event) => setAnswers({ ...answers, [field.key]: event.target.value })} />
+            <Input id={`${inputId}-${field.key}`} type="text" required={field.required} value={answers[field.key] || ""} onChange={(event) => setAnswers({ ...answers, [field.key]: event.target.value })} />
           ) : (
-            <Input id={`${candidate._id}-${field.key}`} type="url" required={field.required} value={answers[field.key] || ""} onChange={(event) => setAnswers({ ...answers, [field.key]: event.target.value })} placeholder={field.type === "github" ? "https://github.com/..." : field.type === "drive_link" ? "https://drive.google.com/..." : "https://"} />
+            <Input id={`${inputId}-${field.key}`} type="url" required={field.required} value={answers[field.key] || ""} onChange={(event) => setAnswers({ ...answers, [field.key]: event.target.value })} placeholder={field.type === "github" ? "https://github.com/..." : field.type === "drive_link" ? "https://drive.google.com/..." : "https://"} />
           )}
         </Field>
       ))}
       <Button type="submit" loading={saving} disabled={!canSubmit || !beforeDeadline || (existing && !round.allowResubmission)}>
-        {saving ? "Uploading..." : existing ? "Update submission" : "Submit work"}
+        {saving ? "Uploading..." : initialApplication ? "Submit application" : existing ? "Update submission" : "Submit work"}
       </Button>
       {!canSubmit && <p className="text-sm text-warn">Submissions open {format(round.submissionOpensAt)}.</p>}
       {!beforeDeadline && <p className="text-sm text-bad">The submission deadline has passed.</p>}

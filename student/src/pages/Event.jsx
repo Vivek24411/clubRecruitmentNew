@@ -436,6 +436,7 @@ export default function Event() {
                   action(endpoint, payload, confirmation, vertical._id)}
                 onSignIn={() => rememberEventAndNavigate("/login")}
                 onRegister={() => rememberEventAndNavigate("/register")}
+                onApplicationSubmitted={load}
                 showHeading
                 verticalNumber={verticalsEnabled ? index + 1 : null}
               />

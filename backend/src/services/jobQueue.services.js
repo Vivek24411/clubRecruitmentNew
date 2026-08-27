@@ -105,6 +105,17 @@ async function enqueueNotification(studentId, notification, options = {}) {
   return job || null;
 }
 
+function notificationChannels(payload = {}) {
+  // Publication announcements are catalogue discovery, not transactional
+  // mail. Force old queued jobs (created before channels were persisted) to
+  // remain browser-push-only as well as all newly queued announcements.
+  if (payload.notification?.type === "event_published") return new Set(["push"]);
+  const configured = Array.isArray(payload.channels)
+    ? payload.channels.filter((channel) => ["inApp", "email", "push"].includes(channel))
+    : [];
+  return new Set(configured.length ? configured : ["inApp", "email", "push"]);
+}
+
 async function claimJob() {
   const now = new Date();
   const staleLock = new Date(now.getTime() - 5 * 60 * 1000);
@@ -125,7 +136,7 @@ async function claimJob() {
 
 async function deliverNotification(job) {
   const { studentId, notification } = job.payload || {};
-  const channels = new Set(Array.isArray(job.payload?.channels) ? job.payload.channels : ["inApp", "email", "push"]);
+  const channels = notificationChannels(job.payload);
   if (!studentId || !notification) return;
   const eventLink = String(notification.link || "").match(/^\/event\/([a-f\d]{24})$/i);
   if (eventLink && !await eventModel.exists({
@@ -316,6 +327,7 @@ module.exports = {
   dateInKolkata,
   enqueueNotification,
   enqueueNotifications,
+  notificationChannels,
   enqueueSessionReminder,
   enqueueSessionReminders,
   sessionReminderRunAt,

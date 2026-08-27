@@ -81,7 +81,7 @@ function RegistrationTypeFields({ registrationType, minTeamSize, maxTeamSize, id
   );
 }
 
-function VerticalEditor({ vertical, index, total, onChange, onRemove, onMove }) {
+function VerticalEditor({ vertical, index, total, eventRegistrationDeadlineAt, onChange, onRemove, onMove }) {
   const set = (key, value) => onChange(index, { ...vertical, [key]: value });
 
   return (
@@ -124,7 +124,7 @@ function VerticalEditor({ vertical, index, total, onChange, onRemove, onMove }) 
         <Field label="Participant limit (optional)" id={`vertical-capacity-${index}`} hint="Counts people in this vertical only.">
           <Input id={`vertical-capacity-${index}`} type="number" min="1" max="10000" value={vertical.maxParticipants} onChange={(event) => set("maxParticipants", event.target.value)} placeholder="Unlimited" />
         </Field>
-        <Field label="Own registration deadline (optional)" id={`vertical-deadline-${index}`} hint="Leave empty to use the event registration deadline.">
+        <Field label="Own registration deadline (optional)" id={`vertical-deadline-${index}`} hint="Leave empty to use the event deadline. For a Round 1 application form, this is also its submission deadline.">
           <DateTimeInput id={`vertical-deadline-${index}`} value={vertical.registrationDeadlineAt} onChange={(value) => set("registrationDeadlineAt", value)} quickTimes={["17:00", "20:00", "23:00", "23:59"]} />
         </Field>
         <Field label="Problem statement Drive link (optional)" id={`vertical-problem-${index}`} className="sm:col-span-2 lg:col-span-4" hint="Students will see this as a clickable link.">
@@ -137,6 +137,7 @@ function VerticalEditor({ vertical, index, total, onChange, onRemove, onMove }) 
           rounds={vertical.rounds}
           onChange={(rounds) => set("rounds", rounds)}
           registrationType={vertical.registrationType}
+          registrationDeadlineAt={vertical.registrationDeadlineAt || eventRegistrationDeadlineAt}
         />
       </div>
       </div>
@@ -153,6 +154,7 @@ export default function VerticalBuilder({
   minTeamSize,
   maxTeamSize,
   problemStatementUrl,
+  registrationDeadlineAt,
   onToggle,
   onVerticalsChange,
   onRoundsChange,
@@ -237,6 +239,7 @@ export default function VerticalBuilder({
                 vertical={vertical}
                 index={index}
                 total={verticals.length}
+                eventRegistrationDeadlineAt={registrationDeadlineAt}
                 onChange={update}
                 onMove={move}
                 onRemove={remove}
@@ -278,7 +281,7 @@ export default function VerticalBuilder({
               </Field>
             </div>
             <div className="mt-6 rounded-sm border border-line bg-paper-2/60 p-4 sm:p-5">
-              <RoundBuilder rounds={rounds} onChange={onRoundsChange} registrationType={registrationType} />
+              <RoundBuilder rounds={rounds} onChange={onRoundsChange} registrationType={registrationType} registrationDeadlineAt={registrationDeadlineAt} />
             </div>
           </div>
         </section>

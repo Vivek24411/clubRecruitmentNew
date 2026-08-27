@@ -39,6 +39,7 @@ const {
   cancelSessionRsvp,
   getSessionRsvp,
   getAcademicOptions,
+  submitInitialApplication,
 } = require("../controllers/student.controllers");
 const { optionalStudentAuth, studentAuth } = require("../middlewares/auth.middlewares");
 const rateLimit = require("../middlewares/rateLimit");
@@ -153,6 +154,13 @@ router.post('/registerEvent',studentAuth,[
   body('eventId').isMongoId().withMessage("Invalid event ID"),
   body('verticalId').optional().isMongoId().withMessage("Invalid vertical ID")
 ], validateRequest, registerEvent)
+
+router.post('/events/:eventId/application', studentAuth, upload.submissionUpload.array('files', 5), attachDirectAssets('submission'), [
+  param('eventId').isMongoId(),
+  body('verticalId').optional().isMongoId().withMessage('Invalid vertical ID'),
+  body('answersJSON').optional().isString().isLength({ max: 50000 }),
+  body('fileKeysJSON').optional().isString().isLength({ max: 2000 }),
+], validateRequest, submitInitialApplication)
 
 router.get('/getEventDetails',studentAuth,[
   query('eventId').isMongoId().withMessage("Invalid event ID")

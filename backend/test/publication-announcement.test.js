@@ -4,7 +4,7 @@ const eventModel = require("../src/models/event.model");
 const sessionModel = require("../src/models/session.model");
 const pushRegistrationModel = require("../src/models/pushRegistration.model");
 const jobModel = require("../src/models/job.model");
-const { enqueueNotifications } = require("../src/services/jobQueue.services");
+const { enqueueNotifications, notificationChannels } = require("../src/services/jobQueue.services");
 const { notifyPushRegisteredStudents } = require("../src/services/notification.services");
 const {
   buildEventPublicationNotification,
@@ -54,6 +54,17 @@ test("notification jobs can be explicitly limited to browser push", async () => 
   } finally {
     jobModel.insertMany = original;
   }
+});
+
+test("legacy event-listing jobs without channel metadata can never send email", () => {
+  assert.deepEqual(
+    [...notificationChannels({ notification: { type: "event_published" } })],
+    ["push"],
+  );
+  assert.deepEqual(
+    [...notificationChannels({ notification: { type: "round_advanced" } })],
+    ["inApp", "email", "push"],
+  );
 });
 
 test("global announcements target only active installations on the configured student origin", async () => {

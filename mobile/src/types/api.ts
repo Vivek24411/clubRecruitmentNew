@@ -48,9 +48,10 @@ export type EventRound = {
   submissionFields?: {
     key: string;
     label: string;
-    type: 'text' | 'short_text' | 'long_text' | 'boolean' | 'url' | 'drive_link' | 'github' | 'file' | 'pdf' | 'video';
+    type: 'text' | 'short_text' | 'long_text' | 'boolean' | 'select' | 'url' | 'drive_link' | 'github' | 'file' | 'pdf' | 'video';
     required?: boolean;
     helpText?: string;
+    options?: string[];
   }[];
 };
 

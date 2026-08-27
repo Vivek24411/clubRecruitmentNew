@@ -19,6 +19,7 @@ const { sessionsWithConfirmedRsvpCounts } = require("../services/sessionRsvp.ser
 const { sessionEndAt } = require("../utils/sessionSchedule");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryAsset, destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
+const { prepareRoundSubmission, saveRoundSubmission } = require("../services/roundSubmission.services");
 const applicationHistoryModel = require("../models/applicationHistory.model");
 const roundCandidateModel = require("../models/roundCandidate.model");
 const roundSubmissionModel = require("../models/roundSubmission.model");
@@ -755,195 +756,224 @@ module.exports.getDashBoard = async (req, res, next) => {
   });
 };
 
-module.exports.registerEvent = async (req, res, next) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.json({ errors: errors.array(), success: false });
+function registrationError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+async function createDirectRegistration({ event, settings, student, verticalId, initialFormSubmission = false }) {
+  await ensureEventVerticals(event);
+  const eventId = event._id;
+  const studentId = student._id;
+  const vertical = eventVertical(event, verticalId);
+  if (!vertical) throw registrationError(404, "This vertical is no longer available");
+  const firstRound = verticalRounds(event, vertical._id)[0];
+  if (firstRound?.type === "submission" && !initialFormSubmission) {
+    throw registrationError(400, "Complete and submit the application form to register");
+  }
+  if (!platformRegistrationIsOpen(settings)) throw registrationError(403, "Recruitment registrations are currently closed");
+  if (!await clubModel.exists({ _id: event.clubId, status: "active" })) throw registrationError(404, "Event not found");
+  if (!registrationIsOpen(event)) throw registrationError(400, "Registration is closed");
+  if (vertical.status === "closed") throw registrationError(400, `Applications to ${vertical.title} are closed`);
+  const deadline = verticalDeadlineAt(event, vertical);
+  if (deadline && new Date(deadline) < new Date()) throw registrationError(400, `The deadline for ${vertical.title} has passed`);
+
+  const eligibility = eventEligibility(verticalEligibilitySource(event, vertical), student, settings);
+  if (!eligibility.eligible) throw registrationError(403, eligibility.reason);
+
+  const [existingMembership, acceptedElsewhere, alreadyRegistered] = await Promise.all([
+    activeEventMembership(eventId, vertical._id, studentId),
+    registerationEventModel.exists({ eventId, verticalId: vertical._id, membersAccepted: studentId, overallStatus: { $ne: "withdrawn" } }),
+    registerationEventModel.findOne({ eventId, verticalId: vertical._id, studentId, overallStatus: { $ne: "withdrawn" } }),
+  ]);
+  if (existingMembership || acceptedElsewhere) throw registrationError(409, `You already belong to a team in ${vertical.title}`);
+  if (alreadyRegistered) throw registrationError(409, `You have already applied to ${vertical.title}`);
+
+  if (event.maxVerticalApplications != null) {
+    const otherApplications = await eventMembershipModel.countDocuments({ eventId, studentId, verticalId: { $ne: vertical._id } });
+    if (otherApplications >= event.maxVerticalApplications) {
+      throw registrationError(409, event.maxVerticalApplications === 1
+        ? "This event lets you apply to only one vertical"
+        : `You can apply to at most ${event.maxVerticalApplications} verticals in this event`);
     }
+  }
+  if (vertical.maxParticipants && await activeParticipantCount(eventId, vertical._id) >= vertical.maxParticipants) {
+    throw registrationError(409, `${vertical.title} has reached its participant limit`);
+  }
 
-    const { eventId, verticalId } = req.body;
-    const studentId = req.student._id;
+  const roundDetailsStudent = (event.roundDetails || []).map((round) => ({
+    ...round,
+    selected: false,
+    status: "not_scheduled",
+    roundDate: null,
+    remarks: "",
+  }));
+  const resetAt = new Date();
+  let reusedWithdrawnAttempt = true;
+  let registeration = await registerationEventModel.findOneAndUpdate(
+    { eventId, verticalId: vertical._id, studentId, overallStatus: "withdrawn" },
+    { $set: {
+      roundDetails: roundDetailsStudent,
+      numberOfRounds: vertical.numberOfRounds,
+      membersAccepted: [],
+      membersOffered: [],
+      teamName: null,
+      overallStatus: "submitted",
+      currentRound: 0,
+      currentRoundId: null,
+      reviewerNotes: "",
+      score: null,
+      source: { type: "direct", eventId: null, verticalId: null, roundId: null, registrationId: null },
+      registeredAt: resetAt,
+      updatedAt: resetAt,
+    } },
+    { new: true, sort: { updatedAt: -1 }, runValidators: true },
+  );
 
-    const [event, settings] = await Promise.all([
-      eventModel.findById(eventId),
-      getPlatformSettingsCached(),
-    ]);
-    if (!event) {
-      return res.json({ success: false, msg: "Event not found" });
-    }
-    await ensureEventVerticals(event);
-
-    const vertical = eventVertical(event, verticalId);
-    if (!vertical) {
-      return res.status(404).json({ success: false, msg: "This vertical is no longer available" });
-    }
-
-    if (!platformRegistrationIsOpen(settings)) {
-      return res.status(403).json({ success: false, msg: "Recruitment registrations are currently closed" });
-    }
-
-    if (!await requireActiveEventClub(event, res)) return;
-
-    if (!registrationIsOpen(event)) {
-      return res.status(400).json({ success: false, msg: "Registration is closed" });
-    }
-    if (vertical.status === "closed") {
-      return res.status(400).json({ success: false, msg: `Applications to ${vertical.title} are closed` });
-    }
-    const verticalDeadline = verticalDeadlineAt(event, vertical);
-    if (verticalDeadline && new Date(verticalDeadline) < new Date()) {
-      return res.status(400).json({ success: false, msg: `The deadline for ${vertical.title} has passed` });
-    }
-
-    const eligibility = eventEligibility(verticalEligibilitySource(event, vertical), req.student, settings);
-    if (!eligibility.eligible) {
-      return res.status(403).json({ success: false, msg: eligibility.reason });
-    }
-
-    const existingMembership = await activeEventMembership(eventId, vertical._id, studentId);
-    const acceptedElsewhere = await registerationEventModel.exists({
-      eventId,
-      verticalId: vertical._id,
-      membersAccepted: studentId,
-      overallStatus: { $ne: "withdrawn" },
-    });
-    if (existingMembership || acceptedElsewhere) {
-      return res.status(409).json({ success: false, msg: `You already belong to a team in ${vertical.title}` });
-    }
-
-    const alreadyRegistered = await registerationEventModel.findOne({
-      eventId,
-      verticalId: vertical._id,
-      studentId,
-      overallStatus: { $ne: "withdrawn" },
-    });
-    if (alreadyRegistered) {
-      return res.json({
-        success: false,
-        msg: `You have already applied to ${vertical.title}`,
-      });
-    }
-
-    // How many other verticals of this event the student is already in.
-    if (event.maxVerticalApplications != null) {
-      const otherApplications = await eventMembershipModel.countDocuments({
-        eventId,
-        studentId,
-        verticalId: { $ne: vertical._id },
-      });
-      if (otherApplications >= event.maxVerticalApplications) {
-        return res.status(409).json({
-          success: false,
-          msg: event.maxVerticalApplications === 1
-            ? "This event lets you apply to only one vertical"
-            : `You can apply to at most ${event.maxVerticalApplications} verticals in this event`,
-        });
-      }
-    }
-
-    if (vertical.maxParticipants && await activeParticipantCount(eventId, vertical._id) >= vertical.maxParticipants) {
-      return res.status(409).json({ success: false, msg: `${vertical.title} has reached its participant limit` });
-    }
-
-    const roundDetailsStudent = (event.roundDetails || []).map((round) => ({
-      ...round,
-      selected: false,
-      status: "not_scheduled",
-      roundDate: null,
-      remarks: "",
-    }));
-
-
-    const resetAt = new Date();
-    let reusedWithdrawnAttempt = true;
-    let registeration = await registerationEventModel.findOneAndUpdate(
-      { eventId, verticalId: vertical._id, studentId, overallStatus: "withdrawn" },
-      {
-        $set: {
-          roundDetails: roundDetailsStudent,
-          numberOfRounds: vertical.numberOfRounds,
-          membersAccepted: [],
-          membersOffered: [],
-          teamName: null,
-          overallStatus: "submitted",
-          currentRound: 0,
-          currentRoundId: null,
-          reviewerNotes: "",
-          score: null,
-          source: { type: "direct", eventId: null, verticalId: null, roundId: null, registrationId: null },
-          registeredAt: resetAt,
-          updatedAt: resetAt,
-        },
-      },
-      { new: true, sort: { updatedAt: -1 }, runValidators: true },
-    );
-
-    if (registeration) {
-      try {
-        await clearRegistrationWorkflow(registeration._id);
-      } catch (error) {
-        registeration.overallStatus = "withdrawn";
-        await registeration.save();
-        throw error;
-      }
-    } else {
-      reusedWithdrawnAttempt = false;
-      try {
-        registeration = await registerationEventModel.create({
-          eventId,
-          verticalId: vertical._id,
-          studentId,
-          roundDetails: roundDetailsStudent,
-          numberOfRounds: vertical.numberOfRounds,
-        });
-      } catch (error) {
-        if (error?.code === 11000) {
-          return res.status(409).json({ success: false, msg: "You already have an application for this event. Refresh and try again" });
-        }
-        throw error;
-      }
-    }
-
+  if (registeration) {
     try {
-      await eventMembershipModel.create({
-        eventId,
-        verticalId: vertical._id,
-        registrationId: registeration._id,
-        studentId,
-        role: "captain",
-      });
+      await clearRegistrationWorkflow(registeration._id);
     } catch (error) {
-      if (reusedWithdrawnAttempt) {
-        registeration.overallStatus = "withdrawn";
-        await registeration.save();
-      } else {
-        await registerationEventModel.deleteOne({ _id: registeration._id });
-      }
-      if (error?.code === 11000) {
-        return res.status(409).json({ success: false, msg: `You already belong to a team in ${vertical.title}` });
-      }
+      registeration.overallStatus = "withdrawn";
+      await registeration.save();
       throw error;
     }
+  } else {
+    reusedWithdrawnAttempt = false;
+    try {
+      registeration = await registerationEventModel.create({
+        eventId,
+        verticalId: vertical._id,
+        studentId,
+        roundDetails: roundDetailsStudent,
+        numberOfRounds: vertical.numberOfRounds,
+      });
+    } catch (error) {
+      if (error?.code === 11000) throw registrationError(409, "You already have an application for this event. Refresh and try again");
+      throw error;
+    }
+  }
 
-    // Pending invitations from other teams in this same vertical no longer apply.
+  try {
+    await eventMembershipModel.create({ eventId, verticalId: vertical._id, registrationId: registeration._id, studentId, role: "captain" });
     await registerationEventModel.updateMany(
       { eventId, verticalId: vertical._id, membersOffered: studentId },
-      { $pull: { membersOffered: studentId } }
+      { $pull: { membersOffered: studentId } },
     );
     await initializeRegistrationWorkflow(event, registeration);
-    await writeAudit({ actorRole: "student", actorId: studentId, action: "event.register", targetType: "event", targetId: eventId });
+  } catch (error) {
+    await eventMembershipModel.deleteMany({ registrationId: registeration._id });
+    await clearRegistrationWorkflow(registeration._id);
+    if (reusedWithdrawnAttempt) {
+      registeration.overallStatus = "withdrawn";
+      await registeration.save();
+    } else {
+      await registerationEventModel.deleteOne({ _id: registeration._id });
+    }
+    if (error?.code === 11000) throw registrationError(409, `You already belong to a team in ${vertical.title}`);
+    throw error;
+  }
+  return { registeration, vertical, firstRound };
+}
 
-   
+module.exports.registerEvent = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array(), success: false });
+  try {
+    const [event, settings] = await Promise.all([
+      eventModel.findById(req.body.eventId),
+      getPlatformSettingsCached(),
+    ]);
+    if (!event) return res.status(404).json({ success: false, msg: "Event not found" });
+    const { registeration } = await createDirectRegistration({
+      event,
+      settings,
+      student: req.student,
+      verticalId: req.body.verticalId,
+    });
+    await writeAudit({ actorRole: "student", actorId: req.student._id, action: "event.register", targetType: "event", targetId: event._id });
+    return res.json({ success: true, msg: "Registered successfully", registeration });
+  } catch (error) {
+    if (!error.status) console.error("Event registration failed:", error);
+    return res.status(error.status || 500).json({ success: false, msg: error.status ? error.message : "Unable to register for this event" });
+  }
+};
 
+module.exports.submitInitialApplication = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    await Promise.all((req.files || []).map(destroyUploadedFile));
+    return res.status(400).json({ success: false, msg: "Please correct the application form", errors: errors.array() });
+  }
+
+  let registeration = null;
+  try {
+    const [event, settings] = await Promise.all([
+      eventModel.findById(req.params.eventId),
+      getPlatformSettingsCached(),
+    ]);
+    if (!event) throw registrationError(404, "Event not found");
+    await ensureEventVerticals(event);
+    const vertical = eventVertical(event, req.body.verticalId);
+    const firstRound = verticalRounds(event, vertical?._id)[0];
+    if (!vertical || firstRound?.type !== "submission" || !firstRound.submissionEnabled) {
+      throw registrationError(404, "Application form not found");
+    }
+    const now = new Date();
+    if (firstRound.submissionOpensAt && firstRound.submissionOpensAt > now) {
+      throw registrationError(400, "Applications are not open yet");
+    }
+    if (firstRound.submissionDeadlineAt && firstRound.submissionDeadlineAt < now) {
+      throw registrationError(400, "The application deadline has passed");
+    }
+    const prepared = prepareRoundSubmission({
+      round: firstRound,
+      answersJSON: req.body.answersJSON,
+      fileKeysJSON: req.body.fileKeysJSON,
+      uploadedFiles: req.files || [],
+    });
+    ({ registeration } = await createDirectRegistration({
+      event,
+      settings,
+      student: req.student,
+      verticalId: vertical._id,
+      initialFormSubmission: true,
+    }));
+    const candidate = await roundCandidateModel.findOne({
+      registrationId: registeration._id,
+      roundId: firstRound._id,
+      participantIds: req.student._id,
+    });
+    if (!candidate) throw new Error("Initial round candidate was not created");
+    const saved = await saveRoundSubmission({
+      event,
+      round: firstRound,
+      candidate,
+      studentId: req.student._id,
+      uploadedFiles: req.files || [],
+      prepared,
+    });
+    await Promise.all([
+      writeAudit({ actorRole: "student", actorId: req.student._id, action: "event.register", targetType: "event", targetId: event._id }),
+      writeAudit({ actorRole: "student", actorId: req.student._id, action: "round.submit", targetType: "submission", targetId: saved.submission._id }),
+    ]);
     return res.json({
       success: true,
-      msg: "Registered successfully",
+      msg: "Application submitted and registration completed",
       registeration,
+      submission: saved.submission,
     });
-  } catch (err) {
-    console.error("Event registration failed:", err);
-    return res.status(500).json({ success: false, msg: "Unable to register for this event" });
+  } catch (error) {
+    if (registeration) {
+      await eventMembershipModel.deleteMany({ registrationId: registeration._id });
+      await clearRegistrationWorkflow(registeration._id);
+      registeration.overallStatus = "withdrawn";
+      await registeration.save();
+    }
+    await Promise.all((req.files || []).map(destroyUploadedFile));
+    if (!error.status) console.error("Initial application submission failed:", error);
+    return res.status(error.status || 500).json({ success: false, msg: error.status ? error.message : "Unable to submit the application" });
   }
 };
 

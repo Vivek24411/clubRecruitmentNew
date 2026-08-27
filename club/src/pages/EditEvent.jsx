@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { normalizeRoundsForForm } from "../components/RoundBuilder";
+import { findInvalidDropdownField, normalizeRoundsForForm } from "../components/RoundBuilder";
 import VerticalBuilder, { normalizeVerticalsForForm, serializeVertical } from "../components/VerticalBuilder";
 import EligibilityBuilder from "../components/EligibilityBuilder";
 import { eligibilityForForm } from "../utils/eligibility";
@@ -63,6 +63,11 @@ export default function EditEvent() {
     } else if (!form.rounds.length) {
       return toast.error("Keep at least one event round");
     }
+    const configuredRounds = form.verticalsEnabled
+      ? form.verticals.flatMap((vertical) => vertical.rounds || [])
+      : form.rounds;
+    const invalidDropdown = findInvalidDropdownField(configuredRounds);
+    if (invalidDropdown) return toast.error(`Dropdown field “${invalidDropdown.field.label || "Untitled field"}” in ${invalidDropdown.round.title} needs at least two options`);
     setSaving(true);
     try {
       const directAsset = await uploadDirect(banner, { role: "club", kind: "eventBanner" });
@@ -131,7 +136,7 @@ export default function EditEvent() {
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label="Event name" id="title" className="sm:col-span-2" required><Input id="title" value={form.title || ""} onChange={(event) => set("title", event.target.value)} required /></Field>
             <Field label="Event type" id="eventType"><Select id="eventType" value={form.eventType || "recruitment"} onChange={(event) => set("eventType", event.target.value)}><option value="recruitment">Recruitment</option><option value="hackathon">Hackathon</option><option value="competition">Competition</option><option value="other">Other</option></Select></Field>
-            <Field label="Registration deadline" id="deadline" className="sm:col-span-2"><DateTimeInput id="deadline" value={form.registrationDeadlineAt || ""} onChange={(value) => set("registrationDeadlineAt", value)} quickTimes={["17:00", "20:00", "23:00", "23:59"]} /></Field>
+            <Field label="Registration deadline" id="deadline" className="sm:col-span-2" required hint="When Round 1 is an application form, this is also its submission deadline."><DateTimeInput id="deadline" value={form.registrationDeadlineAt || ""} onChange={(value) => set("registrationDeadlineAt", value)} required quickTimes={["17:00", "20:00", "23:00", "23:59"]} /></Field>
             <Field label="Short description" id="shortDescription" className="sm:col-span-2"><Input id="shortDescription" value={form.shortDescription || ""} onChange={(event) => set("shortDescription", event.target.value)} /></Field>
             <Field label="Full description (optional)" id="longDescription" className="sm:col-span-2"><Textarea id="longDescription" rows="6" value={form.longDescription || ""} onChange={(event) => set("longDescription", event.target.value)} /></Field>
           </div>
@@ -161,6 +166,7 @@ export default function EditEvent() {
             minTeamSize={form.minTeamSize}
             maxTeamSize={form.maxTeamSize}
             problemStatementUrl={form.problemStatementUrl}
+            registrationDeadlineAt={form.registrationDeadlineAt}
             onToggle={(value) => set("verticalsEnabled", value)}
             onVerticalsChange={(verticals) => set("verticals", verticals)}
             onRoundsChange={(rounds) => set("rounds", rounds)}
