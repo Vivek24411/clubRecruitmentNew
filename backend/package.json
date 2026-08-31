@@ -6,6 +6,7 @@
     "start": "node server.js",
     "worker": "node worker.js",
     "test": "node --test",
+    "test:coverage": "node --experimental-test-coverage --test",
     "migrate:v2": "node scripts/migrate-v2.js",
     "migrate:v3": "node scripts/migrate-v3-workflows.js",
     "migrate:v4": "node scripts/migrate-v4-discovr.js",
@@ -13,8 +14,9 @@
     "migrate:v6": "node scripts/migrate-v6-scale-indexes.js",
     "migrate:v7": "node scripts/migrate-v7-push-notifications.js",
     "migrate:v8": "node scripts/migrate-v8-verticals.js",
+    "migrate:v9": "node scripts/migrate-v9-private-submissions.js",
     "seed:demo": "node scripts/seed-demo.js",
-    "check": "node --check app.js && node --check server.js && node --check worker.js && node --check src/middlewares/directUpload.js && node --check src/services/jobQueue.services.js && node --check src/services/roundReminder.services.js && node --check src/services/roundSubmission.services.js && node --check src/services/firebaseMessaging.services.js && node --check src/services/authPrincipalCache.services.js && node --check scripts/seed-demo.js && node --check scripts/migrate-v4-discovr.js && node --check scripts/migrate-v5-programmes.js && node --check scripts/migrate-v6-scale-indexes.js && node --check scripts/migrate-v7-push-notifications.js && node --check scripts/migrate-v8-verticals.js"
+    "check": "node --check app.js && node --check server.js && node --check worker.js && node --check src/middlewares/directUpload.js && node --check src/controllers/submissionFiles.controllers.js && node --check src/services/submissionFiles.services.js && node --check src/services/jobQueue.services.js && node --check src/services/roundReminder.services.js && node --check src/services/roundSubmission.services.js && node --check src/services/firebaseMessaging.services.js && node --check src/services/authPrincipalCache.services.js && node --check scripts/seed-demo.js && node --check scripts/migrate-v4-discovr.js && node --check scripts/migrate-v5-programmes.js && node --check scripts/migrate-v6-scale-indexes.js && node --check scripts/migrate-v7-push-notifications.js && node --check scripts/migrate-v8-verticals.js && node --check scripts/migrate-v9-private-submissions.js"
   },
   "keywords": [],
   "author": "",

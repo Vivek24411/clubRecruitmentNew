@@ -61,7 +61,6 @@ export default function ForgotPassword() {
       );
       if (!response.data.success) throw new Error(response.data.msg);
 
-      localStorage.removeItem("clubToken");
       toast.success("Password reset successful. Please sign in");
       navigate("/login", { replace: true });
     } catch (error) {

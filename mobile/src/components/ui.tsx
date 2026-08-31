@@ -7,7 +7,7 @@ import {
   ActivityIndicator, ImageStyle, Pressable, RefreshControl, ScrollView, StyleProp,
   StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle,
 } from 'react-native';
-import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { palette, radius, shadow, spacing, typography } from '@/constants/theme';
@@ -30,7 +30,7 @@ export function Screen({ children, refreshing, onRefresh, contentStyle, safeTop 
         showsVerticalScrollIndicator={false}
         refreshControl={onRefresh ? <RefreshControl refreshing={Boolean(refreshing)} onRefresh={onRefresh} tintColor={palette.accent} colors={[palette.accent]} /> : undefined}
       >
-        <Animated.View entering={FadeIn.duration(320)} style={[styles.screenContent, { paddingBottom: spacing.xl + Math.max(insets.bottom, spacing.lg) }, contentStyle]}>
+        <Animated.View entering={FadeInDown.duration(480).easing(Easing.out(Easing.cubic))} style={[styles.screenContent, { paddingBottom: spacing.xl + Math.max(insets.bottom, spacing.lg) }, contentStyle]}>
           {children}
         </Animated.View>
       </ScrollView>
@@ -62,7 +62,7 @@ export function Heading({ children, size = 'lg', inverse = false }: PropsWithChi
 }
 
 export function Card({ children, style }: PropsWithChildren<{ style?: StyleProp<ViewStyle> }>) {
-  return <View style={[styles.card, style]}>{children}</View>;
+  return <Animated.View entering={FadeInDown.duration(420).easing(Easing.out(Easing.cubic))} style={[styles.card, style]}>{children}</Animated.View>;
 }
 
 export function PressableScale({ children, onPress, style, accessibilityLabel, haptic = true }: PropsWithChildren<{
@@ -94,7 +94,7 @@ export function PressableScale({ children, onPress, style, accessibilityLabel, h
 
 export function Badge({ children, tone = 'neutral' }: PropsWithChildren<{ tone?: 'neutral' | 'accent' | 'success' | 'info' | 'warning' | 'danger' }>) {
   const toneStyle = { neutral: styles.badgeNeutral, accent: styles.badgeAccent, success: styles.badgeSuccess, info: styles.badgeInfo, warning: styles.badgeWarning, danger: styles.badgeDanger }[tone];
-  return <View style={[styles.badge, toneStyle]}><Text style={styles.badgeText}>{children}</Text></View>;
+  return <Animated.View entering={FadeIn.duration(300)} style={[styles.badge, toneStyle]}><Text style={styles.badgeText}>{children}</Text></Animated.View>;
 }
 
 export function Button({ label, onPress, variant = 'primary', loading = false, disabled = false, icon }: {
@@ -154,7 +154,8 @@ export function Field({ label, error, onFocus, onBlur, style, multiline, ...prop
 }
 
 export function SearchField({ value, onChangeText, placeholder }: { value: string; onChangeText: (value: string) => void; placeholder: string }) {
-  return <View style={styles.searchWrap}>
+  const [focused, setFocused] = useState(false);
+  return <View style={[styles.searchWrap, focused && styles.searchWrapFocused]}>
     <Ionicons name="search-outline" size={19} color={palette.muted} />
     <TextInput
       accessibilityRole="search"
@@ -164,6 +165,8 @@ export function SearchField({ value, onChangeText, placeholder }: { value: strin
       placeholderTextColor={palette.faint}
       selectionColor={palette.accent}
       returnKeyType="search"
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       style={styles.searchInput}
     />
     {value ? <Pressable accessibilityLabel="Clear search" hitSlop={8} onPress={() => onChangeText('')}><Ionicons name="close-circle" size={19} color={palette.faint} /></Pressable> : null}
@@ -171,15 +174,21 @@ export function SearchField({ value, onChangeText, placeholder }: { value: strin
 }
 
 export function FilterChip({ label, selected, onPress, icon }: { label: string; selected?: boolean; onPress: () => void; icon?: keyof typeof Ionicons.glyphMap }) {
-  return <Pressable
-    accessibilityRole="button"
-    accessibilityState={{ selected }}
-    onPress={() => { void Haptics.selectionAsync(); onPress(); }}
-    style={[styles.filterChip, selected && styles.filterChipSelected]}
-  >
-    {icon ? <Ionicons name={icon} size={15} color={selected ? palette.white : palette.inkSoft} /> : null}
-    <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>{label}</Text>
-  </Pressable>;
+  const scale = useSharedValue(1);
+  const motionStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return <Animated.View style={[styles.filterChipShell, motionStyle]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPressIn={() => { scale.set(withSpring(0.96, { damping: 18, stiffness: 320 })); }}
+      onPressOut={() => { scale.set(withSpring(1, { damping: 16, stiffness: 280 })); }}
+      onPress={() => { void Haptics.selectionAsync(); onPress(); }}
+      style={[styles.filterChip, selected && styles.filterChipSelected]}
+    >
+      {icon ? <Ionicons name={icon} size={15} color={selected ? palette.white : palette.inkSoft} /> : null}
+      <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>{label}</Text>
+    </Pressable>
+  </Animated.View>;
 }
 
 export function RemoteImage({ uri, style, contain = false }: { uri?: string; style?: StyleProp<ImageStyle>; contain?: boolean }) {
@@ -247,9 +256,11 @@ const styles = StyleSheet.create({
   inputFocused: { borderColor: palette.accent, borderWidth: 1.5, backgroundColor: palette.accentMist }, inputError: { borderColor: palette.danger },
   inputMultiline: { minHeight: 112, paddingTop: spacing.lg, textAlignVertical: 'top' }, fieldError: { color: palette.danger, fontFamily: typography.medium, fontSize: 12 },
   searchWrap: { minHeight: 52, borderWidth: 1, borderColor: palette.lineStrong, borderRadius: radius.sm, backgroundColor: palette.surface, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  searchWrapFocused: { borderColor: palette.accent, backgroundColor: palette.accentMist, ...shadow },
   searchInput: { flex: 1, minHeight: 50, color: palette.ink, fontFamily: typography.regular, fontSize: 15 },
+  filterChipShell: { alignSelf: 'flex-start' },
   filterChip: { minHeight: 38, borderRadius: radius.pill, borderWidth: 1, borderColor: palette.lineStrong, backgroundColor: palette.surface, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  filterChipSelected: { borderColor: palette.ink, backgroundColor: palette.ink }, filterChipText: { color: palette.inkSoft, fontFamily: typography.medium, fontSize: 13 }, filterChipTextSelected: { color: palette.white },
+  filterChipSelected: { borderColor: palette.accentDark, backgroundColor: palette.accent }, filterChipText: { color: palette.inkSoft, fontFamily: typography.medium, fontSize: 13 }, filterChipTextSelected: { color: palette.white },
   imageFallback: { backgroundColor: palette.accentDeep, alignItems: 'center', justifyContent: 'center' }, imageFallbackText: { color: palette.surface, fontFamily: typography.bold, fontSize: 26 },
   sectionHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.lg }, sectionHeaderText: { gap: spacing.xs, flex: 1 },
   state: { minHeight: 180, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md }, stateText: { color: palette.muted, fontFamily: typography.regular, fontSize: 14, lineHeight: 21, textAlign: 'center' },

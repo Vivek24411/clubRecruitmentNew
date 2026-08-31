@@ -89,9 +89,13 @@ const studentSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['active', 'suspended'],
+    enum: ['active', 'suspended', 'deleted'],
     default: 'active',
     index: true,
+  },
+  deletedAt: {
+    type: Date,
+    default: null,
   },
   notificationPreferences: {
     email: { type: Boolean, default: true },

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { eventApplicationsOpen, eventDeadline, eventIsOpen, formatDateTime } from "../utils/date";
+import { eventApplicationsOpen, eventDeadline, eventLifecycle, formatDateTime } from "../utils/date";
 import {
   Badge,
   Button,
@@ -23,7 +23,7 @@ export default function ClubEvents() {
     setIsLoading(true);
     try {
       const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getClubEvents`, {
-        params: { clubId },
+        params: { clubId, limit: 100 },
       });
       if (response.data.success) setClubEvents(response.data.events);
       else toast.error(response.data.msg);
@@ -48,7 +48,7 @@ export default function ClubEvents() {
         <PageHeader
           eyebrow="Recruitment"
           title="Events from this club"
-          description="Every opportunity this club is currently running, newest deadline first."
+          description="Ongoing and completed opportunities from this club."
         />
       </div>
 
@@ -57,8 +57,8 @@ export default function ClubEvents() {
           <SkeletonList rows={3} />
         ) : clubEvents.length === 0 ? (
           <EmptyState
-            title="No active events"
-            description="This club doesn't have any open recruitment events right now."
+            title="No events yet"
+            description="This club hasn't published any recruitment events yet."
             action={
               <Button to="/events" variant="secondary">
                 Browse all events
@@ -69,7 +69,7 @@ export default function ClubEvents() {
           <div className="stagger space-y-4">
             {clubEvents.map((event) => {
               const deadline = eventDeadline(event);
-              const open = eventIsOpen(event);
+              const lifecycle = eventLifecycle(event);
               const applicationsOpen = eventApplicationsOpen(event);
               return (
                 <Link
@@ -86,7 +86,7 @@ export default function ClubEvents() {
                         </p>
                       )}
                     </div>
-                    {open ? <Badge tone="ok">Open</Badge> : <Badge tone="neutral">Closed</Badge>}
+                    <Badge tone={lifecycle.tone} live={lifecycle.live}>{lifecycle.label}</Badge>
                   </div>
 
                   <MetaGrid cols={4} className="mt-6 border-t border-line pt-5">

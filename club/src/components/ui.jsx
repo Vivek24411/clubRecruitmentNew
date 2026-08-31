@@ -99,7 +99,7 @@ export function useCountUp(target, duration = 1100) {
 export function Page({ width = "7xl", className, children }) {
   const max = { "3xl": "max-w-3xl", "5xl": "max-w-5xl", "7xl": "max-w-7xl" }[width];
   return (
-    <div className={cx("mx-auto min-w-0 w-full px-4 py-8 sm:px-6 sm:py-10 lg:py-14", max, className)}>{children}</div>
+    <div className={cx("page-shell mx-auto min-w-0 w-full px-4 py-8 sm:px-6 sm:py-10 lg:py-14", max, className)}>{children}</div>
   );
 }
 
@@ -134,7 +134,7 @@ export function PageHeader({ eyebrow, title, description, actions, className }) 
 
 export function SectionHeader({ title, description, action, className }) {
   return (
-    <div className={cx("flex items-end justify-between gap-4", className)}>
+    <div className={cx("section-head flex items-end justify-between gap-4", className)}>
       <div className="min-w-0">
         <h2 className="display text-xl sm:text-2xl">{title}</h2>
         {description && <p className="mt-1.5 text-sm text-ink-3">{description}</p>}
@@ -203,10 +203,10 @@ export function Button({
   );
 
   const body = (
-    <>
+    <span className="btn-label">
       {loading && <span className="spinner" aria-hidden="true" />}
       {children}
-    </>
+    </span>
   );
 
   if (to) return <Link to={to} className={classes} {...rest}>{body}</Link>;
@@ -242,7 +242,7 @@ export function Badge({ tone = "neutral", live = false, className, children, ...
 
 export function Field({ label, hint, error, required, children, className, id }) {
   return (
-    <div className={className}>
+    <div className={cx("field-shell", className)}>
       {label && (
         <label className="label" htmlFor={id}>
           {label}
@@ -345,7 +345,7 @@ export function SkeletonList({ rows = 4, className }) {
   return (
     <div className={cx("space-y-3", className)} role="status" aria-label="Loading">
       {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="card p-5" style={{ opacity: 1 - index * 0.14 }}>
+        <div key={index} className="card skeleton-card p-5" style={{ opacity: 1 - index * 0.14 }}>
           <Skeleton className="h-3 w-24" />
           <Skeleton className="mt-3 h-5 w-2/3" />
           <Skeleton className="mt-3 h-3 w-1/3" />
@@ -359,12 +359,12 @@ export function EmptyState({ title, description, action, className }) {
   return (
     <div
       className={cx(
-        "reveal flex flex-col items-center rounded-md border border-dashed border-line-2 bg-surface/60 px-6 py-14 text-center",
+        "empty-state reveal flex flex-col items-center rounded-md border border-dashed border-line-2 bg-surface/60 px-6 py-14 text-center",
         className,
       )}
     >
       {/* A quiet drawn mark rather than a stock illustration. */}
-      <svg width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden="true">
+      <svg className="empty-state-mark" width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden="true">
         <circle cx="22" cy="22" r="21" stroke="currentColor" className="text-line-2" />
         <path
           d="M13 26.5c3-4 6-6 9-6s6 2 9 6"
@@ -418,7 +418,7 @@ export function Stat({ label, value, suffix, hint, tone, index, className }) {
 /** Label/value pair used throughout detail pages. */
 export function Meta({ label, value, className }) {
   return (
-    <div className={className}>
+    <div className={cx("meta-item", className)}>
       <dt className="eyebrow">{label}</dt>
       <dd className="mt-1.5 text-sm font-medium text-ink">{value ?? "—"}</dd>
     </div>
@@ -429,7 +429,7 @@ export function MetaGrid({ children, className, cols = 2 }) {
   return (
     <dl
       className={cx(
-        "grid gap-x-6 gap-y-5",
+        "meta-grid grid gap-x-6 gap-y-5",
         cols === 2 ? "grid-cols-1 sm:grid-cols-2" : cols === 3 ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
         className,
       )}
@@ -467,7 +467,7 @@ export function Monogram({ name = "", size = "md", className }) {
     <span
       aria-hidden="true"
       className={cx(
-        "grid flex-none place-items-center rounded-md font-semibold tracking-wide text-white",
+        "monogram grid flex-none place-items-center rounded-md font-semibold tracking-wide text-white",
         sizes[size],
         className,
       )}
@@ -492,7 +492,7 @@ export function Meter({ value = 0, max = 100, tone = "accent", label, className 
   const colors = { accent: "bg-accent", ok: "bg-ok", warn: "bg-warn", bad: "bg-bad" };
 
   return (
-    <div className={className}>
+    <div className={cx("meter", className)}>
       {label && (
         <div className="mb-1.5 flex items-baseline justify-between text-xs text-ink-3">
           <span>{label}</span>
@@ -502,14 +502,14 @@ export function Meter({ value = 0, max = 100, tone = "accent", label, className 
         </div>
       )}
       <div
-        className="h-1.5 overflow-hidden rounded-full bg-paper-3"
+        className="meter-track h-1.5 overflow-hidden rounded-full bg-paper-3"
         role="progressbar"
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
       >
         <div
-          className={cx("h-full rounded-full", colors[tone] || colors.accent)}
+          className={cx("meter-fill h-full rounded-full", colors[tone] || colors.accent)}
           style={{ width: `${width}%`, transition: "width .9s cubic-bezier(.16,1,.3,1)" }}
         />
       </div>
@@ -612,17 +612,22 @@ export function Modal({ open, onClose, title, description, children, labelledBy 
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4"
+      className="modal-root fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby={labelledBy}
     >
       <div
-        className="animate-fade absolute inset-0 bg-ink/40 backdrop-blur-[2px]"
+        className="modal-scrim absolute inset-0 bg-ink/40 backdrop-blur-[2px]"
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="animate-scale-in relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border border-line bg-surface p-6 shadow-pop">
+      <div className="modal-panel relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border border-line bg-surface p-6 shadow-pop">
+        {onClose && (
+          <button type="button" className="modal-close" aria-label="Close dialog" onClick={onClose}>
+            <span aria-hidden="true">×</span>
+          </button>
+        )}
         <h2 id={labelledBy} className="display text-xl">
           {title}
         </h2>
@@ -637,7 +642,7 @@ export function Modal({ open, onClose, title, description, children, labelledBy 
 /** Wraps a table so it scrolls on its own instead of the page. */
 export function TableWrap({ children, className }) {
   return (
-    <div className={cx("card overflow-hidden", className)}>
+    <div className={cx("table-wrap card overflow-hidden", className)}>
       <div className="overflow-x-auto">{children}</div>
     </div>
   );

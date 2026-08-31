@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { Link } from "react-router-dom";
-import { daysUntil, eventApplicationsOpen, eventDeadline, eventIsOpen, formatDateTime } from "../utils/date";
+import { daysUntil, eventApplicationsOpen, eventDeadline, eventIsOngoing, eventLifecycle, formatDateTime } from "../utils/date";
 import { sortClubCategories } from "../utils/clubCategories";
 import {
   Badge,
@@ -33,9 +33,8 @@ function SearchIcon() {
 }
 
 function StatusBadge({ event }) {
-  return eventIsOpen(event)
-    ? <Badge tone="ok" live>Open</Badge>
-    : <Badge tone="neutral">Closed</Badge>;
+  const lifecycle = eventLifecycle(event);
+  return <Badge tone={lifecycle.tone} live={lifecycle.live}>{lifecycle.label}</Badge>;
 }
 
 function EventCardSkeleton() {
@@ -63,7 +62,7 @@ export default function Events() {
   const [events, setEvents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState("open");
+  const [filter, setFilter] = useState("ongoing");
   const [category, setCategory] = useState("all");
   const [eventType, setEventType] = useState("all");
   const [sortBy, setSortBy] = useState("deadline");
@@ -72,7 +71,7 @@ export default function Events() {
     async function fetchEvents() {
       setIsLoading(true);
       try {
-        const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getEvents`);
+        const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getEvents?limit=100`);
         if (response.data.success) setEvents(response.data.events);
         else toast.error(response.data.msg);
       } catch {
@@ -99,9 +98,9 @@ export default function Events() {
 
       if (category !== "all" && event.clubId?.category !== category) return false;
       if (eventType !== "all" && event.eventType !== eventType) return false;
-      const isOpen = eventIsOpen(event, now);
-      if (filter === "open") return isOpen;
-      if (filter === "closed") return !isOpen;
+      const isOngoing = eventIsOngoing(event);
+      if (filter === "ongoing") return isOngoing;
+      if (filter === "completed") return event.status === "closed";
       return true;
     });
 
@@ -112,21 +111,19 @@ export default function Events() {
       if (sortBy === "listed_oldest") return listedTimestamp(a) - listedTimestamp(b);
       return (eventDeadline(a)?.getTime() || Infinity) - (eventDeadline(b)?.getTime() || Infinity);
     });
-    // `now` is intentionally read fresh on each render rather than tracked.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events, searchQuery, filter, category, eventType, sortBy]);
 
   const counts = useMemo(() => {
-    const openList = events.filter((event) => eventIsOpen(event, now));
-    const soon = openList.filter((event) => {
+    const ongoingList = events.filter((event) => eventIsOngoing(event));
+    const soon = ongoingList.filter((event) => {
       const days = daysUntil(eventDeadline(event));
       return eventApplicationsOpen(event, now) && days !== null && days <= 3;
     });
     return {
       total: events.length,
-      open: openList.length,
+      ongoing: ongoingList.length,
       soon: soon.length,
-      closed: events.length - openList.length,
+      completed: events.filter((event) => event.status === "closed").length,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events]);
@@ -135,7 +132,7 @@ export default function Events() {
     [events],
   );
 
-  const filtersActive = searchQuery !== "" || filter !== "open" || category !== "all" || eventType !== "all";
+  const filtersActive = searchQuery !== "" || filter !== "ongoing" || category !== "all" || eventType !== "all";
 
   return (
     <Page>
@@ -149,9 +146,9 @@ export default function Events() {
       {!isLoading && events.length > 0 && (
         <div className="stagger mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat index={1} label="Listed" value={counts.total} />
-          <Stat index={2} label="Open events" value={counts.open} tone="accent" />
+          <Stat index={2} label="Ongoing events" value={counts.ongoing} tone="accent" />
           <Stat index={3} label="Applications closing soon" value={counts.soon} />
-          <Stat index={4} label="Closed" value={counts.closed} />
+          <Stat index={4} label="Completed" value={counts.completed} />
         </div>
       )}
 
@@ -174,8 +171,8 @@ export default function Events() {
 
         <Field label="Status" id="filter" className="md:w-40">
           <Select id="filter" value={filter} onChange={(event) => setFilter(event.target.value)}>
-            <option value="open">Open events</option>
-            <option value="closed">Closed events</option>
+            <option value="ongoing">Ongoing events</option>
+            <option value="completed">Completed events</option>
             <option value="all">All events</option>
           </Select>
         </Field>
@@ -206,7 +203,7 @@ export default function Events() {
               <button
                 onClick={() => {
                   setSearchQuery("");
-                  setFilter("open");
+                  setFilter("ongoing");
                   setCategory("all");
                   setEventType("all");
                 }}
@@ -241,7 +238,7 @@ export default function Events() {
                   variant="secondary"
                   onClick={() => {
                     setSearchQuery("");
-                    setFilter("open");
+                    setFilter("ongoing");
                     setCategory("all");
                     setEventType("all");
                   }}

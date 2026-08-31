@@ -33,6 +33,14 @@ function candidateRecipientIds(candidate) {
   return [...new Set(recipients.filter(Boolean).map((studentId) => String(studentId?._id || studentId)))];
 }
 
+function incompleteSubmissionRecipientIds(candidates, submittedCandidateIds = []) {
+  const submitted = new Set((submittedCandidateIds || []).map(String));
+  return [...new Set((candidates || [])
+    .filter((candidate) => ACTIVE_DEADLINE_STATUSES.includes(candidate?.status)
+      && !submitted.has(String(candidate?._id || "")))
+    .flatMap(candidateRecipientIds))];
+}
+
 function roundReminderJobId(kind, sourceId, studentId, targetAt) {
   return crypto
     .createHash("sha256")
@@ -190,6 +198,22 @@ function buildRoundReminderNotification({ kind, event, round, clubName, slot = n
   };
 }
 
+function buildIncompleteSubmissionNotification({ event, round, clubName }) {
+  return {
+    type: "submission_due_reminder",
+    title: `Complete your application for ${event.title}`,
+    message: `You registered for ${event.title}, organised by ${clubName}, but your ${round.title} response has not been submitted yet. Complete and submit it before the deadline to keep your application in consideration.`,
+    link: `/event/${event._id}`,
+    emailDetails: {
+      startsAt: round.submissionDeadlineAt,
+      dateLabel: "Submission deadline",
+      clubName,
+      eventName: event.title,
+      roundName: round.title,
+    },
+  };
+}
+
 async function markEmailHandled(job, workerId) {
   await jobModel.updateOne(
     { _id: job._id, lockedBy: workerId },
@@ -313,6 +337,7 @@ module.exports = {
   SUBMISSION_DEADLINE_LEAD_MS,
   allEventRounds,
   backfillRoundReminders,
+  buildIncompleteSubmissionNotification,
   buildRoundReminderNotification,
   candidateRecipientIds,
   dateInKolkata,
@@ -321,6 +346,7 @@ module.exports = {
   enqueueSubmissionDeadlineReminders,
   enqueueSubmissionDeadlineRemindersForRound,
   interviewReminderRunAt,
+  incompleteSubmissionRecipientIds,
   roundReminderJobId,
   submissionDeadlineReminderRunAt,
 };

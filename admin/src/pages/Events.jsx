@@ -30,7 +30,7 @@ export default function Events() {
 
   useEffect(() => {
     axios
-      .get(`${import.meta.env.VITE_BASE_URI}/admin/getAllEvents`)
+      .get(`${import.meta.env.VITE_BASE_URI}/admin/getAllEvents?limit=100`)
       .then(({ data }) => (data.success ? setEvents(data.events) : toast.error(data.msg)))
       .catch(() => toast.error("Could not load events"))
       .finally(() => setLoading(false));

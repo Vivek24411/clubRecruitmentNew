@@ -16,7 +16,7 @@ const pushRegistrationSchema = new mongoose.Schema({
   },
   provider: {
     type: String,
-    enum: ["fcm"],
+    enum: ["fcm", "expo"],
     default: "fcm",
   },
   appOrigin: {

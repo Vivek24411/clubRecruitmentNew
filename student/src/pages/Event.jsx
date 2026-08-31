@@ -7,7 +7,7 @@ import {
   eventApplicationsOpen,
   eventDeadline,
   eventEndDate,
-  eventIsOpen,
+  eventLifecycle,
   formatDateTime,
 } from "../utils/date";
 import EventWorkflow from "../components/EventWorkflow";
@@ -208,8 +208,8 @@ export default function Event() {
 
   const deadline = eventDeadline(event);
   const eventEndsAt = eventEndDate(event);
-  const eventOpen = eventIsOpen(event);
   const applicationsOpen = eventApplicationsOpen(event);
+  const lifecycle = eventLifecycle(event);
   const canApply = platformOpen && eligibility.eligible !== false && applicationsOpen;
   const verticalsEnabled = Boolean(event.verticalsEnabled) && (event.verticals?.length || 0) > 1;
   // Signed-out visitors still see the catalogue, so fall back to the event's
@@ -223,11 +223,9 @@ export default function Event() {
     || 0;
   const daysLeft = daysUntil(deadline);
 
-  const applicationStatusBadge = !platformOpen
+  const applicationStatusBadge = !platformOpen && applicationsOpen
     ? <Badge tone="warn">Recruitment paused</Badge>
-    : applicationsOpen
-      ? <Badge tone="accent">Applications open</Badge>
-      : <Badge tone="neutral">Applications closed</Badge>;
+    : null;
 
   return (
     <Page>
@@ -250,7 +248,7 @@ export default function Event() {
             </Link>
           )}
           <Badge tone="info" className="capitalize">{(event.eventType || "event").replaceAll("_", " ")}</Badge>
-          {eventOpen ? <Badge tone="ok" live>Event open</Badge> : <Badge tone="neutral">Event closed</Badge>}
+          <Badge tone={lifecycle.tone} live={lifecycle.live}>{lifecycle.label}</Badge>
           {applicationStatusBadge}
           {applicationsOpen && daysLeft !== null && daysLeft >= 0 && daysLeft <= 7 && (
             <Badge tone={daysLeft <= 1 ? "bad" : "warn"}>
@@ -395,7 +393,7 @@ export default function Event() {
         <aside className="space-y-4 lg:sticky lg:top-24 lg:h-fit">
           {!loggedInStudent && (
             <Card className="reveal p-6" style={{ "--d": "160ms" }}>
-              <h2 className="display text-lg">{canApply ? "Ready to apply?" : "Applications closed"}</h2>
+              <h2 className="display text-lg">{canApply ? "Ready to apply?" : lifecycle.key === "completed" ? "Event completed" : "Registration closed"}</h2>
               <p className="mt-2.5 text-sm leading-relaxed text-ink-3">
                 {canApply
                   ? verticalsEnabled

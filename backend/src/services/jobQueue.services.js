@@ -100,6 +100,51 @@ async function enqueueNotifications(studentIds, notification, options = {}) {
   })), { ordered: false });
 }
 
+function notificationJobId(dedupeKey, studentId) {
+  return crypto
+    .createHash("sha256")
+    .update(`notification:${dedupeKey}:${studentId}`)
+    .digest("hex")
+    .slice(0, 24);
+}
+
+async function enqueueUniqueNotifications(studentIds, notification, options = {}) {
+  const recipients = [...new Set((studentIds || []).filter(Boolean).map(String))];
+  const dedupeKey = String(options.dedupeKey || "").trim();
+  if (!recipients.length || !dedupeKey) {
+    return { recipientCount: recipients.length, queuedCount: 0, duplicateCount: 0 };
+  }
+  const requestedChannels = Array.isArray(options.channels)
+    ? options.channels.filter((channel) => ["inApp", "email", "push"].includes(channel))
+    : [];
+  const channels = requestedChannels.length ? [...new Set(requestedChannels)] : ["inApp", "email", "push"];
+  const now = new Date();
+  const result = await jobModel.bulkWrite(recipients.map((studentId) => ({
+    updateOne: {
+      filter: { _id: notificationJobId(dedupeKey, studentId) },
+      update: {
+        $setOnInsert: {
+          type: "notification",
+          payload: { studentId, notification, channels },
+          status: "queued",
+          attempts: 0,
+          maxAttempts: 8,
+          runAt: now,
+          createdAt: now,
+          updatedAt: now,
+        },
+      },
+      upsert: true,
+    },
+  })), { ordered: false });
+  const queuedCount = Number(result.upsertedCount) || 0;
+  return {
+    recipientCount: recipients.length,
+    queuedCount,
+    duplicateCount: recipients.length - queuedCount,
+  };
+}
+
 async function enqueueNotification(studentId, notification, options = {}) {
   const [job] = await enqueueNotifications([studentId], notification, options);
   return job || null;
@@ -327,6 +372,8 @@ module.exports = {
   dateInKolkata,
   enqueueNotification,
   enqueueNotifications,
+  enqueueUniqueNotifications,
+  notificationJobId,
   notificationChannels,
   enqueueSessionReminder,
   enqueueSessionReminders,

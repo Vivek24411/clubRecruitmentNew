@@ -4,18 +4,21 @@
     "slug": "discovr-student",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "../student/public/discovr-o.png",
+    "icon": "./assets/discovr-store-icon.png",
     "scheme": "discovr",
+    "primaryColor": "#0878BE",
     "userInterfaceStyle": "light",
     "ios": {
-      "icon": "../student/public/discovr-o.png",
+      "icon": "./assets/discovr-store-icon.png",
       "bundleIdentifier": "in.expediva.discovr",
+      "supportsTablet": false,
       "config": {
         "usesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "in.expediva.discovr",
+      "permissions": ["POST_NOTIFICATIONS"],
       "adaptiveIcon": {
         "backgroundColor": "#F2F0E9",
         "foregroundImage": "../student/public/discovr-o.png"
@@ -38,6 +41,13 @@
       ],
       "expo-secure-store",
       [
+        "expo-notifications",
+        {
+          "color": "#0878BE",
+          "defaultChannel": "recruitment"
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "Allow Discovr to choose a student profile photo.",
@@ -49,6 +59,7 @@
       "typedRoutes": true,
       "reactCompiler": true
     },
+    "assetBundlePatterns": ["**/*"],
     "extra": {
       "router": {},
       "eas": {

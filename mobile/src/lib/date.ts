@@ -31,9 +31,26 @@ export function eventDeadline(event: { registrationDeadlineAt?: string | null; r
   return Number.isNaN(value.getTime()) ? null : value;
 }
 
-export function eventIsOpen(event: { status?: string; registrationDeadlineAt?: string | null; registerationDeadline?: string }, now = new Date()) {
+type EventDateShape = { status?: string; registrationDeadlineAt?: string | null; registerationDeadline?: string };
+
+export function eventApplicationsOpen(event: EventDateShape, now = new Date()) {
   const deadline = eventDeadline(event);
-  return event.status === 'published' && Boolean(deadline && deadline.getTime() > now.getTime());
+  return event.status === 'published' && (!deadline || deadline.getTime() > now.getTime());
+}
+
+export function eventIsOngoing(event: EventDateShape) {
+  return event.status === 'published';
+}
+
+export function eventLifecycle(event: EventDateShape, now = new Date()) {
+  if (event.status === 'published') {
+    return eventApplicationsOpen(event, now)
+      ? { key: 'registration_open' as const, label: 'Registration open', tone: 'success' as const }
+      : { key: 'selection_ongoing' as const, label: 'Registration closed · Selection ongoing', tone: 'warning' as const };
+  }
+  if (event.status === 'closed') return { key: 'completed' as const, label: 'Completed', tone: 'neutral' as const };
+  if (event.status === 'cancelled') return { key: 'cancelled' as const, label: 'Cancelled', tone: 'danger' as const };
+  return { key: 'draft' as const, label: 'Draft', tone: 'neutral' as const };
 }
 
 export function formatDateTime(value?: string | Date | null) {

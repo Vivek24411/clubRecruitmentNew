@@ -199,7 +199,7 @@ export type RoundCandidate = {
 
 export type SubmissionFile = {
   fieldKey: string;
-  url: string;
+  downloadPath: string;
   publicId: string;
   resourceType: 'image' | 'video' | 'raw';
   originalName?: string;

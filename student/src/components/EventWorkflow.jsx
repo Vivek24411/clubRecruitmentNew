@@ -22,6 +22,16 @@ function pickedFileError(file) {
   return "";
 }
 
+async function openProtectedFile(file) {
+  try {
+    const { data } = await axios.get(`${import.meta.env.VITE_BASE_URI}${file.downloadPath}`);
+    if (!data.download?.url) throw new Error("Download is unavailable");
+    window.open(data.download.url, "_blank", "noopener,noreferrer");
+  } catch (error) {
+    toast.error(error.response?.data?.msg || error.message || "Could not open this attachment");
+  }
+}
+
 export function SubmissionForm({ eventId, round, candidate, existing, onSaved, verticalId, initialApplication = false }) {
   const initialAnswers = Object.fromEntries((existing?.answers || []).map((answer) => [answer.key, answer.value]));
   const [answers, setAnswers] = useState(initialAnswers);
@@ -87,7 +97,7 @@ export function SubmissionForm({ eventId, round, candidate, existing, onSaved, v
                 className="block w-full rounded-sm border border-dashed border-line-2 bg-paper-2/45 p-3 text-sm file:mr-3 file:rounded-sm file:border-0 file:bg-ink file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white"
               />
               {files[field.key] && <p className="mt-2 text-xs font-medium text-ink-2">Selected: {files[field.key].name} · {fileSize(files[field.key].size)}</p>}
-              {existing?.files?.filter((file) => file.fieldKey === field.key).map((file) => <a key={file.publicId} href={file.url} target="_blank" rel="noreferrer" className="link mt-2 block break-all text-xs">Current: {file.originalName || field.label}</a>)}
+              {existing?.files?.filter((file) => file.fieldKey === field.key).map((file) => <button type="button" key={file.publicId} onClick={() => openProtectedFile(file)} className="link mt-2 block break-all text-left text-xs">Current: {file.originalName || field.label}</button>)}
             </>
           ) : field.type === "boolean" ? (
             <label className="flex items-start gap-3 rounded-sm border border-line bg-surface px-4 py-3 text-sm text-ink-2">
@@ -133,7 +143,7 @@ function SubmissionReadOnly({ submission, fields = [] }) {
             {fieldByKey.get(answer.key)?.type === "boolean" ? <p className="mt-1 text-sm text-ink-2">{answer.value === "true" ? "Yes" : "No"}</p> : /^https?:\/\//i.test(answer.value) ? <a href={answer.value} target="_blank" rel="noreferrer" className="link link-accent mt-1 block break-all text-sm">{answer.value} ↗</a> : <p className="mt-1 whitespace-pre-wrap break-words text-sm text-ink-2">{answer.value}</p>}
           </div>
         ))}
-        {(submission.files || []).map((file) => <a key={file.publicId} href={file.url} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-sm bg-surface px-3 py-2.5 text-sm font-semibold text-accent"><span className="truncate">{file.originalName || file.fieldKey}</span><span>Open ↗</span></a>)}
+        {(submission.files || []).map((file) => <button type="button" key={file.publicId} onClick={() => openProtectedFile(file)} className="flex w-full items-center justify-between gap-3 rounded-sm bg-surface px-3 py-2.5 text-left text-sm font-semibold text-accent"><span className="truncate">{file.originalName || file.fieldKey}</span><span>Open ↗</span></button>)}
       </div>
       <p className="mt-3 text-xs text-ink-3">This submission is read-only because the round was decided or its deadline passed.</p>
     </div>

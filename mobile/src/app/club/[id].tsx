@@ -46,7 +46,7 @@ export default function ClubDetailScreen() {
         {club.contactPhone ? <Button label={club.contactPhone} variant="secondary" icon="call-outline" onPress={() => Linking.openURL(`tel:${club.contactPhone}`)} /> : null}
         {links.map(([label, url]) => <Button key={label} label={label} variant="ghost" icon="open-outline" onPress={() => Linking.openURL(url)} />)}
       </Card> : null}
-      {eventsQuery.data?.events.length ? <View style={styles.section}><SectionHeader eyebrow="Recruitment" title="Open events" />{eventsQuery.data.events.map((event) => <EventCard key={event._id} event={event} />)}</View> : null}
+      {eventsQuery.data?.events.length ? <View style={styles.section}><SectionHeader eyebrow="Recruitment" title="Events" />{eventsQuery.data.events.map((event) => <EventCard key={event._id} event={event} />)}</View> : null}
       {sessionsQuery.data?.sessions.length ? <View style={styles.section}><SectionHeader eyebrow="Meet the club" title="Sessions" />{sessionsQuery.data.sessions.map((session) => <SessionCard key={session._id} session={session} />)}</View> : null}
     </>}
   </Screen>;

@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppHeader } from '@/components/app-header';
 import { SessionCard } from '@/components/catalogue';
-import { EmptyState, ErrorState, Eyebrow, FilterChip, Heading, LoadingState, Screen, SearchField } from '@/components/ui';
+import { Button, EmptyState, ErrorState, Eyebrow, FilterChip, Heading, LoadingState, Screen, SearchField } from '@/components/ui';
 import { palette, spacing, typography } from '@/constants/theme';
 import { useApiQuery } from '@/hooks/use-api-query';
 import { sessionStart, sessionTiming } from '@/lib/date';
@@ -13,7 +13,7 @@ type TimingFilter = 'upcoming' | 'past' | 'all';
 type SortFilter = 'date' | 'newest';
 
 export default function SessionsScreen() {
-  const query = useApiQuery<{ success: boolean; sessions: Session[] }>('/student/getSessions');
+  const query = useApiQuery<{ success: boolean; sessions: Session[]; pagination?: { page: number; pages: number; hasMore: boolean } }>('/student/getSessions?limit=24', 'sessions');
   const [search, setSearch] = useState('');
   const [timing, setTiming] = useState<TimingFilter>('upcoming');
   const [sort, setSort] = useState<SortFilter>('date');
@@ -47,7 +47,7 @@ export default function SessionsScreen() {
       </ScrollView>
       <Text style={styles.count}>{visible.length} {visible.length === 1 ? 'session' : 'sessions'}</Text>
     </View>
-    {query.loading ? <LoadingState /> : query.error ? <ErrorState message={query.error} onRetry={query.reload} /> : !visible.length ? <EmptyState title={timing === 'upcoming' ? 'No upcoming sessions' : 'No matching sessions'} message={search ? 'Try another session, club, or venue.' : timing === 'upcoming' ? 'Published future sessions will appear here.' : 'There are no sessions in this view.'} /> : <View style={styles.list}>{visible.map((session) => <SessionCard key={session._id} session={session} />)}</View>}
+    {query.loading ? <LoadingState /> : query.error && !sessions.length ? <ErrorState message={query.error} onRetry={query.reload} /> : !visible.length ? <EmptyState title={timing === 'upcoming' ? 'No upcoming sessions' : 'No matching sessions'} message={search ? 'Try another session, club, or venue.' : timing === 'upcoming' ? 'Published future sessions will appear here.' : 'There are no sessions in this view.'} /> : <View style={styles.list}>{visible.map((session) => <SessionCard key={session._id} session={session} />)}{query.hasMore ? <Button label="Load more sessions" variant="secondary" loading={query.loadingMore} onPress={() => void query.loadMore()} /> : null}</View>}
   </Screen>;
 }
 

@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { apiRequest, setApiAccessToken } from '@/lib/api';
+import { disableNativePush } from '@/lib/push-notifications';
 import type { Student } from '@/types/api';
 
 const tokenKey = 'discovr.student.session';
@@ -83,7 +84,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [applyToken, refreshProfile]);
 
   const signOut = useCallback(async () => {
-    try { await apiRequest('/student/logout', { method: 'POST' }); }
+    try {
+      await disableNativePush().catch(() => {});
+      await apiRequest('/student/logout', { method: 'POST' });
+    }
     finally { setProfile(null); await applyToken(null); }
   }, [applyToken]);
 

@@ -12,6 +12,7 @@ import { useAuth } from '@/context/auth-context';
 import { useFeedback } from '@/context/feedback-context';
 import { apiRequest } from '@/lib/api';
 import { LocalUpload, uploadDirect } from '@/lib/direct-upload';
+import { disableNativePush, enableNativePush, nativePushState, NativePushState } from '@/lib/push-notifications';
 import { titleCase } from '@/lib/date';
 import type { Student } from '@/types/api';
 
@@ -28,6 +29,10 @@ export default function ProfileScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordWorking, setPasswordWorking] = useState(false);
+  const [deletionPassword, setDeletionPassword] = useState('');
+  const [deletionWorking, setDeletionWorking] = useState(false);
+  const [pushState, setPushState] = useState<NativePushState>('disabled');
+  const [pushWorking, setPushWorking] = useState(false);
 
   useEffect(() => {
     if (!profile) return;
@@ -38,6 +43,23 @@ export default function ProfileScreen() {
     }, 0);
     return () => clearTimeout(handle);
   }, [profile]);
+
+  useEffect(() => {
+    if (profile) void nativePushState().then(setPushState);
+  }, [profile]);
+
+  async function changePush(enabled: boolean) {
+    setPushWorking(true);
+    try {
+      if (enabled) await enableNativePush();
+      else await disableNativePush();
+      setPushState(enabled ? 'enabled' : 'disabled');
+      toast(enabled ? 'Push notifications enabled on this device.' : 'Push notifications disabled on this device.', 'success');
+    } catch (error) {
+      setPushState(await nativePushState());
+      toast(error instanceof Error ? error.message : 'Could not update push notifications.', 'error');
+    } finally { setPushWorking(false); }
+  }
 
   async function choosePicture() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -92,6 +114,28 @@ export default function ProfileScreen() {
     await signOut(); toast('You have been signed out.', 'info');
   }
 
+  async function deleteAccount() {
+    if (!deletionPassword) { toast('Enter your current password to delete your account.', 'error'); return; }
+    const accepted = await confirm({
+      title: 'Permanently delete your account?',
+      message: 'Your profile and contact details will be erased, every session will be revoked, and this cannot be undone. Historical recruitment records may remain anonymized.',
+      confirmLabel: 'Delete account',
+      destructive: true,
+    });
+    if (!accepted) return;
+    setDeletionWorking(true);
+    try {
+      const response = await apiRequest<{ success: boolean; msg?: string }>('/student/account', {
+        method: 'DELETE', body: { currentPassword: deletionPassword, confirmation: 'DELETE' },
+      });
+      await signOut();
+      toast(response.msg || 'Your account has been deleted.', 'success');
+      router.replace('/login');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not delete your account.', 'error');
+    } finally { setDeletionWorking(false); }
+  }
+
   if (loading) return <Screen><LoadingState label="Restoring your session…" /></Screen>;
   if (!profile) return <Screen contentStyle={styles.content}><AppHeader /><View style={styles.guestHero}><Eyebrow accent>Student account</Eyebrow><Heading size="xl">Your Discovr journey starts here.</Heading><Text style={styles.copy}>Sign in to apply, build teams, RSVP, submit round work, and receive alerts.</Text><Button label="Student sign in" onPress={() => router.push('/login')} icon="log-in-outline" /><Button label="Create student account" variant="secondary" onPress={() => router.push('/register')} icon="person-add-outline" /></View></Screen>;
 
@@ -114,6 +158,8 @@ export default function ProfileScreen() {
       <SectionTitle icon="bell-cog-outline" title="Recruitment notifications" description="Choose which application and RSVP updates Discovr may send." />
       <SettingToggle icon="bell-outline" title="In-app alerts" description="Team invitations, round schedules, results, and RSVP changes." value={inAppAlerts} onChange={setInAppAlerts} />
       <SettingToggle icon="email-outline" title="Email updates" description="Important recruitment decisions and session reminders by email." value={emailUpdates} onChange={setEmailUpdates} />
+      <View style={styles.pushSetting}><View style={styles.pushCopy}><Text style={styles.settingTitle}>Device push notifications</Text><Text style={styles.settingDescription}>{pushState === 'enabled' ? 'Enabled for deadlines, schedules, decisions, invitations, and RSVP updates.' : pushState === 'blocked' ? 'Blocked in system settings.' : pushState === 'simulator' ? 'Available on a physical device.' : pushState === 'unavailable' ? 'Requires a development build when testing on Android.' : 'Get timely updates even when Discovr is closed.'}</Text></View><Badge tone={pushState === 'enabled' ? 'success' : pushState === 'blocked' ? 'danger' : 'neutral'}>{pushState}</Badge></View>
+      {pushState === 'enabled' ? <Button label="Disable device push" variant="secondary" loading={pushWorking} onPress={() => void changePush(false)} /> : <Button label="Enable device push" variant="secondary" loading={pushWorking} disabled={['blocked', 'simulator', 'unavailable'].includes(pushState)} icon="notifications-outline" onPress={() => void changePush(true)} />}
       <Button label="Open alerts" variant="secondary" icon="notifications-outline" onPress={() => router.push('/notifications')} />
     </Card>
     <Button label="Save profile changes" loading={saving} icon="checkmark-circle-outline" onPress={() => void saveProfile()} />
@@ -123,6 +169,11 @@ export default function ProfileScreen() {
       <Field label="New password" value={newPassword} onChangeText={setNewPassword} secureTextEntry autoComplete="new-password" placeholder="At least 10 characters" />
       <Field label="Confirm new password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry autoComplete="new-password" />
       <Button label="Update password" variant="secondary" loading={passwordWorking} onPress={() => void changePassword()} />
+    </Card>
+    <Card style={styles.dangerCard}>
+      <SectionTitle icon="account-remove-outline" title="Delete account" description="Erase your personal profile and permanently revoke access. Historical recruitment records are retained only in anonymized form." />
+      <Field label="Current password" value={deletionPassword} onChangeText={setDeletionPassword} secureTextEntry autoComplete="current-password" />
+      <Button label="Permanently delete account" variant="danger" loading={deletionWorking} onPress={() => void deleteAccount()} icon="trash-outline" />
     </Card>
     <Button label="Sign out" variant="secondary" onPress={() => void handleSignOut()} icon="log-out-outline" />
   </Screen>;
@@ -145,6 +196,8 @@ const styles = StyleSheet.create({
   content: { paddingTop: spacing.md }, intro: { gap: spacing.sm }, guestHero: { gap: spacing.lg, paddingVertical: spacing.xl }, copy: { color: palette.muted, fontFamily: typography.regular, fontSize: 14, lineHeight: 21 },
   identityCard: { padding: spacing.xl, alignItems: 'center', gap: spacing.md, borderTopWidth: 3, borderTopColor: palette.accent }, identityText: { alignItems: 'center', gap: spacing.sm }, name: { color: palette.ink, fontFamily: typography.semibold, fontSize: 23 }, email: { color: palette.muted, fontFamily: typography.regular, fontSize: 13 },
   sectionCard: { padding: spacing.lg, gap: spacing.lg }, sectionTitle: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }, sectionIcon: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: palette.accentTint, alignItems: 'center', justifyContent: 'center' }, sectionTitleText: { flex: 1, gap: 4 }, sectionHeading: { color: palette.ink, fontFamily: typography.semibold, fontSize: 18 }, sectionDescription: { color: palette.muted, fontFamily: typography.regular, fontSize: 12.5, lineHeight: 18 },
+  dangerCard: { padding: spacing.lg, gap: spacing.lg, borderColor: palette.danger, borderTopWidth: 3 },
   fixedGrid: { gap: spacing.sm }, fixedDetail: { borderRadius: radius.sm, padding: spacing.md, backgroundColor: palette.paper, gap: 4 }, fixedLabel: { color: palette.muted, fontFamily: typography.mono, fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.7 }, fixedValue: { color: palette.ink, fontFamily: typography.medium, fontSize: 14 },
   setting: { paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, settingIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: palette.accentMist, alignItems: 'center', justifyContent: 'center' }, settingText: { flex: 1, gap: 3 }, settingTitle: { color: palette.ink, fontFamily: typography.medium, fontSize: 14 }, settingDescription: { color: palette.muted, fontFamily: typography.regular, fontSize: 11.5, lineHeight: 16 },
+  pushSetting: { padding: spacing.md, borderRadius: radius.sm, backgroundColor: palette.accentMist, borderWidth: 1, borderColor: palette.accentTint, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }, pushCopy: { flex: 1, gap: 4 },
 });

@@ -22,7 +22,6 @@ export default function Login() {
         password,
       });
       if (response.data.success) {
-        localStorage.setItem("adminToken", response.data.token);
         toast.success("Login successful");
         setLoggedInAdmin(true);
         await refreshAdminProfile();

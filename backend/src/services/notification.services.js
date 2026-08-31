@@ -21,9 +21,9 @@ async function notifyRegistrations(registrations, notification) {
 
 async function notifyPushRegisteredStudents(notification) {
   const appOrigin = exactHttpOrigin(process.env.STUDENT_APP_ORIGIN)?.origin;
-  if (!appOrigin) return [];
+  const origins = [appOrigin, "discovr://native"].filter(Boolean);
   const recipients = await pushRegistrationModel.distinct("studentId", {
-    appOrigin,
+    appOrigin: { $in: origins },
     expiresAt: { $gt: new Date() },
   });
   return enqueueNotifications(recipients, notification, { channels: ["push"] });

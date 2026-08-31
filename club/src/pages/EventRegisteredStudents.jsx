@@ -33,9 +33,10 @@ function StudentAvatar({ student, className = "h-10 w-10" }) {
 
 function PersonRow({ student, captain = false }) {
   return (
-    <div className="grid items-center gap-2 border-t border-line/70 py-2 text-xs first:border-0 sm:grid-cols-[1.1fr_1.2fr_.8fr]">
+    <div className="grid items-center gap-2 border-t border-line/70 py-2 text-xs first:border-0 sm:grid-cols-[1.1fr_1.2fr_.85fr_.8fr]">
       <div className="flex min-w-0 items-center gap-2.5"><StudentAvatar student={student} /><p className="min-w-0 truncate font-semibold text-ink">{student?.name || "Student"}{captain ? " · Captain" : ""}</p></div>
       <p className="break-all text-ink-3">{student?.email || "—"}</p>
+      <p className="text-ink-3">{student?.phoneNumber ? <a href={`tel:${student.phoneNumber}`} className="link font-medium">{student.phoneNumber}</a> : "—"}</p>
       <p className="text-ink-3">{[PROGRAMME_LABELS[student?.programme] || "UG", student?.branch || student?.enrollmentNumber].filter(Boolean).join(" · ") || "—"}</p>
     </div>
   );
@@ -76,6 +77,7 @@ function CandidateIdentity({ candidate, registration, finalRound }) {
         <div className="min-w-0">
           <p className="font-semibold">{student?.name || "Student"}</p>
           <p className="mt-0.5 break-all text-xs text-ink-3">{student?.email}</p>
+          <p className="mt-0.5 text-xs text-ink-3">{student?.phoneNumber ? <a href={`tel:${student.phoneNumber}`} className="link font-medium">{student.phoneNumber}</a> : "Phone not provided"}</p>
           <p className="mt-1 text-xs text-ink-3">{PROGRAMME_LABELS[student?.programme] || "UG"} · {student?.branch || "Branch not provided"}{student?.enrollmentNumber ? ` · ${student.enrollmentNumber}` : ""}</p>
           <p className="mt-1 text-xs text-ink-4">Individual evaluation</p>
           <Badge className="mt-2 capitalize" tone={STATUS_TONES[candidate.status]}>
@@ -86,10 +88,12 @@ function CandidateIdentity({ candidate, registration, finalRound }) {
     );
   }
   const participants = candidate.participantIds || [];
+  const primaryContact = registration?.studentId || participants[0];
   return (
     <div className="min-w-0">
       <p className="font-semibold">{registration?.teamName || registration?.studentId?.name || "Application"}</p>
       <p className="mt-0.5 text-xs text-ink-3">{participants.length} participant{participants.length === 1 ? "" : "s"}</p>
+      {primaryContact?.phoneNumber && <p className="mt-1 text-xs text-ink-3">Primary contact · <a href={`tel:${primaryContact.phoneNumber}`} className="link font-medium">{primaryContact.phoneNumber}</a></p>}
       <div className="mt-2 flex -space-x-2" aria-label="Team members">
         {participants.slice(0, 5).map((student) => <StudentAvatar key={student._id} student={student} className="h-8 w-8" />)}
         {participants.length > 5 && <span className="grid h-8 w-8 place-items-center rounded-full border border-surface bg-ink text-[0.65rem] font-semibold text-white">+{participants.length - 5}</span>}
@@ -153,14 +157,22 @@ function SubmissionSummary({ submission, fields = [] }) {
                   ? "Video"
                   : file.mimeType === "application/pdf" || file.format === "pdf" ? "PDF" : "Image";
                 return (
-                  <a key={file.publicId} href={file.url} target="_blank" rel="noreferrer" className="group flex min-w-0 items-center gap-3 rounded-sm border border-line bg-white px-3 py-3 transition-colors hover:border-accent/40 hover:bg-accent-tint/30">
+                  <button type="button" key={file.publicId} onClick={async () => {
+                    try {
+                      const { data } = await axios.get(`${import.meta.env.VITE_BASE_URI}${file.downloadPath}`);
+                      if (!data.download?.url) throw new Error("Download is unavailable");
+                      window.open(data.download.url, "_blank", "noopener,noreferrer");
+                    } catch (error) {
+                      toast.error(error.response?.data?.msg || error.message || "Could not open this attachment");
+                    }
+                  }} className="group flex min-w-0 items-center gap-3 rounded-sm border border-line bg-white px-3 py-3 text-left transition-colors hover:border-accent/40 hover:bg-accent-tint/30">
                     <span className="grid h-10 w-10 flex-none place-items-center rounded-sm bg-ink text-[0.62rem] font-bold tracking-wider text-white">{kind.toUpperCase().slice(0, 3)}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-semibold text-ink">{file.originalName || labels.get(file.fieldKey) || "Attachment"}</span>
                       <span className="mt-0.5 block text-[0.68rem] text-ink-4">{kind}{file.bytes ? ` · ${formatBytes(file.bytes)}` : ""}</span>
                     </span>
                     <span className="flex-none text-sm font-semibold text-accent" aria-hidden="true">↗</span>
-                  </a>
+                  </button>
                 );
               })}
             </div>
@@ -224,6 +236,10 @@ export default function EventRegisteredStudents() {
   const verticalRounds = activeVertical?.rounds || [];
   const round = verticalRounds.find((item) => item._id === roundId);
   const finalRound = round?.order === verticalRounds.length;
+  const canRemindIncomplete = data?.event?.status === "published"
+    && Boolean(round?.submissionDeadlineAt)
+    && new Date(round.submissionDeadlineAt) > new Date()
+    && (round?.submissionEnabled || ["submission", "hackathon"].includes(round?.type));
   const crossVertical = data?.crossVertical || {};
   const registrations = useMemo(() => new Map((data?.registrations || []).map((item) => [item._id, item])), [data]);
   const slots = useMemo(() => new Map((data?.slots || []).filter((slot) => slot.status !== "cancelled").map((slot) => [slot.candidateId, slot])), [data]);
@@ -273,6 +289,25 @@ export default function EventRegisteredStudents() {
       await load();
     } catch (error) { toast.error(error.response?.data?.msg || error.message); }
     finally { setOperation(""); }
+  };
+
+  const remindIncomplete = async () => {
+    if (!round || !canRemindIncomplete) return;
+    const confirmed = window.confirm(
+      `Email only the students who have not submitted ${round.title}?\n\nThe email will include the deadline: ${displayDate(round.submissionDeadlineAt)}. Each student can receive this reminder only once for this deadline.`,
+    );
+    if (!confirmed) return;
+    setOperation("submission-reminders");
+    try {
+      const { data: response } = await axios.post(`${import.meta.env.VITE_BASE_URI}/club/events/${eventId}/rounds/${roundId}/submission-reminders`);
+      if (!response.success) throw new Error(response.msg);
+      toast.success(response.msg);
+      await load();
+    } catch (error) {
+      toast.error(error.response?.data?.msg || error.message || "Could not queue submission reminders");
+    } finally {
+      setOperation("");
+    }
   };
 
   const autoSchedule = async (event) => {
@@ -390,9 +425,9 @@ export default function EventRegisteredStudents() {
 
       <div className="mt-8 overflow-x-auto border-b border-line" role="tablist"><div className="flex min-w-max gap-1">{verticalRounds.map((item) => <button key={item._id} type="button" role="tab" aria-selected={!selectedTab && item._id === roundId} className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${!selectedTab && item._id === roundId ? "border-accent text-accent" : "border-transparent text-ink-3 hover:text-ink"}`} onClick={() => { setRoundId(item._id); setStatusFilter("all"); setSelectedTab(false); setPage(1); }}>{item.order}. {item.title}</button>)}<button type="button" role="tab" aria-selected={selectedTab} className={`border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${selectedTab ? "border-ok text-ok" : "border-transparent text-ink-3 hover:text-ink"}`} onClick={() => { setRoundId(verticalRounds.at(-1)?._id || ""); setStatusFilter("advanced"); setSelectedTab(true); setPage(1); }}>Selected students ({finalSelectedCount})</button></div></div>
 
-      {round && <Card className="mt-6 p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex flex-wrap gap-2"><Badge tone="info">{round.type.replaceAll("_", " ")}</Badge><Badge>{round.evaluationScope === "participant" ? "Per student" : "Whole team/application"}</Badge></div><h2 className="display mt-3 text-xl">{round.title}</h2><p className="mt-2 max-w-2xl text-sm text-ink-3">{round.description || "No round description added."}</p></div><div className="text-right text-sm text-ink-3"><p>{data.pagination?.total || 0} matching candidate record(s)</p>{round.submissionDeadlineAt && <p className="mt-1">Deadline {displayDate(round.submissionDeadlineAt)}</p>}</div></div></Card>}
+      {round && <Card className="mt-6 p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex flex-wrap gap-2"><Badge tone="info">{round.type.replaceAll("_", " ")}</Badge><Badge>{round.evaluationScope === "participant" ? "Per student" : "Whole team/application"}</Badge></div><h2 className="display mt-3 text-xl">{round.title}</h2><p className="mt-2 max-w-2xl text-sm text-ink-3">{round.description || "No round description added."}</p></div><div className="text-right text-sm text-ink-3"><p>{data.pagination?.total || 0} matching candidate record(s)</p>{round.submissionDeadlineAt && <p className="mt-1">Deadline {displayDate(round.submissionDeadlineAt)}</p>}{canRemindIncomplete && <Button type="button" variant="accent" size="sm" className="mt-3" loading={operation === "submission-reminders"} disabled={Boolean(operation)} onClick={remindIncomplete}>Email incomplete applications</Button>}</div></div></Card>}
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem_auto] sm:items-end"><Field label="Search applications" id="candidate-search"><Input id="candidate-search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Name, email, team, branch…" /></Field><Field label="Status" id="candidate-status"><Select id="candidate-status" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setSelectedTab(false); setPage(1); }}><option value="all">All statuses</option><option value="eligible">Eligible</option><option value="scheduled">Scheduled</option><option value="submitted">Submitted</option><option value="under_review">Under review</option><option value="advanced">{finalRound ? "Selected" : "Advanced"}</option><option value="waitlisted">Waitlisted</option><option value="rejected">Rejected</option></Select></Field><div className="flex flex-wrap items-center gap-2 pb-1"><Button type="button" variant="secondary" size="sm" loading={operation === "export"} disabled={!roundId || Boolean(operation)} onClick={exportRound}>Export CSV</Button><Button type="button" variant="secondary" size="sm" disabled={!candidates.length} onClick={toggleAllVisible}>{allVisibleSelected ? "Clear page" : "Select page"}</Button><p className="whitespace-nowrap text-sm text-ink-3">{chosen.length} selected</p></div></div>
+      <div className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_13rem_auto] sm:items-end"><Field label="Search applications" id="candidate-search"><Input id="candidate-search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Name, email, phone, team, branch…" /></Field><Field label="Status" id="candidate-status"><Select id="candidate-status" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setSelectedTab(false); setPage(1); }}><option value="all">All statuses</option><option value="eligible">Eligible</option><option value="scheduled">Scheduled</option><option value="submitted">Submitted</option><option value="under_review">Under review</option><option value="advanced">{finalRound ? "Selected" : "Advanced"}</option><option value="waitlisted">Waitlisted</option><option value="rejected">Rejected</option></Select></Field><div className="flex flex-wrap items-center gap-2 pb-1"><Button type="button" variant="secondary" size="sm" loading={operation === "export"} disabled={!roundId || Boolean(operation)} onClick={exportRound}>Export CSV</Button><Button type="button" variant="secondary" size="sm" disabled={!candidates.length} onClick={toggleAllVisible}>{allVisibleSelected ? "Clear page" : "Select page"}</Button><p className="whitespace-nowrap text-sm text-ink-3">{chosen.length} selected</p></div></div>
 
       {!candidates.length ? (
         <EmptyState className="mt-6" title="No matching candidates" description="Try another round, status, or search term." />

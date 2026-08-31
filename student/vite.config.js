@@ -9,5 +9,10 @@ export default defineConfig({
     tailwindcss(),
   ],
   base: '/',
-  resolve: { alias: { 'react-router-dom': path.resolve(import.meta.dirname, 'src/router.jsx') } }
+  resolve: { alias: { 'react-router-dom': path.resolve(import.meta.dirname, 'src/router.jsx') } },
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.js',
+    clearMocks: true,
+  },
 })

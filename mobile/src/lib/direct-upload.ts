@@ -17,6 +17,7 @@ type UploadConfig = {
   folder: string;
   publicId: string;
   resourceType: string;
+  deliveryType?: 'upload' | 'authenticated';
   uploadUrl: string;
   maxBytes: number;
   maxBytesByMimeType?: Record<string, number>;
@@ -62,6 +63,7 @@ export async function uploadDirect(file: LocalUpload, kind: 'profilePicture' | '
   form.append('folder', config.folder);
   form.append('public_id', config.publicId);
   form.append('allowed_formats', config.allowedFormats.join(','));
+  if (config.deliveryType && config.deliveryType !== 'upload') form.append('type', config.deliveryType);
 
   const response = await fetch(config.uploadUrl, { method: 'POST', body: form });
   const uploaded = await response.json() as {

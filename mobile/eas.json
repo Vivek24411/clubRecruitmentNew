@@ -9,13 +9,26 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://discovr-api.iitr.ac.in"
+      }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://discovr-api.iitr.ac.in"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "track": "internal"
+      }
+    }
   }
 }

@@ -31,21 +31,21 @@ export function AppHeader() {
     <Pressable accessibilityLabel="Discovr home" onPress={() => router.push('/(tabs)')}><Brand compact inverse /></Pressable>
     <View style={styles.actions}>
       {profile ? <Pressable accessibilityLabel={`${unread} unread alerts`} onPress={() => router.push('/notifications')} style={styles.actionButton}>
-        <MaterialCommunityIcons name={unread ? 'bell' : 'bell-outline'} size={21} color={palette.white} />
+        <MaterialCommunityIcons name={unread ? 'bell' : 'bell-outline'} size={21} color={palette.accentDark} />
         {unread ? <View style={styles.badge}><Text style={styles.badgeText}>{unread > 99 ? '99+' : unread}</Text></View> : null}
       </Pressable> : null}
       <Pressable accessibilityLabel={profile ? 'Open profile' : 'Sign in'} onPress={() => router.push(profile ? '/(tabs)/profile' : '/login')} style={styles.profileButton}>
-        {profile ? <Avatar uri={profile.profilePicture} name={profile.name} size={36} /> : <MaterialCommunityIcons name="login-variant" size={21} color={palette.white} />}
+        {profile ? <Avatar uri={profile.profilePicture} name={profile.name} size={36} /> : <MaterialCommunityIcons name="login-variant" size={21} color={palette.accentDark} />}
       </Pressable>
     </View>
   </View>;
 }
 
 const styles = StyleSheet.create({
-  header: { minHeight: 60, paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radius.md, backgroundColor: palette.ink, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  header: { minHeight: 60, paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radius.md, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, shadowColor: palette.accentDeep, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.07, shadowRadius: 18, elevation: 3 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  actionButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.09)', alignItems: 'center', justifyContent: 'center' },
-  profileButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  badge: { position: 'absolute', top: -2, right: -3, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: palette.accent, borderWidth: 2, borderColor: palette.ink, alignItems: 'center', justifyContent: 'center' },
+  actionButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: palette.accentMist, borderWidth: 1, borderColor: palette.accentTint, alignItems: 'center', justifyContent: 'center' },
+  profileButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: palette.lineStrong, backgroundColor: palette.paperRaised, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  badge: { position: 'absolute', top: -2, right: -3, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: palette.accent, borderWidth: 2, borderColor: palette.surface, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: palette.white, fontFamily: typography.bold, fontSize: 8.5 },
 });

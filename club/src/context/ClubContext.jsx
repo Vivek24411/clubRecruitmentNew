@@ -29,23 +29,16 @@ const ClubContext = ({ children }) => {
     try {
       await axios.post(`${import.meta.env.VITE_BASE_URI}/club/logout`);
     } finally {
-      localStorage.removeItem("clubToken");
       setClubProfile(null);
       setLoggedInClub(false);
     }
   }, []);
 
   useEffect(() => {
-    const requestInterceptor = axios.interceptors.request.use((config) => {
-      const token = localStorage.getItem("clubToken");
-      if (token) config.headers.Authorization = `Bearer ${token}`;
-      return config;
-    });
     const interceptor = axios.interceptors.response.use(
       (response) => response,
       (error) => {
         if (error.response?.status === 401) {
-          localStorage.removeItem("clubToken");
           setClubProfile(null);
           setLoggedInClub(false);
         }
@@ -53,7 +46,6 @@ const ClubContext = ({ children }) => {
       }
     );
     return () => {
-      axios.interceptors.request.eject(requestInterceptor);
       axios.interceptors.response.eject(interceptor);
     };
   }, []);

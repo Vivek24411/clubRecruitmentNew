@@ -96,9 +96,18 @@ function SlotCard({ slot }: { slot: ScheduleSlot }) {
 }
 
 function SubmissionReadOnly({ submission }: { submission: RoundSubmission }) {
+  const { toast } = useFeedback();
+  async function openFile(path: string) {
+    try {
+      const response = await apiRequest<{ success: boolean; download: { url: string } }>(path);
+      await Linking.openURL(response.download.url);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not open this attachment.', 'error');
+    }
+  }
   return <View style={styles.submission}><View style={styles.submissionHeader}><Text style={styles.submissionTitle}>Your submitted work</Text><Badge tone="info">Revision {submission.revision || 1}</Badge></View>{submission.submittedAt ? <Text style={styles.submissionTime}>{formatDateTime(submission.submittedAt)}</Text> : null}
     {(submission.answers || []).map((answer) => <View key={answer.key} style={styles.answer}><Text style={styles.answerKey}>{titleCase(answer.key)}</Text><Text style={styles.answerValue}>{answer.value}</Text></View>)}
-    {(submission.files || []).map((file) => <Button key={file.publicId} label={file.originalName || file.fieldKey} variant="secondary" icon="document-outline" onPress={() => Linking.openURL(file.url)} />)}
+    {(submission.files || []).map((file) => <Button key={file.publicId} label={file.originalName || file.fieldKey} variant="secondary" icon="document-outline" onPress={() => void openFile(file.downloadPath)} />)}
   </View>;
 }
 

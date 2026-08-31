@@ -23,7 +23,7 @@ export default function ClubSessions() {
     setIsLoading(true);
     try {
       const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getClubSessions`, {
-        params: { clubId },
+        params: { clubId, limit: 100 },
       });
       if (response.data.success) setClubSessions(response.data.sessions);
       else toast.error(response.data.msg);

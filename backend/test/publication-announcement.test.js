@@ -4,7 +4,12 @@ const eventModel = require("../src/models/event.model");
 const sessionModel = require("../src/models/session.model");
 const pushRegistrationModel = require("../src/models/pushRegistration.model");
 const jobModel = require("../src/models/job.model");
-const { enqueueNotifications, notificationChannels } = require("../src/services/jobQueue.services");
+const {
+  enqueueNotifications,
+  enqueueUniqueNotifications,
+  notificationChannels,
+  notificationJobId,
+} = require("../src/services/jobQueue.services");
 const { notifyPushRegisteredStudents } = require("../src/services/notification.services");
 const {
   buildEventPublicationNotification,
@@ -56,6 +61,34 @@ test("notification jobs can be explicitly limited to browser push", async () => 
   }
 });
 
+test("one-time notification jobs are stable and report already queued recipients", async () => {
+  const original = jobModel.bulkWrite;
+  let operations = [];
+  jobModel.bulkWrite = async (documents) => {
+    operations = documents;
+    return { upsertedCount: 1 };
+  };
+  try {
+    const result = await enqueueUniqueNotifications([
+      "507f1f77bcf86cd799439021",
+      "507f1f77bcf86cd799439021",
+      "507f1f77bcf86cd799439022",
+    ], { type: "submission_due_reminder", title: "Submit now" }, {
+      channels: ["email"],
+      dedupeKey: "round:deadline",
+    });
+    assert.equal(operations.length, 2);
+    assert.deepEqual(operations[0].updateOne.update.$setOnInsert.payload.channels, ["email"]);
+    assert.deepEqual(result, { recipientCount: 2, queuedCount: 1, duplicateCount: 1 });
+    assert.equal(
+      operations[0].updateOne.filter._id,
+      notificationJobId("round:deadline", "507f1f77bcf86cd799439021"),
+    );
+  } finally {
+    jobModel.bulkWrite = original;
+  }
+});
+
 test("legacy event-listing jobs without channel metadata can never send email", () => {
   assert.deepEqual(
     [...notificationChannels({ notification: { type: "event_published" } })],
@@ -67,7 +100,7 @@ test("legacy event-listing jobs without channel metadata can never send email", 
   );
 });
 
-test("global announcements target only active installations on the configured student origin", async () => {
+test("global announcements target active web and native installations", async () => {
   const previousOrigin = process.env.STUDENT_APP_ORIGIN;
   const originalDistinct = pushRegistrationModel.distinct;
   const originalInsertMany = jobModel.insertMany;
@@ -81,7 +114,9 @@ test("global announcements target only active installations on the configured st
   jobModel.insertMany = async (documents) => { inserted = documents; return documents; };
   try {
     await notifyPushRegisteredStudents({ title: "New listing" });
-    assert.equal(filter.appOrigin, "https://discovr.iitr.ac.in");
+    assert.deepEqual(filter.appOrigin, {
+      $in: ["https://discovr.iitr.ac.in", "discovr://native"],
+    });
     assert.ok(filter.expiresAt.$gt instanceof Date);
     assert.deepEqual(inserted[0].payload.channels, ["push"]);
   } finally {

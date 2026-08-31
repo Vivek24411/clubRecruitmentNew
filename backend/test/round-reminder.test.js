@@ -2,11 +2,13 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const jobModel = require("../src/models/job.model");
 const {
+  buildIncompleteSubmissionNotification,
   buildRoundReminderNotification,
   candidateRecipientIds,
   dateInKolkata,
   enqueueInterviewRemindersForSlot,
   enqueueSubmissionDeadlineReminders,
+  incompleteSubmissionRecipientIds,
   interviewReminderRunAt,
   roundReminderJobId,
   submissionDeadlineReminderRunAt,
@@ -56,6 +58,27 @@ test("team reminders deduplicate every eligible participant", () => {
   const first = "507f1f77bcf86cd799439011";
   const second = "507f1f77bcf86cd799439012";
   assert.deepEqual(candidateRecipientIds({ participantIds: [first, second, first] }), [first, second]);
+});
+
+test("manual submission reminders exclude submitted candidates and deduplicate students", () => {
+  const submittedCandidate = "507f1f77bcf86cd799439021";
+  assert.deepEqual(incompleteSubmissionRecipientIds([
+    {
+      _id: submittedCandidate,
+      participantIds: ["507f1f77bcf86cd799439011"],
+      status: "eligible",
+    },
+    {
+      _id: "507f1f77bcf86cd799439022",
+      participantIds: ["507f1f77bcf86cd799439012", "507f1f77bcf86cd799439012"],
+      status: "eligible",
+    },
+    {
+      _id: "507f1f77bcf86cd799439023",
+      participantIds: ["507f1f77bcf86cd799439013"],
+      status: "submitted",
+    },
+  ], [submittedCandidate]), ["507f1f77bcf86cd799439012"]);
 });
 
 test("only active candidates receive deadline jobs", async () => {
@@ -148,6 +171,22 @@ test("deadline emails include the club, event, round, and exact deadline", () =>
   assert.equal(notification.emailDetails.startsAt, deadline);
   assert.equal(notification.emailDetails.dateLabel, "Submission deadline");
   assert.match(notification.title, /today/);
+});
+
+test("incomplete application emails explain what is missing and show the exact deadline", () => {
+  const deadline = new Date("2026-09-02T18:29:59.000Z");
+  const notification = buildIncompleteSubmissionNotification({
+    event: { _id: "507f1f77bcf86cd799439031", title: "Kshitij Recruitment" },
+    round: { title: "Application round", submissionDeadlineAt: deadline },
+    clubName: "Kshitij",
+  });
+  assert.equal(notification.type, "submission_due_reminder");
+  assert.match(notification.title, /Complete your application/);
+  assert.match(notification.message, /not been submitted/);
+  assert.match(notification.message, /Kshitij/);
+  assert.equal(notification.emailDetails.startsAt, deadline);
+  assert.equal(notification.emailDetails.dateLabel, "Submission deadline");
+  assert.equal(notification.link, "/event/507f1f77bcf86cd799439031");
 });
 
 test("deadline wording uses IIT Roorkee's local calendar date", () => {

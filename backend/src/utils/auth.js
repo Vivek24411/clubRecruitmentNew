@@ -102,9 +102,23 @@ function clearSessionCookie(res, role) {
   });
 }
 
+/**
+ * Browser clients authenticate exclusively with the HttpOnly session cookie.
+ * A bearer token is returned only to the native student app, where it is kept
+ * in the OS credential store and cookies are not a dependable session
+ * transport. Requiring the native marker and the absence of an Origin keeps a
+ * browser/XSS request from opting itself back into a JavaScript-readable JWT.
+ */
+function nativeSessionPayload(req, role, token) {
+  if (role !== "student") return {};
+  if (req.headers.origin || req.headers["x-discovr-client"] !== "mobile") return {};
+  return { token };
+}
+
 module.exports = {
   clearSessionCookie,
   getSessionToken,
+  nativeSessionPayload,
   setSessionCookie,
   signSession,
   verifySession,

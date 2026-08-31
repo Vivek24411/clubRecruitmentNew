@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
-import { eventDeadline, eventIsOpen, formatDateTime } from "../utils/date";
+import { eventDeadline, eventLifecycle, formatDateTime } from "../utils/date";
 import {
   Badge,
   Button,
@@ -17,12 +17,12 @@ import {
 
 const STATUSES = ["draft", "published", "closed", "archived", "cancelled"];
 
-const STATUS_TONE = {
-  published: "ok",
-  draft: "neutral",
-  closed: "warn",
-  archived: "neutral",
-  cancelled: "bad",
+const STATUS_LABEL = {
+  draft: "Draft",
+  published: "Published",
+  closed: "Completed",
+  archived: "Archived",
+  cancelled: "Cancelled",
 };
 
 export default function Events() {
@@ -94,13 +94,13 @@ export default function Events() {
       <PageHeader
         eyebrow="Pipelines"
         title="Events"
-        description="Draft, publish, close, and review every opportunity your club runs."
+        description="Draft, publish, complete, and review every opportunity your club runs."
         actions={<Button to="/addEvent" variant="accent">Create event</Button>}
       />
 
       <div className="mt-8 grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_12rem]">
         <label><span className="eyebrow">Search</span><Input className="mt-1.5" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Event title or description…" /></label>
-        <label><span className="eyebrow">Status</span><Select className="mt-1.5" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option>{STATUSES.map((status) => <option key={status} value={status} className="capitalize">{status}</option>)}</Select></label>
+        <label><span className="eyebrow">Status</span><Select className="mt-1.5" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option>{STATUSES.map((status) => <option key={status} value={status}>{STATUS_LABEL[status]}</option>)}</Select></label>
         <label><span className="eyebrow">Type</span><Select className="mt-1.5" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="all">All types</option><option value="recruitment">Recruitment</option><option value="hackathon">Hackathon</option><option value="competition">Competition</option><option value="other">Other</option></Select></label>
       </div>
 
@@ -130,9 +130,7 @@ export default function Events() {
           <div className="stagger grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {filteredEvents.map((event) => {
               const deadline = eventDeadline(event);
-              const effectiveStatus = event.status === "published"
-                ? (eventIsOpen(event) ? "open" : "closed")
-                : event.status;
+              const lifecycle = eventLifecycle(event);
               return (
                 <article key={event._id} className="card flex flex-col overflow-hidden">
                   <div className="relative aspect-square overflow-hidden bg-paper-2">
@@ -155,8 +153,8 @@ export default function Events() {
                       </div>
                     )}
                     <span className="absolute right-3 top-3">
-                      <Badge tone={effectiveStatus === "open" ? "ok" : STATUS_TONE[effectiveStatus] || "neutral"} className="capitalize">
-                        {effectiveStatus}
+                      <Badge tone={lifecycle.tone} live={lifecycle.live}>
+                        {lifecycle.label}
                       </Badge>
                     </span>
                   </div>
@@ -178,13 +176,13 @@ export default function Events() {
                     <label className="mt-5 block">
                       <span className="eyebrow">Lifecycle</span>
                       <Select
-                        className="mt-1.5 capitalize"
+                        className="mt-1.5"
                         value={event.status}
                         onChange={(changeEvent) => changeStatus(event, changeEvent.target.value)}
                       >
                         {STATUSES.map((status) => (
                           <option key={status} value={status}>
-                            {status}
+                            {STATUS_LABEL[status]}
                           </option>
                         ))}
                       </Select>

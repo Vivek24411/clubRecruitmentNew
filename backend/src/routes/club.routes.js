@@ -13,15 +13,19 @@ const {
   cancelScheduleSlot,
   extractCandidates,
   exportRoundCandidates,
+  remindIncompleteSubmissions,
   updateCandidateReview,
 } = require("../controllers/workflow.controllers");
 const rateLimit = require("../middlewares/rateLimit");
 const validateRequest = require("../middlewares/validateRequest");
+const { clubSubmissionDownload } = require("../controllers/submissionFiles.controllers");
 
 const loginRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "club-login", persistent: true, keyGenerator: rateLimit.bodyIdentifier("userName") });
 const resetRequestRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyPrefix: "club-password-reset", persistent: true, keyGenerator: rateLimit.bodyIdentifier("userName", "email") });
 const resetVerifyRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "club-password-reset-verify", persistent: true, keyGenerator: rateLimit.bodyIdentifier("userName", "email") });
 const passwordChangeRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyPrefix: "club-password-change", persistent: true, keyGenerator: rateLimit.sessionOrIp });
+const uploadSignRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, keyPrefix: "club-upload-sign", persistent: true, keyGenerator: rateLimit.sessionOrIp });
+const submissionReminderRateLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 5, keyPrefix: "club-submission-reminder", persistent: true, keyGenerator: rateLimit.sessionOrIp });
 const fitsBcrypt = (value) => Buffer.byteLength(String(value), "utf8") <= 72;
 const validOptionalCapacity = (value) => {
   if (value === "") return true;
@@ -74,7 +78,7 @@ const validProgrammeEligibility = (value) => {
   }
 };
 
-router.post('/uploads/sign', clubAuth, [
+router.post('/uploads/sign', clubAuth, uploadSignRateLimit, [
   body('kind').isIn(['clubLogo', 'clubBanner', 'eventBanner', 'sessionThumbnail']),
 ], validateRequest, signDirectUpload(['clubLogo', 'clubBanner', 'eventBanner', 'sessionThumbnail']))
 
@@ -299,6 +303,10 @@ router.get('/events/:eventId/rounds/:roundId/export', clubAuth, [
   query('status').optional().isIn(['all', 'eligible', 'scheduled', 'active', 'submitted', 'under_review', 'waitlisted', 'advanced', 'rejected', 'missed']),
   query('search').optional().isString().isLength({ max: 100 }),
 ], validateRequest, exportRoundCandidates)
+router.post('/events/:eventId/rounds/:roundId/submission-reminders', clubAuth, submissionReminderRateLimit, [
+  param('eventId').isMongoId(),
+  param('roundId').isMongoId(),
+], validateRequest, remindIncompleteSubmissions)
 router.get('/sessions/:sessionId/attendees', clubAuth, [param('sessionId').isMongoId()], validateRequest, getSessionAttendees)
 router.patch('/sessions/:sessionId/attendance', clubAuth, [
   param('sessionId').isMongoId(),
@@ -317,6 +325,11 @@ router.get('/events/:eventId/workflow', clubAuth, [
   query('page').optional().isInt({ min: 1 }),
   query('limit').optional().isInt({ min: 10, max: 100 }),
 ], validateRequest, getEventWorkflow)
+
+router.get('/submissions/:submissionId/files/:fileIndex', clubAuth, [
+  param('submissionId').isMongoId(),
+  param('fileIndex').isInt({ min: 0, max: 4 }),
+], validateRequest, clubSubmissionDownload)
 
 router.post('/events/:eventId/rounds/:roundId/decisions', clubAuth, [
   param('eventId').isMongoId(),

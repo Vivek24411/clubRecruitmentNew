@@ -25,9 +25,10 @@ function prepareRoundSubmission({ round, answersJSON, fileKeysJSON, uploadedFile
   const answerMap = new Map(cleanAnswers.map((answer) => [answer.key, answer.value.trim()]));
   const files = uploadedFiles.map((file, index) => ({
     fieldKey: String(fileKeys[index] || "attachment").slice(0, 80),
-    url: file.path,
     publicId: file.filename,
     resourceType: file.resourceType || (file.mimetype?.startsWith("video/") ? "video" : file.mimetype === "application/pdf" ? "raw" : "image"),
+    deliveryType: file.deliveryType || "authenticated",
+    version: file.version || null,
     format: file.format || "",
     originalName: file.originalName || file.originalname || "",
     mimeType: file.mimetype || "",
@@ -84,7 +85,7 @@ async function saveRoundSubmission({ event, round, candidate, studentId, answers
     { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
   );
   const replaced = (existing?.files || []).filter((file) => submissionData.uploadedFields.has(file.fieldKey));
-  await Promise.all(replaced.map((file) => destroyCloudinaryAsset(file.publicId, file.resourceType)));
+  await Promise.all(replaced.map((file) => destroyCloudinaryAsset(file.publicId, file.resourceType, file.deliveryType)));
   candidate.status = "submitted";
   await candidate.save();
   return { submission, existing: Boolean(existing) };

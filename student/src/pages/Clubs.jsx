@@ -69,7 +69,7 @@ export default function Clubs() {
     async function fetchClubs() {
       setIsLoading(true);
       try {
-        const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getAllClubs`);
+        const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getAllClubs?limit=100`);
         if (response.data.success) setClubs(response.data.clubs);
         else toast.error(response.data.msg);
       } catch {

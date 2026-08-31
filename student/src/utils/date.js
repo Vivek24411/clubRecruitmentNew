@@ -43,16 +43,32 @@ export function eventEndDate(event) {
   return eventDeadline(event);
 }
 
-export function eventIsOpen(event, now = new Date()) {
-  if (event?.status !== "published") return false;
-  const endsAt = eventEndDate(event);
-  return !endsAt || endsAt > now;
-}
-
 export function eventApplicationsOpen(event, now = new Date()) {
   if (event?.status !== "published") return false;
   const deadline = eventDeadline(event);
   return !deadline || deadline > now;
+}
+
+export function eventIsOngoing(event) {
+  return event?.status === "published";
+}
+
+export function eventLifecycle(event, now = new Date()) {
+  if (event?.status === "published") {
+    return eventApplicationsOpen(event, now)
+      ? { key: "registration_open", label: "Registration open", tone: "ok", live: true }
+      : { key: "selection_ongoing", label: "Registration closed · Selection ongoing", tone: "warn", live: true };
+  }
+  if (event?.status === "closed") {
+    return { key: "completed", label: "Completed", tone: "neutral", live: false };
+  }
+  if (event?.status === "cancelled") {
+    return { key: "cancelled", label: "Cancelled", tone: "bad", live: false };
+  }
+  if (event?.status === "archived") {
+    return { key: "archived", label: "Archived", tone: "neutral", live: false };
+  }
+  return { key: "draft", label: "Draft", tone: "neutral", live: false };
 }
 
 export function sessionDate(date, time = "00:00") {

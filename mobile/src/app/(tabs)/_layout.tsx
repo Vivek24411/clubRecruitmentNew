@@ -24,15 +24,15 @@ export default function TabsLayout() {
       tabBarStyle: {
         backgroundColor: palette.surface, borderTopColor: palette.line, borderTopWidth: StyleSheet.hairlineWidth,
         height: 58 + Math.max(insets.bottom, 8), paddingTop: 7, paddingBottom: Math.max(insets.bottom, 8),
+        shadowColor: palette.accentDeep, shadowOffset: { width: 0, height: -7 }, shadowOpacity: 0.07, shadowRadius: 18, elevation: 12,
       },
       tabBarItemStyle: { gap: 1 },
       tabBarLabelStyle: { fontFamily: typography.medium, fontSize: 10.5 },
       tabBarIconStyle: { marginBottom: 1 },
       tabBarIcon: ({ color, focused }) => {
         const icon = icons[route.name] || { active: 'circle', idle: 'circle-outline' };
-        return <View style={styles.iconWrap}>
+        return <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
           <MaterialCommunityIcons name={focused ? icon.active : icon.idle} color={color} size={23} />
-          {focused ? <View style={styles.activeDot} /> : null}
         </View>;
       },
     })}>
@@ -47,6 +47,6 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  iconWrap: { width: 32, height: 28, alignItems: 'center', justifyContent: 'center' },
-  activeDot: { position: 'absolute', bottom: 0, width: 4, height: 4, borderRadius: 2, backgroundColor: palette.accent },
+  iconWrap: { width: 42, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  iconWrapActive: { backgroundColor: palette.accentTint },
 });

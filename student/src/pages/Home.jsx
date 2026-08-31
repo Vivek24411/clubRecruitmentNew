@@ -6,7 +6,7 @@ import {
   daysUntil,
   eventApplicationsOpen,
   eventDeadline,
-  eventIsOpen,
+  eventIsOngoing,
   formatDateTime,
   sessionDate,
   sessionEndDate,
@@ -29,7 +29,7 @@ export function DeadlinePill({ event }) {
   const deadline = eventDeadline(event);
   const days = daysUntil(deadline);
   if (!eventApplicationsOpen(event)) return <Badge tone="ok">Selection ongoing</Badge>;
-  if (days === null) return <Badge tone="ok">Open</Badge>;
+  if (days === null) return <Badge tone="ok">Registration open</Badge>;
   if (days === 0) return <Badge tone="bad" live>Closes today</Badge>;
   if (days === 1) return <Badge tone="bad">Closes tomorrow</Badge>;
   if (days <= 7) return <Badge tone="warn">{days}d left</Badge>;
@@ -85,21 +85,21 @@ export default function Home() {
     [sessions],
   );
 
-  const openEvents = useMemo(
-    () => sortedEvents.filter((event) => eventIsOpen(event)),
+  const ongoingEvents = useMemo(
+    () => sortedEvents.filter((event) => eventIsOngoing(event)),
     [sortedEvents],
   );
 
   const featuredClubs = useMemo(
     () => [
       ...new Map(
-        openEvents
+        ongoingEvents
           .filter((event) => event.eventType === "recruitment")
           .filter((event) => event.clubId?.name)
           .map((event) => [event.clubId._id || event.clubId.name, event.clubId]),
       ).values(),
     ],
-    [openEvents],
+    [ongoingEvents],
   );
 
   const now = new Date();
@@ -132,7 +132,7 @@ export default function Home() {
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Button to="/events" variant="primary" size="lg">
-                Explore open events
+                Explore ongoing events
               </Button>
               <Button to={loggedInStudent ? "/applications" : "/register"} variant="secondary" size="lg">
                 {loggedInStudent ? "Track applications" : "Create account to apply"}
@@ -143,7 +143,7 @@ export default function Home() {
           {/* At-a-glance counters, ruled like a masthead. */}
           {!loading && (
             <div className="flex gap-8 lg:flex-col lg:gap-6">
-              <HeroCount value={openEvents.length} label="Open events" />
+              <HeroCount value={ongoingEvents.length} label="Ongoing events" />
               <HeroCount value={upcomingSessions.length} label="Upcoming sessions" />
             </div>
           )}
@@ -175,7 +175,7 @@ export default function Home() {
       <div className="mt-12 grid gap-12 lg:grid-cols-2 lg:gap-10">
         <section>
           <SectionHeader
-            title="Open events"
+            title="Ongoing events"
             description="Applications and selection processes currently running."
             action={
               <Link className="link link-accent text-sm" to="/events">
@@ -186,14 +186,14 @@ export default function Home() {
           <div className="mt-5">
             {loading ? (
               <SkeletonList rows={3} />
-            ) : openEvents.length === 0 ? (
+            ) : ongoingEvents.length === 0 ? (
               <EmptyState
-                title="No open events"
+                title="No ongoing events"
                 description="No event or selection process is currently running."
               />
             ) : (
               <div className="stagger space-y-3">
-                {openEvents.slice(0, 4).map((event) => (
+                {ongoingEvents.slice(0, 4).map((event) => (
                   <CardLink key={event._id} to={`/event/${event._id}`} className="group overflow-hidden p-0">
                     <div className="grid min-w-0 sm:grid-cols-[13rem_minmax(0,1fr)]">
                       <div className="relative aspect-square min-w-0 overflow-hidden bg-paper-2">

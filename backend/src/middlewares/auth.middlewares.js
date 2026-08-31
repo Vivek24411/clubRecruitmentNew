@@ -47,7 +47,7 @@ module.exports.studentAuth = async (req, res, next) => {
   try {
     const decoded = verifySession(token, "student");
     const student = await getPrincipal({ role: "student", id: decoded.sub, version: decoded.ver, model: studentModel });
-    if (!student || student.status === "suspended" || student.tokenVersion !== decoded.ver) {
+    if (!student || student.status !== "active" || student.tokenVersion !== decoded.ver) {
       return unauthorized(res, "Student session is no longer active");
     }
     const settings = await getPlatformSettingsCached();
@@ -72,7 +72,7 @@ module.exports.optionalStudentAuth = async (req, _res, next) => {
   try {
     const decoded = verifySession(token, "student");
     const student = await getPrincipal({ role: "student", id: decoded.sub, version: decoded.ver, model: studentModel });
-    if (student && student.status !== "suspended" && student.tokenVersion === decoded.ver) {
+    if (student && student.status === "active" && student.tokenVersion === decoded.ver) {
       const settings = await getPlatformSettingsCached();
       await syncAcademicState(student, settings);
       putPrincipal("student", student, decoded.ver);

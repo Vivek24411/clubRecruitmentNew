@@ -130,7 +130,7 @@ module.exports.clubLogin = async (req, res) => {
   const token = await club.createToken();
   setSessionCookie(res, "club", token);
   await writeAudit({ actorRole: "club", actorId: club._id, action: "auth.login", targetType: "club", targetId: club._id });
-  return res.json({ success: true, msg: "Club logged in successfully", token });
+  return res.json({ success: true, msg: "Club logged in successfully" });
 };
 
 module.exports.logout = async (req, res) => {
@@ -849,7 +849,8 @@ module.exports.updateEventStatus = async (req, res) => {
     });
   }
   await writeAudit({ actorRole: "club", actorId: req.club._id, action: `event.${event.status}`, targetType: "event", targetId: event._id });
-  return res.json({ success: true, msg: `Event ${event.status}`, event });
+  const statusLabel = event.status === "closed" ? "completed" : event.status;
+  return res.json({ success: true, msg: `Event ${statusLabel}`, event });
 };
 
 module.exports.deleteEvent = async (req, res) => {
@@ -940,7 +941,7 @@ module.exports.deleteEvent = async (req, res) => {
   const submissionFiles = submissions.flatMap((submission) => submission.files || []);
   await Promise.all([
     destroyCloudinaryImage(event.eventBannerPublicId),
-    ...submissionFiles.map((file) => destroyCloudinaryAsset(file.publicId, file.resourceType)),
+    ...submissionFiles.map((file) => destroyCloudinaryAsset(file.publicId, file.resourceType, file.deliveryType)),
   ]);
   await writeAudit({
     actorRole: "club",

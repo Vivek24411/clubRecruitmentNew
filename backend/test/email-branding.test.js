@@ -65,3 +65,23 @@ test("email logo can be overridden with a secure hosted asset", () => {
     else process.env.EMAIL_LOGO_URL = previousLogo;
   }
 });
+
+test("incomplete submission emails use an application reminder label and action", () => {
+  const html = buildNotificationEmailHtml({
+    title: "Complete your application",
+    message: "Your response has not been submitted yet.",
+    detailsUrl: "https://discovr.iitr.ac.in/event/507f1f77bcf86cd799439011",
+    type: "submission_due_reminder",
+    emailDetails: {
+      clubName: "Kshitij",
+      eventName: "Kshitij Recruitment",
+      roundName: "Application round",
+      startsAt: "2026-09-02T18:29:59.000Z",
+      dateLabel: "Submission deadline",
+    },
+  });
+  assert.match(html, /Application reminder/);
+  assert.match(html, /Complete application/);
+  assert.match(html, /Submission deadline/);
+  assert.match(html, /Kshitij Recruitment/);
+});

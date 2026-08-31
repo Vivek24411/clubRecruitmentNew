@@ -41,7 +41,7 @@ export default function Clubs() {
 
   useEffect(() => {
     axios
-      .get(`${import.meta.env.VITE_BASE_URI}/admin/getAllClubs`)
+      .get(`${import.meta.env.VITE_BASE_URI}/admin/getAllClubs?limit=100`)
       .then(({ data }) => (data.success ? setClubs(data.clubs) : toast.error(data.msg)))
       .catch(() => toast.error("Could not load clubs"))
       .finally(() => setLoading(false));

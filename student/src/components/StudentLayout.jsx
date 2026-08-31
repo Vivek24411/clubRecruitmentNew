@@ -6,11 +6,11 @@ import { Button, Modal, Monogram, SlidingNav } from "./ui";
 import { toast } from "react-toastify";
 import {
   enablePushNotifications,
+  getPushNotificationPreference,
   getPushNotificationState,
+  keepPushNotificationsDisabled,
   syncPushRegistration,
 } from "../utils/pushNotifications";
-
-const PUSH_PROMPT_SESSION_KEY = "discovrPushPromptShown";
 
 const publicLinks = [
   ["/", "Discover"],
@@ -78,15 +78,17 @@ export default function StudentLayout({ children }) {
       setPushPrompt({ open: false, status: "disabled" });
       return undefined;
     }
-    if (window.sessionStorage.getItem(PUSH_PROMPT_SESSION_KEY) === "1") return undefined;
 
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       try {
-        await syncPushRegistration().catch(() => {});
         const state = await getPushNotificationState();
-        if (cancelled || !["disabled", "blocked"].includes(state.status)) return;
-        window.sessionStorage.setItem(PUSH_PROMPT_SESSION_KEY, "1");
+        const permissionUndecided = typeof Notification !== "undefined"
+          && Notification.permission === "default";
+        if (cancelled
+          || state.status !== "disabled"
+          || !permissionUndecided
+          || getPushNotificationPreference() !== "undecided") return;
         setPushPrompt({ open: true, status: state.status });
       } catch {
         // Profile remains the fallback if this browser cannot report push state.
@@ -125,6 +127,11 @@ export default function StudentLayout({ children }) {
     setPushPrompt((current) => ({ ...current, open: false }));
   };
 
+  const keepPushDisabled = () => {
+    keepPushNotificationsDisabled();
+    closePushPrompt();
+  };
+
   const enablePushFromPrompt = async () => {
     setPushPromptWorking(true);
     try {
@@ -160,13 +167,13 @@ export default function StudentLayout({ children }) {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5 sm:px-6">
           <NavLink
             to="/"
-            className="group mr-auto"
+            className="brand-link group mr-auto"
             aria-label="Discovr home"
           >
             <img
               src="/discovrlogo.png"
               alt="Discovr"
-              className="block h-8 w-auto object-contain transition-transform duration-300 group-hover:scale-[1.02]"
+              className="brand-wordmark block h-8 w-auto object-contain"
             />
           </NavLink>
 
@@ -226,7 +233,7 @@ export default function StudentLayout({ children }) {
 
       <Modal
         open={pushPrompt.open}
-        onClose={closePushPrompt}
+        onClose={keepPushDisabled}
         title={pushPrompt.status === "blocked" ? "Notifications are blocked" : pushPrompt.status === "error" ? "Notifications need attention" : "Never miss a Discovr update"}
         description={pushPrompt.status === "blocked"
           ? "Allow notifications for this site in your browser settings, then manage this device from your Discovr Profile."
@@ -256,7 +263,7 @@ export default function StudentLayout({ children }) {
             </Button>
           )}
           {pushPrompt.status === "error" && <Button type="button" variant="secondary" onClick={openPushSettings}>View Profile</Button>}
-          <Button type="button" variant="ghost" onClick={closePushPrompt}>Not now</Button>
+          <Button type="button" variant="ghost" onClick={keepPushDisabled}>Keep disabled</Button>
         </div>
       </Modal>
 

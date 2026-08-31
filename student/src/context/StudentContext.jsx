@@ -31,23 +31,16 @@ const StudentContext = ({ children }) => {
       await detachPushRegistration().catch(() => {});
       await axios.post(`${import.meta.env.VITE_BASE_URI}/student/logout`);
     } finally {
-      localStorage.removeItem("token");
       setProfile(null);
       setLoggedInStudent(false);
     }
   }, []);
 
   useEffect(() => {
-    const requestInterceptor = axios.interceptors.request.use((config) => {
-      const token = localStorage.getItem("token");
-      if (token) config.headers.Authorization = `Bearer ${token}`;
-      return config;
-    });
     const interceptor = axios.interceptors.response.use(
       (response) => response,
       (error) => {
         if (error.response?.status === 401) {
-          localStorage.removeItem("token");
           setProfile(null);
           setLoggedInStudent(false);
         }
@@ -55,7 +48,6 @@ const StudentContext = ({ children }) => {
       }
     );
     return () => {
-      axios.interceptors.request.eject(requestInterceptor);
       axios.interceptors.response.eject(interceptor);
     };
   }, []);

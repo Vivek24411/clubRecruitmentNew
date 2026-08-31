@@ -40,6 +40,7 @@ const {
   getSessionRsvp,
   getAcademicOptions,
   submitInitialApplication,
+  deleteAccount,
 } = require("../controllers/student.controllers");
 const { optionalStudentAuth, studentAuth } = require("../middlewares/auth.middlewares");
 const rateLimit = require("../middlewares/rateLimit");
@@ -47,6 +48,7 @@ const validateRequest = require("../middlewares/validateRequest");
 const upload = require("../middlewares/upload");
 const { attachDirectAsset, attachDirectAssets, signDirectUpload } = require("../middlewares/directUpload");
 const { getMyEventWorkflow, submitRoundWork } = require("../controllers/workflow.controllers");
+const { studentSubmissionDownload } = require("../controllers/submissionFiles.controllers");
 const { checkEmailDomain } = require("../services/student.services");
 const { catalogueCache, publicCache } = require("../middlewares/cacheControl");
 const { registerPushInstallation, unregisterPushInstallation, getPushInstallationStatus } = require("../controllers/push.controllers");
@@ -60,6 +62,8 @@ const authIpCeiling = rateLimit({ windowMs: 15 * 60 * 1000, max: 20000, keyPrefi
 const otpRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyPrefix: "otp", persistent: true, keyGenerator: rateLimit.bodyIdentifier("email", "purpose") });
 const verifyRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "otp-verify", persistent: true, keyGenerator: rateLimit.bodyIdentifier("email", "purpose") });
 const loginRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: "student-login", persistent: true, keyGenerator: rateLimit.bodyIdentifier("email") });
+const uploadSignRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, keyPrefix: "student-upload-sign", persistent: true, keyGenerator: rateLimit.sessionOrIp });
+const sensitiveAccountRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyPrefix: "student-account-sensitive", persistent: true, keyGenerator: rateLimit.sessionOrIp });
 
 router.post(
   "/sendOtp",
@@ -104,7 +108,7 @@ router.post('/logout', logout)
 
 router.get('/getProfile',studentAuth,getProfile)
 
-router.post('/uploads/sign', studentAuth, [
+router.post('/uploads/sign', studentAuth, uploadSignRateLimit, [
   body('kind').isIn(['profilePicture', 'submission']),
 ], validateRequest, signDirectUpload(['profilePicture', 'submission']))
 
@@ -117,10 +121,15 @@ router.patch('/profile', studentAuth, upload.single('profilePicture'), attachDir
   body('notificationPreferences.inApp').optional().isBoolean(),
 ], validateRequest, updateProfile)
 
-router.post('/changePassword', studentAuth, [
+router.post('/changePassword', studentAuth, sensitiveAccountRateLimit, [
   body('currentPassword').isString().isLength({ min: 1, max: 128 }),
   body('newPassword').isLength({ min: 10, max: 128 }).custom(fitsBcrypt).withMessage("Password must be 10–72 bytes long"),
 ], validateRequest, changePassword)
+
+router.delete('/account', studentAuth, sensitiveAccountRateLimit, [
+  body('currentPassword').isString().isLength({ min: 1, max: 128 }),
+  body('confirmation').equals('DELETE'),
+], validateRequest, deleteAccount)
 
 router.get('/getSessions', publicCache(60), getAllSessions)
 
@@ -213,9 +222,10 @@ router.get('/notifications/unread-count', studentAuth, getUnreadNotificationCoun
 router.post('/notifications/read', studentAuth, [body('notificationId').isMongoId()], validateRequest, markNotificationRead)
 router.post('/notifications/read-all', studentAuth, markAllNotificationsRead)
 
-const validInstallationId = (value) => /^[A-Za-z0-9_-]{10,200}$/.test(String(value || ""));
+const validInstallationId = (value) => /^(?:[A-Za-z0-9_-]{10,200}|ExponentPushToken\[[A-Za-z0-9_-]{10,180}\]|ExpoPushToken\[[A-Za-z0-9_-]{10,180}\])$/.test(String(value || ""));
 router.put('/push/registration', studentAuth, [
   body('installationId').custom(validInstallationId).withMessage('Invalid Firebase installation ID'),
+  body('provider').optional().isIn(['fcm', 'expo']),
 ], validateRequest, registerPushInstallation)
 router.delete('/push/registration', studentAuth, [
   body('installationId').custom(validInstallationId).withMessage('Invalid Firebase installation ID'),
@@ -239,6 +249,11 @@ router.put('/events/:eventId/rounds/:roundId/submission', studentAuth, upload.su
   body('answersJSON').optional().isString().isLength({ max: 50000 }),
   body('fileKeysJSON').optional().isString().isLength({ max: 2000 }),
 ], validateRequest, submitRoundWork)
+
+router.get('/submissions/:submissionId/files/:fileIndex', studentAuth, [
+  param('submissionId').isMongoId(),
+  param('fileIndex').isInt({ min: 0, max: 4 }),
+], validateRequest, studentSubmissionDownload)
 
 router.post('/forgotPassword',[
   body("email").custom(isIitrEmail).withMessage("Invalid IITR email address"),

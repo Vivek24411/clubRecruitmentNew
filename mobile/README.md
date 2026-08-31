@@ -14,7 +14,7 @@ Expo SDK 57 / React Native student client for the existing Discovr API. Club and
 - Session RSVP/cancellation, capacity, seat availability, and accurate live/upcoming/past states
 - Production API default with an environment override
 
-Native push-token registration and password recovery remain future mobile-specific slices; in-app alerts and notification preferences already use the website backend.
+The native app includes the full student workflow available on the website: discovery, registration and password recovery, event applications and teams, round submissions and schedules, session RSVP, in-app alerts, native push, profile editing, and password changes.
 
 ## Run locally
 

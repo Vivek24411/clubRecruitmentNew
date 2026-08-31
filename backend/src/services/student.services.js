@@ -147,6 +147,7 @@ function buildNotificationEmailHtml({ title, message, detailsUrl, type, emailDet
         round_scheduled: "View schedule",
         round_advanced: "Open next round",
         round_waitlisted: "View application",
+        submission_due_reminder: "Complete application",
         event_deadline_changed: "View updated event",
         event_extracted: "Open event",
         session_reminder: "View session",
@@ -177,7 +178,7 @@ function buildNotificationEmailHtml({ title, message, detailsUrl, type, emailDet
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#eef7fc;">
         <tr><td align="center" style="padding:40px 14px;">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:580px;background:#ffffff;border:1px solid #c8dfec;border-radius:18px;box-shadow:0 18px 50px -30px rgba(7,93,148,0.4);overflow:hidden;">
-                ${buildEmailBrandHeader(type === "session_reminder" ? "Session reminder" : type === "round_deadline_reminder" || type === "round_interview_reminder" ? "Round reminder" : "Application update")}
+                ${buildEmailBrandHeader(type === "session_reminder" ? "Session reminder" : type === "submission_due_reminder" ? "Application reminder" : type === "round_deadline_reminder" || type === "round_interview_reminder" ? "Round reminder" : "Application update")}
                 <tr><td style="padding:32px 34px 12px;">
                     <div style="margin-bottom:8px;font-size:11px;line-height:17px;font-weight:700;letter-spacing:1.3px;text-transform:uppercase;color:#0878be;">New Discovr update</div>
                     <h1 style="margin:0 0 12px;font-size:28px;line-height:36px;color:#10212d;">${safeTitle}</h1>

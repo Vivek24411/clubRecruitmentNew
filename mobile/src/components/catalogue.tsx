@@ -3,12 +3,13 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { Badge, Card, MetaRow, PressableScale, RemoteImage } from '@/components/ui';
 import { palette, radius, spacing, typography } from '@/constants/theme';
-import { eventDeadline, eventIsOpen, formatDateOnly, formatSessionDate, sessionTiming, titleCase } from '@/lib/date';
+import { eventApplicationsOpen, eventDeadline, eventLifecycle, formatDateOnly, formatSessionDate, sessionTiming, titleCase } from '@/lib/date';
 import type { Club, DiscovrEvent, Session } from '@/types/api';
 
 export function EventCard({ event }: { event: DiscovrEvent }) {
   const deadline = eventDeadline(event);
-  const open = eventIsOpen(event);
+  const applicationsOpen = eventApplicationsOpen(event);
+  const lifecycle = eventLifecycle(event);
   const applied = event.hasApplied || Boolean(event.application) || Boolean(event.applications?.length);
   const rounds = event.verticalsEnabled ? event.verticals?.length : event.verticals?.[0]?.rounds?.length || event.rounds?.length || event.numberOfRounds;
   return (
@@ -16,7 +17,7 @@ export function EventCard({ event }: { event: DiscovrEvent }) {
       <Card>
         <View style={styles.media}>
           <RemoteImage uri={event.eventBanner || event.clubId?.clubBanner} style={styles.banner} />
-          <View style={styles.mediaBadge}><Badge tone={open ? 'success' : 'neutral'}>{open ? 'Open' : 'Closed'}</Badge></View>
+          <View style={styles.mediaBadge}><Badge tone={lifecycle.tone}>{lifecycle.label}</Badge></View>
         </View>
         <View style={styles.body}>
           <View style={styles.row}><Badge tone="accent">{titleCase(event.eventType || 'event')}</Badge>{applied ? <Badge tone="success">Applied</Badge> : null}</View>
@@ -24,11 +25,11 @@ export function EventCard({ event }: { event: DiscovrEvent }) {
           <Text style={styles.title}>{event.title}</Text>
           {event.shortDescription ? <Text style={styles.description} numberOfLines={2}>{event.shortDescription}</Text> : null}
           <View style={styles.eventDetails}>
-            <Detail label="Closes" value={deadline ? formatDateOnly(deadline) : 'Not set'} muted={!open} />
+            <Detail label="Registration closes" value={deadline ? formatDateOnly(deadline) : 'Not set'} muted={!applicationsOpen} />
             <Detail label="Team size" value={event.registrationType === 'individual' ? 'Individual' : `${event.minTeamSize || 1}–${event.maxTeamSize || 1}`} />
             <Detail label={event.verticalsEnabled ? 'Verticals' : 'Rounds'} value={rounds ? String(rounds) : '—'} />
           </View>
-          <View style={styles.cardAction}><Text style={styles.cardActionText}>{open && !applied ? 'Apply now' : 'View details'}</Text><Text style={styles.cardArrow}>→</Text></View>
+          <View style={styles.cardAction}><Text style={styles.cardActionText}>{applicationsOpen && !applied ? 'Apply now' : 'View details'}</Text><Text style={styles.cardArrow}>→</Text></View>
         </View>
       </Card>
     </PressableScale>

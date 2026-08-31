@@ -4,7 +4,7 @@ import { InstrumentSans_500Medium } from '@expo-google-fonts/instrument-sans/500
 import { InstrumentSans_600SemiBold } from '@expo-google-fonts/instrument-sans/600SemiBold';
 import { InstrumentSans_700Bold } from '@expo-google-fonts/instrument-sans/700Bold';
 import { useFonts } from 'expo-font';
-import { Stack, ThemeProvider } from 'expo-router';
+import { router, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -13,6 +13,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { palette, typography } from '@/constants/theme';
 import { AuthProvider } from '@/context/auth-context';
 import { FeedbackProvider } from '@/context/feedback-context';
+import { loadNotifications, notificationPath } from '@/lib/push-notifications';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -35,6 +36,27 @@ export default function RootLayout() {
     if (fontsLoaded || fontError) void SplashScreen.hideAsync();
   }, [fontsLoaded, fontError]);
 
+  useEffect(() => {
+    let active = true;
+    let subscription: { remove: () => void } | undefined;
+
+    void (async () => {
+      const Notifications = await loadNotifications();
+      if (!active || !Notifications) return;
+
+      subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+        router.push(notificationPath(response) as never);
+      });
+      const response = await Notifications.getLastNotificationResponseAsync();
+      if (active && response) router.push(notificationPath(response) as never);
+    })().catch((error) => console.warn('Could not initialize notification routing.', error));
+
+    return () => {
+      active = false;
+      subscription?.remove();
+    };
+  }, []);
+
   if (!fontsLoaded && !fontError) return null;
 
   return (
@@ -53,6 +75,7 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="login" options={{ title: 'Student sign in', presentation: 'modal', animation: 'slide_from_bottom' }} />
               <Stack.Screen name="register" options={{ title: 'Create account', presentation: 'modal', animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="forgot-password" options={{ title: 'Reset password', presentation: 'modal', animation: 'slide_from_bottom' }} />
               <Stack.Screen name="event/[id]" options={{ title: 'Event' }} />
               <Stack.Screen name="session/[id]" options={{ title: 'Session' }} />
               <Stack.Screen name="club/[id]" options={{ title: 'Club' }} />

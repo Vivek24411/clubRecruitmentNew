@@ -8,10 +8,17 @@ const scheduleSlotModel = require("../models/scheduleSlot.model");
 const scheduleReservationModel = require("../models/scheduleReservation.model");
 const studentModel = require("../models/student.model");
 const { notifyStudent } = require("../services/notification.services");
-const { enqueueInterviewRemindersForSlot } = require("../services/roundReminder.services");
+const { enqueueUniqueNotifications } = require("../services/jobQueue.services");
+const {
+  ACTIVE_DEADLINE_STATUSES,
+  buildIncompleteSubmissionNotification,
+  enqueueInterviewRemindersForSlot,
+  incompleteSubmissionRecipientIds,
+} = require("../services/roundReminder.services");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryAsset, destroyUploadedFile } = require("../utils/uploads");
 const { saveRoundSubmission } = require("../services/roundSubmission.services");
+const { secureSubmission, secureSubmissions } = require("../services/submissionFiles.services");
 const {
   advanceCandidate,
   autoScheduleCandidates,
@@ -68,7 +75,7 @@ async function workflowData(event, query = {}) {
   if (search) {
     const pattern = new RegExp(escapedRegex(search), "i");
     const [students, registrations] = await Promise.all([
-      studentModel.find({ $or: [{ name: pattern }, { email: pattern }, { enrollmentNumber: pattern }, { branch: pattern }] }).select("_id").limit(500).lean(),
+      studentModel.find({ $or: [{ name: pattern }, { email: pattern }, { phoneNumber: pattern }, { enrollmentNumber: pattern }, { branch: pattern }] }).select("_id").limit(500).lean(),
       registerationEventModel.find({ eventId: event._id, verticalId: vertical?._id, teamName: pattern }).select("_id").limit(500).lean(),
     ]);
     const studentIds = students.map((student) => student._id);
@@ -169,7 +176,7 @@ async function workflowData(event, query = {}) {
   return {
     registrations,
     candidates,
-    submissions,
+    submissions: secureSubmissions(submissions, "club"),
     slots,
     vertical,
     selectedVerticalId: vertical?._id || null,
@@ -198,6 +205,92 @@ module.exports.getEventWorkflow = async (req, res) => {
   return res.json({ success: true, event, ...data, targetEvents });
 };
 
+async function ensureLegacyRegistrationWorkflows(event, verticalId) {
+  const registrations = await registerationEventModel.find({
+    eventId: event._id,
+    verticalId,
+    overallStatus: { $ne: "withdrawn" },
+  });
+  if (!registrations.length) return 0;
+  const represented = new Set((await roundCandidateModel.distinct("registrationId", {
+    eventId: event._id,
+    registrationId: { $in: registrations.map((registration) => registration._id) },
+  })).map(String));
+  const missing = registrations.filter((registration) => !represented.has(String(registration._id)));
+  for (let index = 0; index < missing.length; index += 25) {
+    await Promise.all(missing.slice(index, index + 25).map((registration) =>
+      ensureRegistrationWorkflow(event, registration)));
+  }
+  return missing.length;
+}
+
+module.exports.remindIncompleteSubmissions = async (req, res) => {
+  if (invalidRequest(req, res)) return;
+  const event = await ownedEvent(req.params.eventId, req.club._id);
+  const round = eventRound(event, req.params.roundId);
+  const vertical = round ? verticalForRound(event, round._id) : null;
+  if (!event || !round || !vertical) {
+    return res.status(404).json({ success: false, msg: "Event or round not found" });
+  }
+  if (event.status !== "published") {
+    return res.status(409).json({ success: false, msg: "Reminders can be sent only while the event is published" });
+  }
+  if (!round.submissionEnabled && !["submission", "hackathon"].includes(round.type)) {
+    return res.status(409).json({ success: false, msg: "This round does not collect an application submission" });
+  }
+  const deadline = new Date(round.submissionDeadlineAt);
+  if (Number.isNaN(deadline.getTime()) || deadline <= new Date()) {
+    return res.status(409).json({ success: false, msg: "Set a future submission deadline before sending a reminder" });
+  }
+
+  const backfilledRegistrations = await ensureLegacyRegistrationWorkflows(event, vertical._id);
+  const candidates = await roundCandidateModel.find({
+    eventId: event._id,
+    roundId: round._id,
+    status: { $in: ACTIVE_DEADLINE_STATUSES },
+  }).select("_id studentId participantIds status").lean();
+  const submittedCandidateIds = candidates.length
+    ? await roundSubmissionModel.distinct("candidateId", {
+      eventId: event._id,
+      roundId: round._id,
+      candidateId: { $in: candidates.map((candidate) => candidate._id) },
+    })
+    : [];
+  const recipientIds = incompleteSubmissionRecipientIds(candidates, submittedCandidateIds);
+  if (!recipientIds.length) {
+    return res.json({
+      success: true,
+      msg: "No incomplete active applications need a reminder",
+      recipientCount: 0,
+      queuedCount: 0,
+      duplicateCount: 0,
+      backfilledRegistrations,
+    });
+  }
+
+  const notification = buildIncompleteSubmissionNotification({
+    event,
+    round,
+    clubName: req.club.name || "the organising club",
+  });
+  const queued = await enqueueUniqueNotifications(recipientIds, notification, {
+    channels: ["email"],
+    dedupeKey: `submission-due:${event._id}:${round._id}:${deadline.toISOString()}`,
+  });
+  await writeAudit({
+    actorRole: "club",
+    actorId: req.club._id,
+    action: "round.remind_incomplete_submissions",
+    targetType: "round",
+    targetId: round._id,
+    metadata: { ...queued, eventId: event._id, backfilledRegistrations },
+  });
+  const msg = queued.queuedCount
+    ? `Reminder email queued for ${queued.queuedCount} student${queued.queuedCount === 1 ? "" : "s"}${queued.duplicateCount ? `; ${queued.duplicateCount} already had this reminder` : ""}`
+    : `All ${queued.recipientCount} incomplete applicant${queued.recipientCount === 1 ? " has" : "s have"} already been reminded for this deadline`;
+  return res.json({ success: true, msg, ...queued, backfilledRegistrations });
+};
+
 function csvValue(value) {
   let text = value == null ? "" : String(value);
   if (/^[\t\r\n ]*[=+\-@]/.test(text)) text = `'${text}`;
@@ -221,7 +314,7 @@ module.exports.exportRoundCandidates = async (req, res) => {
   if (search) {
     const pattern = new RegExp(escapedRegex(search), "i");
     const [students, registrations] = await Promise.all([
-      studentModel.find({ $or: [{ name: pattern }, { email: pattern }, { enrollmentNumber: pattern }, { branch: pattern }] }).select("_id").limit(1000).lean(),
+      studentModel.find({ $or: [{ name: pattern }, { email: pattern }, { phoneNumber: pattern }, { enrollmentNumber: pattern }, { branch: pattern }] }).select("_id").limit(1000).lean(),
       registerationEventModel.find({ eventId: event._id, teamName: pattern }).select("_id").limit(1000).lean(),
     ]);
     const studentIds = students.map((student) => student._id);
@@ -289,7 +382,7 @@ module.exports.exportRoundCandidates = async (req, res) => {
         const value = field?.type === "boolean" ? (answer.value === "true" ? "Yes" : "No") : answer.value;
         return `${field?.label || answer.key}: ${value}`;
       }).join(" | "),
-      (submission?.files || []).map((file) => file.url).join(" | "),
+      (submission?.files || []).map((file) => file.originalName || file.fieldKey || "Protected attachment").join(" | "),
     ]);
   });
 
@@ -799,7 +892,7 @@ module.exports.getMyEventWorkflow = async (req, res) => {
         ...candidate.toObject(),
         canAct: (candidate.participantIds || []).some((student) => String(student?._id || student) === String(req.student._id)),
       })),
-      submissions,
+      submissions: secureSubmissions(submissions, "student"),
       slots,
     });
   }
@@ -865,7 +958,7 @@ module.exports.submitRoundWork = async (req, res) => {
       uploadedFiles: req.files || [],
     });
     await writeAudit({ actorRole: "student", actorId: req.student._id, action: "round.submit", targetType: "submission", targetId: saved.submission._id });
-    return res.json({ success: true, msg: saved.existing ? "Submission updated" : "Submission received", submission: saved.submission });
+    return res.json({ success: true, msg: saved.existing ? "Submission updated" : "Submission received", submission: secureSubmission(saved.submission, "student") });
   } catch (error) {
     await Promise.all((req.files || []).map(destroyUploadedFile));
     return res.status(error.status || 500).json({ success: false, msg: error.status ? error.message : "Could not save the submission" });

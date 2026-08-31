@@ -1,7 +1,6 @@
 import { fetch } from 'expo/fetch';
 
 const fallbackApiUrl = 'https://discovr-api.iitr.ac.in';
-const studentWebOrigin = 'https://discovr.iitr.ac.in';
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL || fallbackApiUrl).replace(/\/$/, '');
 
 let accessToken: string | null = null;
@@ -28,11 +27,6 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const isForm = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers = new Headers(options.headers);
   headers.set('Accept', 'application/json');
-  // The currently deployed API expects an approved browser-style Origin on
-  // anonymous mutations. Native clients have no automatic Origin, so send the
-  // public student origin as a compatibility header until the mobile-aware
-  // backend middleware is deployed.
-  headers.set('Origin', studentWebOrigin);
   headers.set('X-Discovr-Client', 'mobile');
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
 

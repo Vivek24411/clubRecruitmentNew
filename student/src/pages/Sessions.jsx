@@ -65,7 +65,7 @@ export default function Sessions() {
     async function fetchSessions() {
       setIsLoading(true);
       try {
-        const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getSessions`);
+        const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getSessions?limit=100`);
         if (response.data.success) setSessions(response.data.sessions);
         else toast.error(response.data.msg);
       } catch {

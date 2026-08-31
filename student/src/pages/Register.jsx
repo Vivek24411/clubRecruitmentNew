@@ -144,7 +144,6 @@ export default function Register() {
             { ...form, verificationToken: response.data.verificationToken },
           );
           if (registerResponse.data.success) {
-            localStorage.setItem("token", registerResponse.data.token);
             toast.success(registerResponse.data.msg || "Registration successful");
             setLoggedInStudent(true);
             await refreshProfile();

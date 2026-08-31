@@ -10,7 +10,7 @@ import { useAuth } from '@/context/auth-context';
 import { useFeedback } from '@/context/feedback-context';
 import { useApiQuery } from '@/hooks/use-api-query';
 import { apiRequest } from '@/lib/api';
-import { eventDeadline, formatDateTime, titleCase } from '@/lib/date';
+import { eventDeadline, eventLifecycle, formatDateTime, titleCase } from '@/lib/date';
 import type { DiscovrEvent, EventVertical } from '@/types/api';
 
 type EventResponse = {
@@ -65,10 +65,11 @@ export default function EventDetailScreen() {
 
   const applicationVerticals = detailsQuery.data?.verticals || event?.verticals || [];
   const totalRounds = event?.verticals?.reduce((total, vertical) => total + (vertical.rounds?.length || 0), 0) || event?.numberOfRounds || 0;
+  const lifecycle = event ? eventLifecycle(event) : null;
   return <Screen safeTop={false} refreshing={query.refreshing} onRefresh={query.refresh} contentStyle={styles.content}>
     {query.loading ? <LoadingState /> : query.error || !event ? <ErrorState message={query.error || 'Event not found'} onRetry={query.reload} /> : <>
       <RemoteImage uri={event.eventBanner || event.clubId?.clubBanner} style={styles.heroImage} />
-      <View style={styles.titleBlock}><Badge tone="accent">{titleCase(event.eventType || 'event')}</Badge><Text style={styles.club}>{event.clubId?.name}</Text><Heading size="xl">{event.title}</Heading>{event.shortDescription ? <Text style={styles.lead}>{event.shortDescription}</Text> : null}</View>
+      <View style={styles.titleBlock}><View style={styles.statusRow}><Badge tone="accent">{titleCase(event.eventType || 'event')}</Badge>{lifecycle ? <Badge tone={lifecycle.tone}>{lifecycle.label}</Badge> : null}</View><Text style={styles.club}>{event.clubId?.name}</Text><Heading size="xl">{event.title}</Heading>{event.shortDescription ? <Text style={styles.lead}>{event.shortDescription}</Text> : null}</View>
       <Card style={styles.metaCard}>
         {eventDeadline(event) ? <MetaRow icon="time-outline">Application deadline · {formatDateTime(eventDeadline(event))}</MetaRow> : null}
         {event.verticalsEnabled && event.verticals?.length ? <MetaRow icon="layers-outline">{event.verticals.length} vertical{event.verticals.length === 1 ? '' : 's'}</MetaRow> : null}
@@ -112,7 +113,7 @@ export default function EventDetailScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingTop: spacing.lg }, heroImage: { width: '100%', aspectRatio: 1, borderRadius: radius.md, backgroundColor: palette.ink }, titleBlock: { gap: spacing.md },
-  club: { color: palette.accentDark, fontFamily: typography.mono, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.85 }, lead: { color: palette.muted, fontFamily: typography.regular, fontSize: 16, lineHeight: 24 },
+  statusRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm }, club: { color: palette.accentDark, fontFamily: typography.mono, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.85 }, lead: { color: palette.muted, fontFamily: typography.regular, fontSize: 16, lineHeight: 24 },
   metaCard: { padding: spacing.lg, gap: spacing.md }, section: { gap: spacing.md }, sectionTitle: { color: palette.ink, fontFamily: typography.semibold, fontSize: 19 },
   body: { color: palette.inkSoft, fontFamily: typography.regular, fontSize: 14, lineHeight: 22 }, vertical: { padding: spacing.lg, gap: spacing.sm, borderWidth: 2, borderColor: palette.accentTint }, verticalTitle: { color: palette.ink, fontFamily: typography.semibold, fontSize: 17 }, verticalLead: { color: palette.ink, fontFamily: typography.medium, fontSize: 14, lineHeight: 21 },
   rounds: { gap: spacing.md, marginTop: spacing.sm }, round: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.sm, backgroundColor: palette.paper, borderWidth: 1, borderColor: palette.line }, roundHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm }, roundNumber: { color: palette.accentDark, fontFamily: typography.mono, fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.7 }, roundTitle: { color: palette.ink, fontFamily: typography.semibold, fontSize: 15 }, instructions: { gap: spacing.xs, padding: spacing.sm, borderRadius: radius.sm, backgroundColor: palette.surface }, requirements: { color: palette.inkSoft, fontFamily: typography.medium, fontSize: 12, lineHeight: 18 },

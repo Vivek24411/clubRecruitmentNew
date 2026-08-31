@@ -10,6 +10,7 @@ const validateRequest = require("../middlewares/validateRequest");
 const fitsBcrypt = (value) => Buffer.byteLength(String(value), "utf8") <= 72;
 
 const loginRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 8, keyPrefix: "admin-login", persistent: true, keyGenerator: rateLimit.bodyIdentifier("email") });
+const uploadSignRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, keyPrefix: "admin-upload-sign", persistent: true, keyGenerator: rateLimit.sessionOrIp });
 
 router.post("/login", loginRateLimit, [
   body("email").isEmail().normalizeEmail().isLength({ max: 254 }),
@@ -20,7 +21,7 @@ router.post('/logout', logout)
 
 router.get('/getProfile',adminAuth,getProfile)
 
-router.post('/uploads/sign', adminAuth, [
+router.post('/uploads/sign', adminAuth, uploadSignRateLimit, [
   body('kind').equals('clubLogo'),
 ], validateRequest, signDirectUpload(['clubLogo']))
 

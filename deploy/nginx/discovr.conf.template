@@ -55,6 +55,11 @@ server {
     # Note: a location with its own add_header drops server-level ones, so the
     # asset and service-worker blocks below deliberately do not inherit HSTS.
     add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://res.cloudinary.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://__API_HOST__ https://api.cloudinary.com https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com; worker-src 'self'; manifest-src 'self'; upgrade-insecure-requests" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
 
     # Vite emits content-hashed filenames into /assets, so they cache hard.
     # add_header alone — `expires` would emit a second Cache-Control header.
@@ -99,6 +104,11 @@ server {
     error_log  /var/log/nginx/discovr-club.error.log;
 
     add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://res.cloudinary.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://__API_HOST__ https://api.cloudinary.com; upgrade-insecure-requests" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
 
     location /assets/ {
         add_header Cache-Control "public, max-age=31536000, immutable";
@@ -128,6 +138,11 @@ server {
     error_log  /var/log/nginx/discovr-admin.error.log;
 
     add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://res.cloudinary.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://__API_HOST__ https://api.cloudinary.com; upgrade-insecure-requests" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
 
     location /assets/ {
         add_header Cache-Control "public, max-age=31536000, immutable";

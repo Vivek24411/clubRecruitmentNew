@@ -2,6 +2,8 @@ const { applicationDefault, cert, getApps, initializeApp } = require("firebase-a
 const { getMessaging } = require("firebase-admin/messaging");
 const pushRegistrationModel = require("../models/pushRegistration.model");
 
+const NATIVE_APP_ORIGIN = "discovr://native";
+
 let firebaseApp;
 
 function serviceAccount() {
@@ -66,15 +68,14 @@ const INVALID_REGISTRATION_CODES = new Set([
 
 async function sendPushNotification(studentId, notification) {
   const client = messagingClient();
-  if (!client) return { configured: false, sent: 0, failed: 0 };
   const target = notificationLink(notification.link);
 
   const registrations = await pushRegistrationModel.find({
     studentId,
-    appOrigin: target.origin,
+    appOrigin: { $in: [target.origin, NATIVE_APP_ORIGIN].filter(Boolean) },
     expiresAt: { $gt: new Date() },
   }).sort({ updatedAt: -1 }).limit(10).lean();
-  if (!registrations.length) return { configured: true, sent: 0, failed: 0 };
+  if (!registrations.length) return { configured: Boolean(client), sent: 0, failed: 0 };
 
   const title = String(notification.title || "Discovr update").slice(0, 120);
   const body = String(notification.message || "You have a new recruitment update.").slice(0, 500);
@@ -85,8 +86,11 @@ async function sendPushNotification(studentId, notification) {
   const deliveredIds = [];
   const deliveryErrors = [];
 
-  for (let offset = 0; offset < registrations.length; offset += 500) {
-    const batch = registrations.slice(offset, offset + 500);
+  const browserRegistrations = registrations.filter((item) => item.provider === "fcm" && item.appOrigin === target.origin);
+  const nativeRegistrations = registrations.filter((item) => item.provider === "expo" && item.appOrigin === NATIVE_APP_ORIGIN);
+
+  for (let offset = 0; client && offset < browserRegistrations.length; offset += 500) {
+    const batch = browserRegistrations.slice(offset, offset + 500);
     const response = await client.sendEachForMulticast({
       fids: batch.map((registration) => registration.installationId),
       data: {
@@ -110,6 +114,40 @@ async function sendPushNotification(studentId, notification) {
     });
   }
 
+  for (let offset = 0; offset < nativeRegistrations.length; offset += 100) {
+    const batch = nativeRegistrations.slice(offset, offset + 100);
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Accept-Encoding": "gzip, deflate",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(batch.map((registration) => ({
+        to: registration.installationId,
+        sound: "default",
+        title,
+        body,
+        data: { link: target.path, type: String(notification.type || "general").slice(0, 80) },
+        ...(image ? { richContent: { image } } : {}),
+      }))),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) throw new Error(`Expo push delivery failed (${response.status})`);
+    const payload = await response.json();
+    const tickets = Array.isArray(payload?.data) ? payload.data : [payload?.data].filter(Boolean);
+    tickets.forEach((ticket, index) => {
+      if (ticket?.status === "ok") {
+        sent += 1;
+        if (batch[index]) deliveredIds.push(batch[index]._id);
+      } else {
+        failed += 1;
+        if (ticket?.details?.error === "DeviceNotRegistered" && batch[index]) invalidIds.push(batch[index]._id);
+        else deliveryErrors.push(new Error(ticket?.message || "Expo push delivery failed"));
+      }
+    });
+  }
+
   await Promise.all([
     invalidIds.length ? pushRegistrationModel.deleteMany({ _id: { $in: invalidIds } }) : Promise.resolve(),
     deliveredIds.length ? pushRegistrationModel.updateMany(
@@ -123,7 +161,7 @@ async function sendPushNotification(studentId, notification) {
     error.code = failure?.code || "messaging/delivery-failed";
     throw error;
   }
-  return { configured: true, sent, failed };
+  return { configured: Boolean(client) || nativeRegistrations.length > 0, sent, failed };
 }
 
 module.exports = { firebaseConfigured, sendPushNotification };

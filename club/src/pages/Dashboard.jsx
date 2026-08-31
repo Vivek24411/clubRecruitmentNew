@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
-import { eventDeadline, eventEndDate, eventIsOpen, formatDateTime, sessionDate, sessionEndDate, sessionIsOpen } from "../utils/date";
+import { eventDeadline, eventEndDate, eventIsOngoing, eventLifecycle, formatDateTime, sessionDate, sessionEndDate, sessionIsOpen } from "../utils/date";
 import {
   Badge,
   Button,
@@ -39,9 +39,8 @@ export default function Dashboard() {
   const upcomingEvents = useMemo(
     () =>
       [...events]
-        .filter((event) => eventIsOpen(event, now))
+        .filter((event) => eventIsOngoing(event))
         .sort((a, b) => (eventEndDate(a)?.getTime() || Infinity) - (eventEndDate(b)?.getTime() || Infinity)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [events],
   );
 
@@ -58,7 +57,7 @@ export default function Dashboard() {
   );
 
   const nextEvent = upcomingEvents[0] || events[0];
-  const nextEventOpen = nextEvent && eventIsOpen(nextEvent, now);
+  const nextEventLifecycle = nextEvent && eventLifecycle(nextEvent, now);
   const nextEventEndsAt = nextEvent && eventEndDate(nextEvent);
   const nextSession = upcomingSessions[0] || sessions[0];
   const nextSessionStartsAt = nextSession && sessionDate(nextSession.date, nextSession.time);
@@ -106,7 +105,7 @@ export default function Dashboard() {
         <div className="stagger mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat index={1} label="Events" value={events.length} hint="All time" />
           <Stat index={2} label="Published" value={publishedEvents} tone="accent" hint="Visible to students" />
-          <Stat index={3} label="Open deadlines" value={upcomingEvents.length} hint="Still accepting" />
+          <Stat index={3} label="Ongoing events" value={upcomingEvents.length} hint="Published until completed" />
           <Stat index={4} label="Sessions ahead" value={upcomingSessions.length} hint="Scheduled" />
         </div>
       )}
@@ -140,10 +139,10 @@ export default function Dashboard() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <h3 className="display text-xl leading-snug">{nextEvent.title}</h3>
                   <Badge
-                    tone={nextEventOpen ? "ok" : "neutral"}
-                    className="capitalize"
+                    tone={nextEventLifecycle?.tone || "neutral"}
+                    live={nextEventLifecycle?.live}
                   >
-                    {nextEvent.status === "published" ? (nextEventOpen ? "open" : "closed") : nextEvent.status || "draft"}
+                    {nextEventLifecycle?.label || "Draft"}
                   </Badge>
                 </div>
                 <div className="mt-2.5 lg:min-h-[4.5rem]">

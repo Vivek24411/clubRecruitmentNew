@@ -37,6 +37,7 @@ export default function LoginScreen() {
       <Card style={styles.form}>
         <Field label="IITR email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoComplete="email" placeholder="you@iitr.ac.in" />
         <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" autoComplete="current-password" placeholder="Enter password" />
+        <Button label="Forgot password?" variant="ghost" disabled={loading} onPress={() => router.push('/forgot-password' as never)} />
         {error ? <Text style={styles.error}>{error}</Text> : null}<Button label="Sign in" loading={loading} onPress={() => void submit()} icon="arrow-forward" />
       </Card>
       <View style={styles.register}><Text style={styles.note}>New to Discovr?</Text><Button label="Create student account" variant="secondary" onPress={() => router.push('/register')} icon="person-add-outline" /></View>

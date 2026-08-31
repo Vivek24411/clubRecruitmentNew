@@ -103,6 +103,7 @@ export async function uploadDirect(file, { role, kind }) {
   form.append("folder", config.folder);
   form.append("public_id", config.publicId);
   form.append("allowed_formats", config.allowedFormats.join(","));
+  if (config.deliveryType && config.deliveryType !== "upload") form.append("type", config.deliveryType);
   const response = await fetch(config.uploadUrl, { method: "POST", body: form, credentials: "omit" });
   const uploaded = await response.json();
   if (!response.ok) throw new Error(uploaded?.error?.message || "File upload failed");

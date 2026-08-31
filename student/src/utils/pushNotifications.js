@@ -1,6 +1,9 @@
 import axios from "axios";
 
 const INSTALLATION_KEY = "discovrFirebaseInstallationId";
+const PREFERENCE_KEY = "discovrPushNotificationPreference";
+const ENABLED_PREFERENCE = "enabled";
+const DISABLED_PREFERENCE = "disabled";
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -21,6 +24,26 @@ const configured = Boolean(
 let clientPromise;
 let currentInstallationId = localStorage.getItem(INSTALLATION_KEY) || "";
 const registrationWaiters = new Set();
+
+function storedPreference() {
+  const preference = localStorage.getItem(PREFERENCE_KEY);
+  return [ENABLED_PREFERENCE, DISABLED_PREFERENCE].includes(preference)
+    ? preference
+    : "undecided";
+}
+
+function rememberPreference(preference) {
+  localStorage.setItem(PREFERENCE_KEY, preference);
+}
+
+export function getPushNotificationPreference() {
+  return storedPreference();
+}
+
+export function keepPushNotificationsDisabled() {
+  rememberPreference(DISABLED_PREFERENCE);
+  announce("disabled");
+}
 
 function announce(status, detail = {}) {
   window.dispatchEvent(new CustomEvent("push-state-changed", { detail: { status, ...detail } }));
@@ -153,12 +176,17 @@ export async function enablePushNotifications() {
     throw new Error("This browser does not support push notifications");
   }
   if (Notification.permission === "denied") {
+    rememberPreference(DISABLED_PREFERENCE);
     throw new Error("Notifications are blocked in your browser settings");
   }
   const permission = Notification.permission === "granted"
     ? "granted"
     : await Notification.requestPermission();
-  if (permission !== "granted") throw new Error("Notification permission was not granted");
+  if (permission !== "granted") {
+    rememberPreference(DISABLED_PREFERENCE);
+    throw new Error("Notification permission was not granted");
+  }
+  rememberPreference(ENABLED_PREFERENCE);
   const client = await messagingClient();
   if (!client) throw new Error("This browser does not support push notifications");
 
@@ -177,7 +205,11 @@ export async function enablePushNotifications() {
 }
 
 export async function syncPushRegistration() {
-  if (!configured || !("Notification" in window) || Notification.permission !== "granted") return;
+  if (!configured
+    || !("Notification" in window)
+    || Notification.permission !== "granted"
+    || storedPreference() === DISABLED_PREFERENCE) return;
+  rememberPreference(ENABLED_PREFERENCE);
   const client = await messagingClient();
   if (!client) return;
   await client.messagingApi.register(client.messaging, {
@@ -189,6 +221,7 @@ export async function syncPushRegistration() {
 }
 
 export async function disablePushNotifications() {
+  rememberPreference(DISABLED_PREFERENCE);
   const client = await messagingClient();
   const installationId = currentInstallationId || localStorage.getItem(INSTALLATION_KEY) || "";
   await removeInstallation(installationId);

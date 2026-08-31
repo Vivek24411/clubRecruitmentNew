@@ -5,8 +5,10 @@ const { exactHttpOrigin } = require("../utils/appOrigin");
 
 const REGISTRATION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const MAX_INSTALLATIONS_PER_STUDENT = 10;
+const NATIVE_APP_ORIGIN = "discovr://native";
 
 function pushAppOrigin(req) {
+  if (!req.get("origin") && req.get("x-discovr-client") === "mobile") return NATIVE_APP_ORIGIN;
   const requested = exactHttpOrigin(req.get("origin"))?.origin || "";
   const configured = exactHttpOrigin(process.env.STUDENT_APP_ORIGIN)?.origin || "";
   if (!requested || (configured && requested !== configured)) return null;
@@ -20,13 +22,18 @@ module.exports.registerPushInstallation = async (req, res) => {
   if (!appOrigin) return res.status(403).json({ success: false, msg: "Browser notifications are available only on the official Discovr student app" });
 
   const installationId = String(req.body.installationId).trim();
+  const native = appOrigin === NATIVE_APP_ORIGIN;
+  const provider = native ? "expo" : "fcm";
+  if (req.body.provider && req.body.provider !== provider) {
+    return res.status(400).json({ success: false, msg: "Push provider does not match this client" });
+  }
   const now = new Date();
   const registration = await pushRegistrationModel.findOneAndUpdate(
     { installationId },
     {
       $set: {
         studentId: req.student._id,
-        provider: "fcm",
+        provider,
         appOrigin,
         userAgent: String(req.get("user-agent") || "").slice(0, 500),
         lastSeenAt: now,
@@ -46,9 +53,9 @@ module.exports.registerPushInstallation = async (req, res) => {
 
   return res.json({
     success: true,
-    msg: "Browser notifications enabled",
+    msg: native ? "Push notifications enabled on this device" : "Browser notifications enabled",
     registrationId: registration._id,
-    deliveryConfigured: firebaseConfigured(),
+    deliveryConfigured: native || firebaseConfigured(),
   });
 };
 
@@ -62,7 +69,7 @@ module.exports.unregisterPushInstallation = async (req, res) => {
     installationId: String(req.body.installationId).trim(),
     appOrigin,
   });
-  return res.json({ success: true, msg: "Browser notifications disabled on this device" });
+  return res.json({ success: true, msg: "Push notifications disabled on this device" });
 };
 
 module.exports.getPushInstallationStatus = async (req, res) => {
@@ -76,7 +83,8 @@ module.exports.getPushInstallationStatus = async (req, res) => {
     appOrigin,
     expiresAt: { $gt: new Date() },
   });
-  return res.json({ success: true, active: Boolean(active), deliveryConfigured: firebaseConfigured() });
+  return res.json({ success: true, active: Boolean(active), deliveryConfigured: appOrigin === NATIVE_APP_ORIGIN || firebaseConfigured() });
 };
 
 module.exports.pushAppOrigin = pushAppOrigin;
+module.exports.NATIVE_APP_ORIGIN = NATIVE_APP_ORIGIN;

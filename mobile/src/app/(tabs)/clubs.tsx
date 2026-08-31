@@ -3,14 +3,14 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppHeader } from '@/components/app-header';
 import { ClubCard } from '@/components/catalogue';
-import { EmptyState, ErrorState, Eyebrow, FilterChip, Heading, LoadingState, Screen, SearchField } from '@/components/ui';
+import { Button, EmptyState, ErrorState, Eyebrow, FilterChip, Heading, LoadingState, Screen, SearchField } from '@/components/ui';
 import { palette, spacing, typography } from '@/constants/theme';
 import { useApiQuery } from '@/hooks/use-api-query';
 import { titleCase } from '@/lib/date';
 import type { Club } from '@/types/api';
 
 export default function ClubsScreen() {
-  const query = useApiQuery<{ success: boolean; clubs: Club[] }>('/student/getAllClubs');
+  const query = useApiQuery<{ success: boolean; clubs: Club[]; pagination?: { page: number; pages: number; hasMore: boolean } }>('/student/getAllClubs?limit=24', 'clubs');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
   const clubs = useMemo(() => query.data?.clubs || [], [query.data]);
@@ -33,7 +33,7 @@ export default function ClubsScreen() {
       </ScrollView>
       <Text style={styles.count}>{visible.length} {visible.length === 1 ? 'club' : 'clubs'}</Text>
     </View>
-    {query.loading ? <LoadingState /> : query.error ? <ErrorState message={query.error} onRetry={query.reload} /> : !visible.length ? <EmptyState title="No matching clubs" message="Try another name, keyword, or category." /> : <View style={styles.list}>{visible.map((club) => <ClubCard key={club._id} club={club} />)}</View>}
+    {query.loading ? <LoadingState /> : query.error && !clubs.length ? <ErrorState message={query.error} onRetry={query.reload} /> : !visible.length ? <EmptyState title="No matching clubs" message="Try another name, keyword, or category." /> : <View style={styles.list}>{visible.map((club) => <ClubCard key={club._id} club={club} />)}{query.hasMore ? <Button label="Load more clubs" variant="secondary" loading={query.loadingMore} onPress={() => void query.loadMore()} /> : null}</View>}
   </Screen>;
 }
 

@@ -12,7 +12,7 @@ const registerationEventModel = require("../models/registerationEvent.model");
 const eventMembershipModel = require("../models/eventMembership.model");
 const notificationModel = require("../models/notification.model");
 const sessionRsvpModel = require("../models/sessionRsvp.model");
-const { clearSessionCookie, setSessionCookie } = require("../utils/auth");
+const { clearSessionCookie, nativeSessionPayload, setSessionCookie } = require("../utils/auth");
 const { notifyStudent } = require("../services/notification.services");
 const { enqueueSessionReminder } = require("../services/jobQueue.services");
 const { sessionsWithConfirmedRsvpCounts } = require("../services/sessionRsvp.services");
@@ -20,11 +20,15 @@ const { sessionEndAt } = require("../utils/sessionSchedule");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryAsset, destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
 const { prepareRoundSubmission, saveRoundSubmission } = require("../services/roundSubmission.services");
+const { secureSubmission } = require("../services/submissionFiles.services");
+const { pageMetadata, pageRequest } = require("../utils/pagination");
 const applicationHistoryModel = require("../models/applicationHistory.model");
 const roundCandidateModel = require("../models/roundCandidate.model");
 const roundSubmissionModel = require("../models/roundSubmission.model");
 const scheduleSlotModel = require("../models/scheduleSlot.model");
 const scheduleReservationModel = require("../models/scheduleReservation.model");
+const pushRegistrationModel = require("../models/pushRegistration.model");
+const jobModel = require("../models/job.model");
 const {
   eventEligibility,
   inferProgramStartYear,
@@ -183,7 +187,7 @@ async function clearRegistrationWorkflow(registrationId) {
 
   await Promise.all([
     ...submissions.flatMap((submission) => (submission.files || []).map((file) =>
-      destroyCloudinaryAsset(file.publicId, file.resourceType))),
+      destroyCloudinaryAsset(file.publicId, file.resourceType, file.deliveryType))),
     slotIds.length
       ? scheduleReservationModel.deleteMany({ slotId: { $in: slotIds } })
       : Promise.resolve(),
@@ -424,7 +428,7 @@ module.exports.register = async (req, res) => {
     return res.status(201).json({
       success: true,
       msg: "Registration successful",
-      token,
+      ...nativeSessionPayload(req, "student", token),
       student: publicStudent(student),
     });
   } catch (err) {
@@ -467,7 +471,7 @@ module.exports.login = async (req, res) => {
   return res.json({
     success: true,
     msg: "Login successful",
-    token,
+    ...nativeSessionPayload(req, "student", token),
     student: publicStudent(student),
   });
 };
@@ -551,11 +555,76 @@ module.exports.changePassword = async (req, res) => {
   return res.json({ success: true, msg: "Password changed. Please sign in again." });
 };
 
+module.exports.deleteAccount = async (req, res) => {
+  const student = await studentModel.findById(req.student._id).select("+password +tokenVersion");
+  const valid = student && await student.comparePassword(req.body.currentPassword);
+  if (!valid) return res.status(400).json({ success: false, msg: "Current password is incorrect" });
+
+  const studentId = student._id;
+  const studentIdText = String(studentId);
+  const originalEmail = student.email;
+  const profilePicturePublicId = student.profilePicturePublicId;
+  const rsvps = await sessionRsvpModel.find({ studentId }).select("sessionId").lean();
+  const affectedSessionIds = [...new Set(rsvps.map((rsvp) => String(rsvp.sessionId)))];
+
+  student.name = "Deleted student";
+  student.email = `deleted-${studentIdText}@invalid.local`;
+  student.password = await bcrypt.hash(crypto.randomBytes(32).toString("base64url"), 12);
+  student.programme = "undergraduate";
+  student.branch = "Deleted account";
+  student.year = "First year";
+  student.academicYear = 1;
+  student.academicStatus = "passed_out";
+  student.programStartYear = null;
+  student.courseDurationYears = 4;
+  student.phoneNumber = `del-${studentIdText}`;
+  student.profilePicture = "";
+  student.profilePicturePublicId = "";
+  student.enrollmentNumber = `DEL${studentIdText.toUpperCase()}`;
+  student.notificationPreferences = { email: false, inApp: false };
+  student.status = "deleted";
+  student.deletedAt = new Date();
+  student.tokenVersion += 1;
+  await student.save();
+  invalidatePrincipal("student", studentId);
+
+  const cleanup = await Promise.allSettled([
+    otpModel.deleteMany({ email: originalEmail }),
+    verificationTokenModel.deleteMany({ email: originalEmail }),
+    notificationModel.deleteMany({ studentId }),
+    pushRegistrationModel.deleteMany({ studentId }),
+    sessionRsvpModel.deleteMany({ studentId }),
+    jobModel.deleteMany({ "payload.studentId": studentIdText }),
+  ]);
+  const cleanupFailure = cleanup.find((result) => result.status === "rejected");
+  if (cleanupFailure) console.error("Account deletion cleanup needs retry:", cleanupFailure.reason?.message || "unknown error");
+
+  await Promise.all(affectedSessionIds.map(async (sessionId) => {
+    const confirmedRsvpCount = await sessionRsvpModel.countDocuments({
+      sessionId,
+      status: { $in: ["confirmed", "attended"] },
+    });
+    await sessionModel.updateOne({ _id: sessionId }, { $set: { confirmedRsvpCount } });
+  }));
+  await Promise.all([
+    destroyCloudinaryImage(profilePicturePublicId),
+    writeAudit({ actorRole: "student", actorId: studentId, action: "account.delete", targetType: "student", targetId: studentId }),
+  ]);
+  clearSessionCookie(res, "student");
+  return res.json({ success: true, msg: "Your Discovr account and personal profile have been deleted." });
+};
+
 module.exports.getAllSessions = async (req, res) => {
   try {
-    const sessions = await sessionModel.find({ status: "published" }).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS });
-    const visibleSessions = sessions.filter((session) => session.clubId);
-    return res.json({ success: true, sessions: await sessionsWithConfirmedRsvpCounts(visibleSessions) });
+    const paging = pageRequest(req.query);
+    const activeClubIds = await clubModel.find({ status: "active" }).distinct("_id");
+    const filter = { status: "published", clubId: { $in: activeClubIds } };
+    const [sessions, total] = await Promise.all([
+      sessionModel.find(filter).sort({ createdAt: -1, _id: -1 }).skip(paging.skip).limit(paging.limit)
+        .populate({ path: "clubId", select: PUBLIC_CLUB_FIELDS }),
+      sessionModel.countDocuments(filter),
+    ]);
+    return res.json({ success: true, sessions: await sessionsWithConfirmedRsvpCounts(sessions), pagination: pageMetadata(paging, total) });
   } catch (error) {
     console.error("Error fetching sessions:", error);
     return res.status(500).json({ success: false, msg: "Server error" });
@@ -587,8 +656,13 @@ module.exports.getSession = async (req, res) => {
 
 module.exports.getAllClubs = async (req, res) => {
   try {
-    const clubs = await clubModel.find({ status: "active" }).select(PUBLIC_CLUB_FIELDS);
-    return res.json({ success: true, clubs });
+    const paging = pageRequest(req.query);
+    const filter = { status: "active" };
+    const [clubs, total] = await Promise.all([
+      clubModel.find(filter).select(PUBLIC_CLUB_FIELDS).sort({ name: 1, _id: 1 }).skip(paging.skip).limit(paging.limit),
+      clubModel.countDocuments(filter),
+    ]);
+    return res.json({ success: true, clubs, pagination: pageMetadata(paging, total) });
   } catch (error) {
 
     return res.status(500).json({ success: false, msg: "Server error" });
@@ -628,7 +702,15 @@ module.exports.getClub = async (req, res) => {
 
 module.exports.getAllEvents = async (req, res) => {
   try {
-    const events = await eventModel.find({ status: { $in: ["published", "closed"] } }).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS });
+    const paging = pageRequest(req.query);
+    const activeClubIds = await clubModel.find({ status: "active" }).distinct("_id");
+    const filter = { status: { $in: ["published", "closed"] }, clubId: { $in: activeClubIds } };
+    const [events, total] = await Promise.all([
+      eventModel.find(filter).sort({ publishedAt: -1, createdAt: -1, _id: -1 })
+        .skip(paging.skip).limit(paging.limit)
+        .populate({ path: "clubId", select: PUBLIC_CLUB_FIELDS }),
+      eventModel.countDocuments(filter),
+    ]);
     const eventIds = events.map((event) => event._id);
     const memberships = req.student
       ? await eventMembershipModel.find({ studentId: req.student._id, eventId: { $in: eventIds } })
@@ -655,6 +737,7 @@ module.exports.getAllEvents = async (req, res) => {
           application: mine[0] || null,
         };
       }),
+      pagination: pageMetadata(paging, total),
     });
   } catch (error) {
 
@@ -703,10 +786,14 @@ module.exports.getClubEvents = async (req, res) => {
   const { clubId } = req.query;
 
   try {
-    const events = await eventModel
-      .find({ clubId, status: "published" })
-      .populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS });
-    return res.json({ success: true, events: events.filter((event) => event.clubId) });
+    const paging = pageRequest(req.query);
+    const filter = { clubId, status: { $in: ["published", "closed"] } };
+    const [events, total] = await Promise.all([
+      eventModel.find(filter).sort({ publishedAt: -1, createdAt: -1 }).skip(paging.skip).limit(paging.limit)
+        .populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS }),
+      eventModel.countDocuments(filter),
+    ]);
+    return res.json({ success: true, events: events.filter((event) => event.clubId), pagination: pageMetadata(paging, total) });
   } catch (error) {
     
     return res.status(500).json({ success: false, msg: "Server error" });
@@ -722,11 +809,15 @@ module.exports.getClubSessions = async (req, res) => {
   const { clubId } = req.query;
 
   try {
-    const sessions = await sessionModel
-      .find({ clubId, status: "published" })
-      .populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS });
+    const paging = pageRequest(req.query);
+    const filter = { clubId, status: "published" };
+    const [sessions, total] = await Promise.all([
+      sessionModel.find(filter).sort({ createdAt: -1, _id: -1 }).skip(paging.skip).limit(paging.limit)
+        .populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS }),
+      sessionModel.countDocuments(filter),
+    ]);
     const visibleSessions = sessions.filter((session) => session.clubId);
-    return res.json({ success: true, sessions: await sessionsWithConfirmedRsvpCounts(visibleSessions) });
+    return res.json({ success: true, sessions: await sessionsWithConfirmedRsvpCounts(visibleSessions), pagination: pageMetadata(paging, total) });
   } catch (error) {
     
     return res.status(500).json({ success: false, msg: "Server error" });
@@ -735,8 +826,8 @@ module.exports.getClubSessions = async (req, res) => {
 
 module.exports.getDashBoard = async (req, res, next) => {
   const [events, sessions, settings] = await Promise.all([
-    eventModel.find({ status: "published" }).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS }),
-    sessionModel.find({ status: "published" }).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS }),
+    eventModel.find({ status: "published" }).sort({ publishedAt: -1, createdAt: -1 }).limit(8).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS }),
+    sessionModel.find({ status: "published" }).sort({ createdAt: -1 }).limit(8).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS }),
     getPlatformSettingsCached(),
   ]);
   const visibleEvents = events.filter((event) => event.clubId);
@@ -962,7 +1053,7 @@ module.exports.submitInitialApplication = async (req, res) => {
       success: true,
       msg: "Application submitted and registration completed",
       registeration,
-      submission: saved.submission,
+      submission: secureSubmission(saved.submission, "student"),
     });
   } catch (error) {
     if (registeration) {

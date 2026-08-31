@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { eventDeadline, eventEndDate, eventIsOpen, formatDateTime } from "../utils/date";
+import { eventDeadline, eventEndDate, eventLifecycle, formatDateTime } from "../utils/date";
 import { eligibilitySummary } from "../utils/eligibility";
 import { useContext } from "react";
 import { ClubContextData } from "../context/ClubContext.jsx";
@@ -17,14 +17,6 @@ import {
   Page,
   Skeleton,
 } from "../components/ui";
-
-const STATUS_TONE = {
-  published: "ok",
-  draft: "neutral",
-  closed: "warn",
-  archived: "neutral",
-  cancelled: "bad",
-};
 
 const ROUND_TYPE_LABELS = {
   test: "Test",
@@ -114,9 +106,7 @@ export default function Event() {
 
   const deadline = eventDeadline(event);
   const eventEndsAt = eventEndDate(event);
-  const effectiveStatus = event.status === "published"
-    ? (eventIsOpen(event) ? "open" : "closed")
-    : event.status;
+  const lifecycle = eventLifecycle(event);
   const verticalCount = event.verticalsEnabled ? event.verticals?.length || 0 : 1;
   const roundCount = event.verticals?.reduce((total, vertical) => total + (vertical.rounds?.length || 0), 0)
     || event.roundDetails?.length
@@ -145,8 +135,8 @@ export default function Event() {
               </p>
             )}
           </div>
-          <Badge tone={effectiveStatus === "open" ? "ok" : STATUS_TONE[effectiveStatus] || "neutral"} className="capitalize">
-            {effectiveStatus}
+          <Badge tone={lifecycle.tone} live={lifecycle.live}>
+            {lifecycle.label}
           </Badge>
         </div>
 

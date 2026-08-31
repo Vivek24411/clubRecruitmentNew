@@ -30,7 +30,7 @@ export default function Sessions() {
 
   useEffect(() => {
     axios
-      .get(`${import.meta.env.VITE_BASE_URI}/admin/getAllSessions`)
+      .get(`${import.meta.env.VITE_BASE_URI}/admin/getAllSessions?limit=100`)
       .then(({ data }) => (data.success ? setSessions(data.sessions) : toast.error(data.msg)))
       .catch(() => toast.error("Could not load sessions"))
       .finally(() => setLoading(false));

@@ -5,6 +5,7 @@ const sessionModel = require("../models/session.model");
 const eventModel = require("../models/event.model");
 const studentModel = require("../models/student.model");
 const { clearSessionCookie, setSessionCookie, signSession } = require("../utils/auth");
+const { pageMetadata, pageRequest } = require("../utils/pagination");
 const auditLogModel = require("../models/auditLog.model");
 const platformSettingsModel = require("../models/platformSettings.model");
 const registerationEventModel = require("../models/registerationEvent.model");
@@ -57,7 +58,6 @@ module.exports.login = async (req, res) => {
     return res.json({
       success: true,
       msg: "Admin logged in successfully",
-      token,
     });
   } else {
     return res.json({ success: false, msg: "Invalid admin credentials" });
@@ -126,8 +126,12 @@ module.exports.addClub = async (req, res) => {
 
 module.exports.getAllSessions = async (req, res) => {
   try{
-    const sessions = await sessionModel.find().populate('clubId', '-password');
-    res.json({ success: true, sessions, msg: "Sessions fetched successfully" });
+    const paging = pageRequest(req.query, { defaultLimit: 50 });
+    const [sessions, total] = await Promise.all([
+      sessionModel.find().sort({ createdAt: -1, _id: -1 }).skip(paging.skip).limit(paging.limit).populate('clubId', '-password'),
+      sessionModel.countDocuments(),
+    ]);
+    res.json({ success: true, sessions, pagination: pageMetadata(paging, total), msg: "Sessions fetched successfully" });
   } catch (error) {
     res.status(500).json({ success: false, msg: "Error fetching sessions" });
   }
@@ -156,8 +160,12 @@ module.exports.getSessionDetail = async (req, res) => {
 
 module.exports.getAllClubs = async (req, res) => {
   try {
-    const clubs = await clubModel.find().select('-password');
-    res.json({ success: true, clubs, msg: "Clubs fetched successfully" });
+    const paging = pageRequest(req.query, { defaultLimit: 50 });
+    const [clubs, total] = await Promise.all([
+      clubModel.find().select('-password').sort({ name: 1, _id: 1 }).skip(paging.skip).limit(paging.limit),
+      clubModel.countDocuments(),
+    ]);
+    res.json({ success: true, clubs, pagination: pageMetadata(paging, total), msg: "Clubs fetched successfully" });
   } catch (error) {
     res.status(500).json({ success: false, msg: "Error fetching clubs" });
   }
@@ -185,8 +193,12 @@ module.exports.getClubDetail = async (req, res) => {
 
 module.exports.getAllEvents = async (req, res) => {
   try {
-    const events = await eventModel.find().populate('clubId', '-password');
-    res.json({ success: true, events, msg: "Events fetched successfully" });
+    const paging = pageRequest(req.query, { defaultLimit: 50 });
+    const [events, total] = await Promise.all([
+      eventModel.find().sort({ createdAt: -1, _id: -1 }).skip(paging.skip).limit(paging.limit).populate('clubId', '-password'),
+      eventModel.countDocuments(),
+    ]);
+    res.json({ success: true, events, pagination: pageMetadata(paging, total), msg: "Events fetched successfully" });
   } catch (error) {
     res.status(500).json({ success: false, msg: "Error fetching events" });
   }
@@ -220,8 +232,8 @@ module.exports.getDashBoard = async (req, res) => {
 
     const studentsCount = await studentModel.countDocuments();
 
-    const sessions = await sessionModel.find();
-    const events = await eventModel.find();
+    const sessions = await sessionModel.find().sort({ createdAt: -1 }).limit(10);
+    const events = await eventModel.find().sort({ createdAt: -1 }).limit(10);
 
 
 

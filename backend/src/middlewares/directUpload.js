@@ -44,6 +44,7 @@ const UPLOAD_KINDS = Object.freeze({
   submission: {
     folder: "discovr/submissions",
     resourceType: "auto",
+    deliveryType: "authenticated",
     maxBytes: CLOUDINARY_FREE_VIDEO_LIMIT,
     maxBytesByMimeType: {
       "image/jpeg": DEFAULT_CLOUDINARY_IMAGE_LIMIT,
@@ -132,13 +133,20 @@ function signDirectUpload(allowedKinds) {
 
       const timestamp = Math.floor(Date.now() / 1000);
       const publicId = crypto.randomUUID();
-      const params = { allowed_formats: config.allowedFormats, folder: config.folder, public_id: publicId, timestamp };
+      const params = {
+        allowed_formats: config.allowedFormats,
+        folder: config.folder,
+        public_id: publicId,
+        timestamp,
+        ...(config.deliveryType ? { type: config.deliveryType } : {}),
+      };
       const signature = cloudinary.utils.api_sign_request(params, process.env.CLOUDINARY_API_SECRET);
       const uploadToken = encodeToken({
         actor,
         kind,
         folder: config.folder,
         publicId,
+        deliveryType: config.deliveryType || "upload",
         exp: timestamp + 15 * 60,
       });
 
@@ -152,6 +160,7 @@ function signDirectUpload(allowedKinds) {
           folder: config.folder,
           publicId,
           resourceType: config.resourceType,
+          deliveryType: config.deliveryType || "upload",
           uploadUrl: `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/${config.resourceType}/upload`,
           maxBytes: config.maxBytes,
           maxBytesByMimeType: config.maxBytesByMimeType,
@@ -180,6 +189,7 @@ function normalizeAsset(req, asset, expectedKind) {
   const mimeMaxBytes = config.maxBytesByMimeType?.[mimeType] || config.maxBytes;
 
   if (token.actor !== actorKey(req) || token.kind !== expectedKind || token.folder !== config.folder
+    || token.deliveryType !== (config.deliveryType || "upload")
     || String(asset.publicId || "") !== expectedPublicId) {
     throw uploadError("Uploaded file authorization does not match this request");
   }
@@ -207,6 +217,8 @@ function normalizeAsset(req, asset, expectedKind) {
     size: bytes,
     format: String(asset.format || "").slice(0, 20),
     resourceType,
+    deliveryType: config.deliveryType || "upload",
+    version,
     originalName: String(asset.originalName || "upload").slice(0, 255),
     mimetype: mimeType,
   };

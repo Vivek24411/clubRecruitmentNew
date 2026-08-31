@@ -29,23 +29,16 @@ const AdminContext = ({ children }) => {
     try {
       await axios.post(`${import.meta.env.VITE_BASE_URI}/admin/logout`);
     } finally {
-      localStorage.removeItem("adminToken");
       setAdminProfile(null);
       setLoggedInAdmin(false);
     }
   }, []);
 
   useEffect(() => {
-    const requestInterceptor = axios.interceptors.request.use((config) => {
-      const token = localStorage.getItem("adminToken");
-      if (token) config.headers.Authorization = `Bearer ${token}`;
-      return config;
-    });
     const interceptor = axios.interceptors.response.use(
       (response) => response,
       (error) => {
         if (error.response?.status === 401) {
-          localStorage.removeItem("adminToken");
           setAdminProfile(null);
           setLoggedInAdmin(false);
         }
@@ -53,7 +46,6 @@ const AdminContext = ({ children }) => {
       }
     );
     return () => {
-      axios.interceptors.request.eject(requestInterceptor);
       axios.interceptors.response.eject(interceptor);
     };
   }, []);
