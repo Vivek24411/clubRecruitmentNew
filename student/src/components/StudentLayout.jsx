@@ -154,7 +154,7 @@ export default function StudentLayout({ children }) {
   };
 
   const links = loggedInStudent
-    ? [...publicLinks, ["/applications", "Applications"]]
+    ? [...publicLinks, ["/calendar", "Calendar"], ["/applications", "Applications"]]
     : publicLinks;
 
   return (

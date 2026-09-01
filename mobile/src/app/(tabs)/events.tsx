@@ -4,9 +4,10 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppHeader } from '@/components/app-header';
 import { EventCard } from '@/components/catalogue';
-import { Button, EmptyState, ErrorState, Eyebrow, FilterChip, Heading, LoadingState, Screen, SearchField } from '@/components/ui';
+import { Button, EmptyState, ErrorState, Eyebrow, FilterChip, Heading, ListScreen, LoadingState, SearchField } from '@/components/ui';
 import { palette, radius, spacing, typography } from '@/constants/theme';
 import { useApiQuery } from '@/hooks/use-api-query';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { eventDeadline, eventIsOngoing, titleCase } from '@/lib/date';
 import type { DiscovrEvent } from '@/types/api';
 
@@ -19,16 +20,18 @@ function listedAt(event: DiscovrEvent) {
 }
 
 export default function EventsScreen() {
-  const query = useApiQuery<{ success: boolean; events: DiscovrEvent[]; pagination?: { page: number; pages: number; hasMore: boolean } }>('/student/getEvents?limit=24', 'events');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>('ongoing');
   const [category, setCategory] = useState('all');
   const [eventType, setEventType] = useState('all');
   const [sortBy, setSortBy] = useState<SortFilter>('deadline');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const debouncedSearch = useDebouncedValue(search.trim(), 320);
+  const queryPath = `/student/getEvents?limit=24&status=${status}&sort=${sortBy}${debouncedSearch ? `&q=${encodeURIComponent(debouncedSearch)}` : ''}${category !== 'all' ? `&category=${encodeURIComponent(category)}` : ''}${eventType !== 'all' ? `&eventType=${encodeURIComponent(eventType)}` : ''}`;
+  const query = useApiQuery<{ success: boolean; events: DiscovrEvent[]; pagination?: { page: number; pages: number; hasMore: boolean; total: number } }>(queryPath, 'events');
   const events = useMemo(() => query.data?.events || [], [query.data]);
 
-  const categories = useMemo(() => [...new Set(events.map((event) => event.clubId?.category).filter((value): value is string => Boolean(value)))].sort(), [events]);
+  const categories = useMemo(() => [...new Set(['cultural', 'technical', 'departmental', 'others', ...events.map((event) => event.clubId?.category).filter((value): value is string => Boolean(value))])], [events]);
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
     return events.filter((event) => {
@@ -42,11 +45,21 @@ export default function EventsScreen() {
       return (eventDeadline(a)?.getTime() || Number.MAX_SAFE_INTEGER) - (eventDeadline(b)?.getTime() || Number.MAX_SAFE_INTEGER);
     });
   }, [category, eventType, events, search, sortBy, status]);
+  const searchSettled = debouncedSearch === search.trim();
+  const resultCount = searchSettled ? query.data?.pagination?.total ?? visible.length : visible.length;
 
   const activeFilters = status !== 'ongoing' || category !== 'all' || eventType !== 'all' || sortBy !== 'deadline';
   function clearFilters() { setSearch(''); setStatus('ongoing'); setCategory('all'); setEventType('all'); setSortBy('deadline'); }
 
-  return <Screen refreshing={query.refreshing} onRefresh={query.refresh} contentStyle={styles.content}>
+  return <ListScreen
+    data={query.loading ? [] : visible}
+    keyExtractor={(event) => event._id}
+    renderItem={({ item }) => <EventCard event={item} />}
+    refreshing={query.refreshing}
+    onRefresh={query.refresh}
+    onEndReached={query.hasMore ? () => void query.loadMore() : undefined}
+    contentStyle={styles.content}
+    header={<>
     <AppHeader />
     <View style={styles.intro}><Eyebrow accent>Recruitment</Eyebrow><Heading size="xl">Events</Heading><Text style={styles.copy}>Apply while registration is open and follow every selection stage from one place.</Text></View>
     <View style={styles.searchArea}>
@@ -56,7 +69,7 @@ export default function EventsScreen() {
           <Ionicons name="options-outline" size={18} color={filtersOpen ? palette.white : palette.ink} /><Text style={[styles.filterButtonText, filtersOpen && styles.filterButtonTextActive]}>Filters{activeFilters ? ' · On' : ''}</Text>
         </Pressable>
         {(activeFilters || search) ? <Pressable onPress={clearFilters}><Text style={styles.clear}>Clear</Text></Pressable> : null}
-        <Text style={styles.count}>{visible.length} {visible.length === 1 ? 'event' : 'events'}</Text>
+        <Text accessibilityLiveRegion="polite" style={styles.count}>{resultCount} {resultCount === 1 ? 'event' : 'events'}</Text>
       </View>
       {filtersOpen ? <View style={styles.filters}>
         <ChipRow label="Status" values={[['ongoing', 'Ongoing'], ['completed', 'Completed'], ['all', 'All']]} selected={status} onSelect={(value) => setStatus(value as StatusFilter)} />
@@ -65,8 +78,10 @@ export default function EventsScreen() {
         <ChipRow label="Sort" values={[['deadline', 'Deadline'], ['newest', 'Recently listed'], ['title', 'A–Z']]} selected={sortBy} onSelect={(value) => setSortBy(value as SortFilter)} />
       </View> : null}
     </View>
-    {query.loading ? <LoadingState /> : query.error && !events.length ? <ErrorState message={query.error} onRetry={query.reload} /> : !visible.length ? <EmptyState title="No matching events" message="Try a different search or widen the filters." /> : <View style={styles.list}>{visible.map((event) => <EventCard key={event._id} event={event} />)}{query.hasMore ? <Button label="Load more events" variant="secondary" loading={query.loadingMore} onPress={() => void query.loadMore()} /> : null}</View>}
-  </Screen>;
+    </>}
+    empty={query.loading ? <LoadingState /> : query.error && !events.length ? <ErrorState message={query.error} onRetry={query.reload} /> : <EmptyState title="No matching events" message="Try a different search or widen the filters." />}
+    footer={query.loadingMore ? <LoadingState label="Loading more events…" /> : query.hasMore ? <Button label="Load more events" variant="secondary" onPress={() => void query.loadMore()} /> : null}
+  />;
 }
 
 function ChipRow({ label, values, selected, onSelect }: { label: string; values: [string, string][]; selected: string; onSelect: (value: string) => void }) {

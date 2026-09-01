@@ -18,12 +18,12 @@ test("job records support durable round reminders", () => {
   assert.ok(jobModel.schema.path("type").enumValues.includes("round_reminder"));
 });
 
-test("submission deadlines are reminded six hours beforehand", () => {
+test("submission deadlines are reminded two hours beforehand", () => {
   const deadline = new Date("2026-08-24T18:29:59.000Z");
   const now = new Date("2026-08-24T08:00:00.000Z");
   assert.equal(
     submissionDeadlineReminderRunAt(deadline, now).toISOString(),
-    "2026-08-24T12:29:59.000Z",
+    "2026-08-24T16:29:59.000Z",
   );
 });
 
@@ -36,11 +36,11 @@ test("interviews are reminded two hours beforehand", () => {
   );
 });
 
-test("students becoming eligible inside the lead window are reminded immediately", () => {
+test("reminders run at the lead boundary or immediately inside it", () => {
   const now = new Date("2026-08-24T12:30:00.000Z");
   assert.equal(
     submissionDeadlineReminderRunAt("2026-08-24T15:30:00.000Z", now).toISOString(),
-    now.toISOString(),
+    "2026-08-24T13:30:00.000Z",
   );
   assert.equal(
     interviewReminderRunAt("2026-08-24T13:30:00.000Z", now).toISOString(),

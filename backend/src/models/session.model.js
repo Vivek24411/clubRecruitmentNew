@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { isHttpUrl } = require("../utils/validation");
 
 const sessionSchema = new mongoose.Schema({
   clubId: {
@@ -36,6 +37,7 @@ const sessionSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: 2048,
+    validate: { validator: isHttpUrl, message: "Meeting link must use http or https" },
   },
   sessionThumbnail: {
     type: String,
@@ -87,6 +89,7 @@ sessionSchema.pre('save', function(next) {
 
 sessionSchema.index({ status: 1, date: 1, time: 1 });
 sessionSchema.index({ clubId: 1, status: 1, createdAt: -1 });
+sessionSchema.index({ title: "text", shortDescription: "text", longDescription: "text", venue: "text" });
 
 const sessionModel = mongoose.model("Session", sessionSchema);
 

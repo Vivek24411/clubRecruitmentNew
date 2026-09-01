@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { eventDeadline, formatDateTime } from "../utils/date";
 import {
   Badge,
+  Button,
   EmptyState,
   Input,
   Page,
@@ -27,14 +28,26 @@ export default function Events() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
-    axios
-      .get(`${import.meta.env.VITE_BASE_URI}/admin/getAllEvents?limit=100`)
-      .then(({ data }) => (data.success ? setEvents(data.events) : toast.error(data.msg)))
+    const timer = window.setTimeout(() => axios
+      .get(`${import.meta.env.VITE_BASE_URI}/admin/getAllEvents`, { params: { limit: 24, search: search.trim() || undefined } })
+      .then(({ data }) => { if (data.success) { setEvents(data.events); setPagination(data.pagination); } else toast.error(data.msg); })
       .catch(() => toast.error("Could not load events"))
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => setLoading(false)), 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const loadMore = async () => {
+    if (loadingMore || pagination.page >= pagination.pages) return;
+    setLoadingMore(true);
+    try {
+      const { data } = await axios.get(`${import.meta.env.VITE_BASE_URI}/admin/getAllEvents`, { params: { page: pagination.page + 1, limit: 24, search: search.trim() || undefined } });
+      setEvents((current) => [...current, ...(data.events || [])]); setPagination(data.pagination);
+    } catch { toast.error("Could not load more events"); } finally { setLoadingMore(false); }
+  };
 
   const updateStatus = async (event, status) => {
     if (
@@ -144,6 +157,7 @@ export default function Events() {
             ))}
           </div>
         )}
+        {!loading && pagination.page < pagination.pages && <div className="mt-7 flex justify-center"><Button variant="secondary" loading={loadingMore} onClick={loadMore}>Load more events</Button></div>}
       </div>
     </Page>
   );

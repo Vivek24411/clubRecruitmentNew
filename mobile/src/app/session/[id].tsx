@@ -2,7 +2,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 
-import { Badge, Button, Card, ErrorState, Heading, LoadingState, MetaRow, RemoteImage, Screen } from '@/components/ui';
+import { ArtworkImage, Badge, Button, Card, ErrorState, Heading, LoadingState, MetaRow, Screen } from '@/components/ui';
+import { CalendarSaveButton } from '@/components/calendar-save-button';
 import { palette, radius, spacing, typography } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useFeedback } from '@/context/feedback-context';
@@ -65,7 +66,7 @@ export default function SessionDetailScreen() {
 
   return <Screen safeTop={false} refreshing={sessionQuery.refreshing} onRefresh={sessionQuery.refresh} contentStyle={styles.content}>
     {sessionQuery.loading ? <LoadingState /> : sessionQuery.error || !session ? <ErrorState message={sessionQuery.error || 'Session not found'} onRetry={sessionQuery.reload} /> : <>
-      <RemoteImage uri={session.sessionThumbnail || session.clubId?.clubBanner} style={styles.heroImage} />
+      <ArtworkImage uri={session.sessionThumbnail || session.clubId?.clubBanner} fallbackText={session.title} accessibilityLabel={`${session.title} banner`} style={styles.heroImage} />
       <View style={styles.titleBlock}>
         <View style={styles.badges}><Badge tone={isPast ? 'neutral' : 'success'}>{isPast ? 'Past session' : isOngoing ? 'Live now' : timing === 'tba' ? 'Schedule TBA' : 'Upcoming'}</Badge>{rsvp?.status ? <Badge tone="info">{rsvp.status}</Badge> : null}</View>
         <Text style={styles.club}>{session.clubId?.name}</Text>
@@ -80,6 +81,7 @@ export default function SessionDetailScreen() {
         <MetaRow icon="people-outline">{placesLeft === null ? 'Open attendance' : placesLeft > 0 ? `${placesLeft} places left` : 'Waitlist only'}</MetaRow>
         {session.capacity ? <View style={styles.capacity}><View style={styles.capacityLabels}><Text style={styles.capacityLabel}>Seats filled</Text><Text style={styles.capacityValue}>{session.confirmedRsvpCount || 0}/{session.capacity}</Text></View><View style={styles.capacityTrack}><View style={[styles.capacityFill, { width: `${Math.min(100, ((session.confirmedRsvpCount || 0) / session.capacity) * 100)}%` }]} /></View></View> : null}
       </Card>
+      <CalendarSaveButton sourceType="session" sourceId={id!} />
       <View style={styles.section}><Text style={styles.sectionTitle}>About this session</Text><Text style={styles.body}>{session.longDescription || 'No additional description was provided by the club.'}</Text></View>
       {meetingUrl ? <Button label="Open meeting link" variant="secondary" icon="videocam-outline" onPress={() => Linking.openURL(meetingUrl)} /> : null}
       <Card style={styles.rsvpCard}><Text style={styles.rsvpTitle}>{profile ? 'Your RSVP' : 'Reserve a place'}</Text><Text style={styles.body}>{isPast ? 'This session has ended.' : isOngoing ? activeRsvp ? 'The session is live and your place is reserved.' : 'The session is live. You can still reserve before it ends.' : activeRsvp ? 'Your place is reserved. Updates will appear in Alerts.' : placesLeft === 0 ? 'The room is full; reserving now adds you to the waitlist.' : 'Reserve a seat and receive schedule updates.'}</Text><Button label={!profile ? 'Sign in to reserve' : activeRsvp ? 'Cancel RSVP' : isPast ? 'Session has ended' : placesLeft === 0 ? 'Join waitlist' : 'Reserve a place'} variant={activeRsvp ? 'secondary' : 'primary'} loading={working || rsvpQuery.loading} disabled={Boolean(profile && isPast && !activeRsvp)} onPress={updateRsvp} /></Card>
@@ -88,7 +90,7 @@ export default function SessionDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingTop: spacing.lg }, heroImage: { width: '100%', aspectRatio: 16 / 9, borderRadius: radius.md, backgroundColor: palette.ink }, titleBlock: { gap: spacing.md },
+  content: { paddingTop: spacing.lg }, heroImage: { width: '100%', aspectRatio: 1, borderRadius: radius.md, backgroundColor: palette.ink }, titleBlock: { gap: spacing.md },
   badges: { flexDirection: 'row', gap: spacing.sm }, club: { color: palette.accentDark, fontFamily: typography.mono, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.85 },
   lead: { color: palette.muted, fontFamily: typography.regular, fontSize: 16, lineHeight: 24 }, metaCard: { padding: spacing.lg, gap: spacing.md }, section: { gap: spacing.md },
   sectionTitle: { color: palette.ink, fontFamily: typography.semibold, fontSize: 19 }, body: { color: palette.inkSoft, fontFamily: typography.regular, fontSize: 14, lineHeight: 22 },

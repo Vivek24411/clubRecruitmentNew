@@ -2,12 +2,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { PropsWithChildren, ReactNode, useState } from 'react';
+import { PropsWithChildren, ReactNode, useRef, useState } from 'react';
 import {
-  ActivityIndicator, ImageStyle, Pressable, RefreshControl, ScrollView, StyleProp,
+  ActivityIndicator, FlatList, ImageStyle, ListRenderItem, Pressable, RefreshControl, ScrollView, StyleProp,
   StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle,
 } from 'react-native';
-import Animated, { Easing, FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown, ReduceMotion, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { palette, radius, shadow, spacing, typography } from '@/constants/theme';
@@ -25,17 +25,55 @@ export function Screen({ children, refreshing, onRefresh, contentStyle, safeTop 
     <SafeAreaView style={styles.screen} edges={safeTop ? ['top'] : []}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
         refreshControl={onRefresh ? <RefreshControl refreshing={Boolean(refreshing)} onRefresh={onRefresh} tintColor={palette.accent} colors={[palette.accent]} /> : undefined}
       >
-        <Animated.View entering={FadeInDown.duration(480).easing(Easing.out(Easing.cubic))} style={[styles.screenContent, { paddingBottom: spacing.xl + Math.max(insets.bottom, spacing.lg) }, contentStyle]}>
+        <Animated.View entering={FadeInDown.duration(480).easing(Easing.out(Easing.cubic)).reduceMotion(ReduceMotion.System)} style={[styles.screenContent, { paddingBottom: 84 + Math.max(insets.bottom, spacing.lg) }, contentStyle]}>
           {children}
         </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+export function ListScreen<T>({ data, renderItem, keyExtractor, header, empty, footer, refreshing, onRefresh, onEndReached, contentStyle, safeTop = true }: {
+  data: T[];
+  renderItem: ListRenderItem<T>;
+  keyExtractor: (item: T, index: number) => string;
+  header?: ReactNode;
+  empty?: ReactNode;
+  footer?: ReactNode;
+  refreshing?: boolean;
+  onRefresh?: () => void;
+  onEndReached?: () => void;
+  contentStyle?: StyleProp<ViewStyle>;
+  safeTop?: boolean;
+}) {
+  const insets = useSafeAreaInsets();
+  return <SafeAreaView style={styles.screen} edges={safeTop ? ['top'] : []}>
+    <FlatList
+      data={data}
+      renderItem={renderItem}
+      keyExtractor={keyExtractor}
+      ListHeaderComponent={header ? <View style={styles.listHeader}>{header}</View> : null}
+      ListEmptyComponent={empty ? <View style={styles.listEmpty}>{empty}</View> : null}
+      ListFooterComponent={footer ? <View style={styles.listFooter}>{footer}</View> : null}
+      ItemSeparatorComponent={() => <View style={styles.listSeparator} />}
+      contentContainerStyle={[styles.listContent, { paddingBottom: 84 + Math.max(insets.bottom, spacing.lg) }, contentStyle]}
+      keyboardShouldPersistTaps="always"
+      keyboardDismissMode="on-drag"
+      showsVerticalScrollIndicator={false}
+      refreshControl={onRefresh ? <RefreshControl refreshing={Boolean(refreshing)} onRefresh={onRefresh} tintColor={palette.accent} colors={[palette.accent]} /> : undefined}
+      onEndReached={onEndReached}
+      onEndReachedThreshold={0.35}
+      initialNumToRender={6}
+      maxToRenderPerBatch={8}
+      windowSize={7}
+      removeClippedSubviews={false}
+    />
+  </SafeAreaView>;
 }
 
 export function Brand({ compact = false, inverse = false }: { compact?: boolean; inverse?: boolean }) {
@@ -58,11 +96,11 @@ export function Eyebrow({ children, accent = false, inverse = false }: PropsWith
 }
 
 export function Heading({ children, size = 'lg', inverse = false }: PropsWithChildren<{ size?: 'md' | 'lg' | 'xl'; inverse?: boolean }>) {
-  return <Text style={[styles.heading, size === 'md' && styles.headingMd, size === 'xl' && styles.headingXl, inverse && styles.headingInverse]}>{children}</Text>;
+  return <Text accessibilityRole="header" style={[styles.heading, size === 'md' && styles.headingMd, size === 'xl' && styles.headingXl, inverse && styles.headingInverse]}>{children}</Text>;
 }
 
 export function Card({ children, style }: PropsWithChildren<{ style?: StyleProp<ViewStyle> }>) {
-  return <Animated.View entering={FadeInDown.duration(420).easing(Easing.out(Easing.cubic))} style={[styles.card, style]}>{children}</Animated.View>;
+  return <Animated.View entering={FadeInDown.duration(420).easing(Easing.out(Easing.cubic)).reduceMotion(ReduceMotion.System)} style={[styles.card, style]}>{children}</Animated.View>;
 }
 
 export function PressableScale({ children, onPress, style, accessibilityLabel, haptic = true }: PropsWithChildren<{
@@ -74,12 +112,12 @@ export function PressableScale({ children, onPress, style, accessibilityLabel, h
   const scale = useSharedValue(1);
   const motionStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
-    <Animated.View entering={FadeIn.duration(260)} style={[styles.pressableShell, style, motionStyle]}>
+    <Animated.View entering={FadeIn.duration(260).reduceMotion(ReduceMotion.System)} style={[styles.pressableShell, style, motionStyle]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
-        onPressIn={() => { scale.set(withSpring(0.975, { damping: 18, stiffness: 280 })); }}
-        onPressOut={() => { scale.set(withSpring(1, { damping: 16, stiffness: 260 })); }}
+        onPressIn={() => { scale.set(withSpring(0.975, { damping: 18, stiffness: 280, reduceMotion: ReduceMotion.System })); }}
+        onPressOut={() => { scale.set(withSpring(1, { damping: 16, stiffness: 260, reduceMotion: ReduceMotion.System })); }}
         onPress={() => {
           if (haptic) void Haptics.selectionAsync();
           onPress?.();
@@ -94,7 +132,7 @@ export function PressableScale({ children, onPress, style, accessibilityLabel, h
 
 export function Badge({ children, tone = 'neutral' }: PropsWithChildren<{ tone?: 'neutral' | 'accent' | 'success' | 'info' | 'warning' | 'danger' }>) {
   const toneStyle = { neutral: styles.badgeNeutral, accent: styles.badgeAccent, success: styles.badgeSuccess, info: styles.badgeInfo, warning: styles.badgeWarning, danger: styles.badgeDanger }[tone];
-  return <Animated.View entering={FadeIn.duration(300)} style={[styles.badge, toneStyle]}><Text style={styles.badgeText}>{children}</Text></Animated.View>;
+  return <Animated.View entering={FadeIn.duration(300).reduceMotion(ReduceMotion.System)} style={[styles.badge, toneStyle]}><Text style={styles.badgeText}>{children}</Text></Animated.View>;
 }
 
 export function Button({ label, onPress, variant = 'primary', loading = false, disabled = false, icon }: {
@@ -117,8 +155,8 @@ export function Button({ label, onPress, variant = 'primary', loading = false, d
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onPress?.();
         }}
-        onPressIn={() => { scale.set(withSpring(0.975, { damping: 18, stiffness: 300 })); }}
-        onPressOut={() => { scale.set(withSpring(1, { damping: 16, stiffness: 280 })); }}
+        onPressIn={() => { scale.set(withSpring(0.975, { damping: 18, stiffness: 300, reduceMotion: ReduceMotion.System })); }}
+        onPressOut={() => { scale.set(withSpring(1, { damping: 16, stiffness: 280, reduceMotion: ReduceMotion.System })); }}
         style={[styles.button, styles[`button_${variant}`]]}
       >
         {variant === 'primary' ? <LinearGradient colors={['#0A86CF', palette.accentDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} /> : null}
@@ -141,6 +179,9 @@ export function Field({ label, error, onFocus, onBlur, style, multiline, ...prop
       <Text style={[styles.fieldLabel, focused && styles.fieldLabelFocused]}>{label}</Text>
       <TextInput
         {...props}
+        accessibilityLabel={props.accessibilityLabel || label}
+        accessibilityState={{ ...props.accessibilityState, disabled: props.editable === false }}
+        aria-invalid={error ? true : undefined}
         multiline={multiline}
         onFocus={(event) => { setFocused(true); onFocus?.(event); }}
         onBlur={(event) => { setFocused(false); onBlur?.(event); }}
@@ -148,28 +189,33 @@ export function Field({ label, error, onFocus, onBlur, style, multiline, ...prop
         selectionColor={palette.accent}
         style={[styles.input, focused && styles.inputFocused, error && styles.inputError, multiline && styles.inputMultiline, style]}
       />
-      {error ? <Text style={styles.fieldError}>{error}</Text> : null}
+      {error ? <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.fieldError}>{error}</Text> : null}
     </View>
   );
 }
 
 export function SearchField({ value, onChangeText, placeholder }: { value: string; onChangeText: (value: string) => void; placeholder: string }) {
   const [focused, setFocused] = useState(false);
-  return <View style={[styles.searchWrap, focused && styles.searchWrapFocused]}>
-    <Ionicons name="search-outline" size={19} color={palette.muted} />
+  const inputRef = useRef<TextInput>(null);
+  return <View onTouchStart={() => inputRef.current?.focus()} style={[styles.searchWrap, focused && styles.searchWrapFocused]}>
+    <View pointerEvents="none" style={styles.searchIcon}><Ionicons name="search" size={18} color={focused ? palette.accent : palette.muted} /></View>
     <TextInput
+      ref={inputRef}
       accessibilityRole="search"
+      accessibilityLabel={placeholder}
       value={value}
       onChangeText={onChangeText}
       placeholder={placeholder}
       placeholderTextColor={palette.faint}
       selectionColor={palette.accent}
       returnKeyType="search"
+      autoCapitalize="none"
+      autoCorrect={false}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       style={styles.searchInput}
     />
-    {value ? <Pressable accessibilityLabel="Clear search" hitSlop={8} onPress={() => onChangeText('')}><Ionicons name="close-circle" size={19} color={palette.faint} /></Pressable> : null}
+    {value ? <Pressable accessibilityLabel="Clear search" hitSlop={10} onPress={() => { onChangeText(''); inputRef.current?.focus(); }}><Ionicons name="close-circle" size={20} color={palette.muted} /></Pressable> : null}
   </View>;
 }
 
@@ -180,8 +226,8 @@ export function FilterChip({ label, selected, onPress, icon }: { label: string; 
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      onPressIn={() => { scale.set(withSpring(0.96, { damping: 18, stiffness: 320 })); }}
-      onPressOut={() => { scale.set(withSpring(1, { damping: 16, stiffness: 280 })); }}
+      onPressIn={() => { scale.set(withSpring(0.96, { damping: 18, stiffness: 320, reduceMotion: ReduceMotion.System })); }}
+      onPressOut={() => { scale.set(withSpring(1, { damping: 16, stiffness: 280, reduceMotion: ReduceMotion.System })); }}
       onPress={() => { void Haptics.selectionAsync(); onPress(); }}
       style={[styles.filterChip, selected && styles.filterChipSelected]}
     >
@@ -191,9 +237,20 @@ export function FilterChip({ label, selected, onPress, icon }: { label: string; 
   </Animated.View>;
 }
 
-export function RemoteImage({ uri, style, contain = false }: { uri?: string; style?: StyleProp<ImageStyle>; contain?: boolean }) {
-  if (!uri) return <View style={[styles.imageFallback, style]}><Text style={styles.imageFallbackText}>D</Text></View>;
-  return <Image source={{ uri }} style={style} contentFit={contain ? 'contain' : 'cover'} transition={220} cachePolicy="memory-disk" />;
+export function RemoteImage({ uri, style, contain = false, fallbackText = 'D', accessibilityLabel }: { uri?: string; style?: StyleProp<ImageStyle>; contain?: boolean; fallbackText?: string; accessibilityLabel?: string }) {
+  const [failedUri, setFailedUri] = useState<string | null>(null);
+  if (!uri || failedUri === uri) return <View style={[styles.imageFallback, style]}><Text style={styles.imageFallbackText}>{fallbackText.slice(0, 2).toUpperCase()}</Text></View>;
+  return <Image source={{ uri }} accessibilityLabel={accessibilityLabel} style={style} contentFit={contain ? 'contain' : 'cover'} transition={220} cachePolicy="memory-disk" onError={() => setFailedUri(uri)} />;
+}
+
+export function ArtworkImage({ uri, style, fallbackText = 'D', accessibilityLabel }: { uri?: string; style?: StyleProp<ViewStyle>; fallbackText?: string; accessibilityLabel?: string }) {
+  const [failedUri, setFailedUri] = useState<string | null>(null);
+  if (!uri || failedUri === uri) return <View style={[styles.artwork, styles.imageFallback, style]}><Text style={styles.imageFallbackText}>{fallbackText.slice(0, 2).toUpperCase()}</Text></View>;
+  return <View style={[styles.artwork, style]}>
+    <Image source={{ uri }} style={[StyleSheet.absoluteFill, styles.artworkAmbient]} contentFit="cover" cachePolicy="memory-disk" />
+    <View style={styles.artworkShade} />
+    <Image source={{ uri }} accessibilityLabel={accessibilityLabel} style={StyleSheet.absoluteFill} contentFit="contain" transition={220} cachePolicy="memory-disk" onError={() => setFailedUri(uri)} />
+  </View>;
 }
 
 export function SectionHeader({ eyebrow, title, action }: { eyebrow?: string; title: string; action?: ReactNode }) {
@@ -232,6 +289,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.paper },
   scrollContent: { flexGrow: 1 },
   screenContent: { flexGrow: 1, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.xl },
+  listContent: { flexGrow: 1, paddingHorizontal: spacing.lg, paddingTop: spacing.md }, listHeader: { gap: spacing.xl, marginBottom: spacing.xl }, listEmpty: { flex: 1 }, listFooter: { paddingTop: spacing.lg }, listSeparator: { height: spacing.xl },
   brand: { alignSelf: 'flex-start', gap: 3, backgroundColor: palette.ink, borderRadius: radius.sm, paddingHorizontal: 11, paddingVertical: 8 }, brandInverse: { backgroundColor: 'transparent', paddingHorizontal: 0, paddingVertical: 0 },
   brandLogo: { width: 128, height: 35 }, brandLogoCompact: { width: 104, height: 29 },
   brandMeta: { color: '#B9DDF2', fontFamily: typography.mono, fontSize: 8, marginLeft: 4, letterSpacing: 1.55 }, brandMetaInverse: { color: '#B9DDF2' },
@@ -240,7 +298,7 @@ const styles = StyleSheet.create({
   eyebrowAccent: { color: palette.accentDark }, eyebrowInverse: { color: '#CBEAFE' },
   heading: { color: palette.ink, fontFamily: typography.display, fontSize: 27, lineHeight: 31, letterSpacing: -0.8 },
   headingMd: { fontSize: 20, lineHeight: 24, letterSpacing: -0.4 }, headingXl: { fontSize: 36, lineHeight: 39, letterSpacing: -1.35 }, headingInverse: { color: palette.white },
-  card: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, overflow: 'hidden', ...shadow },
+  card: { backgroundColor: palette.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.lineStrong, borderRadius: radius.md, overflow: 'hidden', ...shadow },
   pressableShell: { alignSelf: 'stretch' }, pressableFill: { alignSelf: 'stretch' },
   badge: { alignSelf: 'flex-start', borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 5 },
   badgeNeutral: { backgroundColor: palette.paper }, badgeAccent: { backgroundColor: palette.accentTint }, badgeSuccess: { backgroundColor: palette.successTint },
@@ -255,12 +313,13 @@ const styles = StyleSheet.create({
   input: { minHeight: 52, borderWidth: 1, borderColor: palette.lineStrong, borderRadius: radius.sm, backgroundColor: palette.white, color: palette.ink, paddingHorizontal: spacing.lg, fontFamily: typography.regular, fontSize: 16 },
   inputFocused: { borderColor: palette.accent, borderWidth: 1.5, backgroundColor: palette.accentMist }, inputError: { borderColor: palette.danger },
   inputMultiline: { minHeight: 112, paddingTop: spacing.lg, textAlignVertical: 'top' }, fieldError: { color: palette.danger, fontFamily: typography.medium, fontSize: 12 },
-  searchWrap: { minHeight: 52, borderWidth: 1, borderColor: palette.lineStrong, borderRadius: radius.sm, backgroundColor: palette.surface, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  searchWrapFocused: { borderColor: palette.accent, backgroundColor: palette.accentMist, ...shadow },
+  searchWrap: { minHeight: 54, borderWidth: 1, borderColor: palette.lineStrong, borderRadius: radius.md, backgroundColor: palette.surface, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  searchWrapFocused: { borderColor: palette.accent, borderWidth: 1.5, backgroundColor: palette.white, ...shadow }, searchIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: palette.accentTint, alignItems: 'center', justifyContent: 'center' },
   searchInput: { flex: 1, minHeight: 50, color: palette.ink, fontFamily: typography.regular, fontSize: 15 },
   filterChipShell: { alignSelf: 'flex-start' },
   filterChip: { minHeight: 38, borderRadius: radius.pill, borderWidth: 1, borderColor: palette.lineStrong, backgroundColor: palette.surface, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   filterChipSelected: { borderColor: palette.accentDark, backgroundColor: palette.accent }, filterChipText: { color: palette.inkSoft, fontFamily: typography.medium, fontSize: 13 }, filterChipTextSelected: { color: palette.white },
+  artwork: { position: 'relative', overflow: 'hidden', backgroundColor: palette.ink }, artworkAmbient: { opacity: 0.42, transform: [{ scale: 1.08 }] }, artworkShade: { position: 'absolute', inset: 0, backgroundColor: 'rgba(5, 20, 30, 0.28)' },
   imageFallback: { backgroundColor: palette.accentDeep, alignItems: 'center', justifyContent: 'center' }, imageFallbackText: { color: palette.surface, fontFamily: typography.bold, fontSize: 26 },
   sectionHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.lg }, sectionHeaderText: { gap: spacing.xs, flex: 1 },
   state: { minHeight: 180, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md }, stateText: { color: palette.muted, fontFamily: typography.regular, fontSize: 14, lineHeight: 21, textAlign: 'center' },

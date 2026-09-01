@@ -12,16 +12,16 @@
   /* --- ink ------------------------------------------------------------- */
   --color-ink: #111612;
   --color-ink-2: #384039;
-  --color-ink-3: #697169;
-  --color-ink-4: #969c96;
+  --color-ink-3: #566057;
+  --color-ink-4: #626b63;
 
   /* --- hairlines ------------------------------------------------------- */
   --color-line: #dcd8cd;
   --color-line-2: #c9c3b5;
 
   /* --- E-Cell blue: shared brand accent -------------------------------- */
-  --color-accent: #0878be;
-  --color-accent-deep: #075d94;
+  --color-accent: #075d94;
+  --color-accent-deep: #064873;
   --color-accent-tint: #e5f3fb;
 
   /* --- semantic, kept earthy so it sits inside the palette -------------- */

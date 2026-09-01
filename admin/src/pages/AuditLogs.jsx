@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { formatDateTime } from "../utils/date";
-import { EmptyState, Input, Page, PageHeader, Skeleton } from "../components/ui";
+import { Button, EmptyState, Input, Page, PageHeader, Skeleton } from "../components/ui";
 
 /** Rough tone by action keyword, so destructive entries read at a glance. */
 function actionAccent(action = "") {
@@ -17,20 +17,31 @@ export default function AuditLogs() {
   const [logs, setLogs] = useState([]);
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
+  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setLoading(true);
       axios
         .get(`${import.meta.env.VITE_BASE_URI}/admin/audit-logs`, {
-          params: { action: filter, limit: 100 },
+          params: { action: filter, limit: 50 },
         })
-        .then(({ data }) => (data.success ? setLogs(data.logs) : toast.error(data.msg)))
+        .then(({ data }) => { if (data.success) { setLogs(data.logs); setPagination(data.pagination); } else toast.error(data.msg); })
         .catch(() => toast.error("Could not load audit log"))
         .finally(() => setLoading(false));
     }, 250);
     return () => clearTimeout(timer);
   }, [filter]);
+
+  const loadMore = async () => {
+    if (loadingMore || pagination.page >= pagination.pages) return;
+    setLoadingMore(true);
+    try {
+      const { data } = await axios.get(`${import.meta.env.VITE_BASE_URI}/admin/audit-logs`, { params: { action: filter, page: pagination.page + 1, limit: 50 } });
+      setLogs((current) => [...current, ...(data.logs || [])]); setPagination(data.pagination);
+    } catch { toast.error("Could not load more audit entries"); } finally { setLoadingMore(false); }
+  };
 
   return (
     <Page width="5xl">
@@ -106,11 +117,7 @@ export default function AuditLogs() {
               ))}
             </ol>
 
-            <p className="mt-4 text-sm text-ink-3" role="status">
-              Showing <span className="tabular font-semibold text-ink">{logs.length}</span>{" "}
-              {logs.length === 1 ? "entry" : "entries"}
-              {logs.length === 100 ? " (most recent 100)" : ""}.
-            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-ink-3" role="status">Showing <span className="tabular font-semibold text-ink">{logs.length}</span> of <span className="tabular font-semibold text-ink">{pagination.total}</span> entries.</p>{pagination.page < pagination.pages && <Button variant="secondary" loading={loadingMore} onClick={loadMore}>Load more</Button>}</div>
           </>
         )}
       </div>

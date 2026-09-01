@@ -23,19 +23,23 @@ export default function Students() {
   const [editing, setEditing] = useState(null);
   const [academicForm, setAcademicForm] = useState({ programme: "undergraduate", branch: "", academicYear: 1 });
   const [savingAcademics, setSavingAcademics] = useState(false);
+  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (page = 1, append = false) => {
+    if (append) setLoadingMore(true); else setLoading(true);
     try {
       const { data } = await axios.get(`${import.meta.env.VITE_BASE_URI}/admin/students`, {
-        params: { search, limit: 100 },
+        params: { search, page, limit: 50 },
       });
       if (!data.success) throw new Error(data.msg);
-      setStudents(data.students);
+      setStudents((current) => append ? [...current, ...data.students] : data.students);
+      setPagination(data.pagination);
     } catch (error) {
       toast.error(error.response?.data?.msg || error.message || "Could not load students");
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, [search]);
 
@@ -194,11 +198,7 @@ export default function Students() {
       </TableWrap>
 
       {!loading && students.length > 0 && (
-        <p className="mt-4 text-sm text-ink-3" role="status">
-          Showing <span className="tabular font-semibold text-ink">{students.length}</span>{" "}
-          {students.length === 1 ? "student" : "students"}
-          {students.length === 100 ? " (first 100 — refine your search)" : ""}.
-        </p>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-ink-3" role="status">Showing <span className="tabular font-semibold text-ink">{students.length}</span> of <span className="tabular font-semibold text-ink">{pagination.total}</span> students.</p>{pagination.page < pagination.pages && <Button variant="secondary" loading={loadingMore} onClick={() => load(pagination.page + 1, true)}>Load more</Button>}</div>
       )}
 
       <Modal

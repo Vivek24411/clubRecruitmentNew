@@ -32,14 +32,28 @@ export default function Events() {
   const [statusFilter, setStatusFilter] = useState("published");
   const [typeFilter, setTypeFilter] = useState("all");
   const [deleting, setDeleting] = useState("");
+  const [pagination, setPagination] = useState({ page: 1, hasMore: false, total: 0 });
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
-    axios
-      .get(`${import.meta.env.VITE_BASE_URI}/club/getEvents`)
-      .then(({ data }) => (data.success ? setEvents(data.events) : toast.error(data.msg)))
+    const timer = window.setTimeout(() => axios
+      .get(`${import.meta.env.VITE_BASE_URI}/club/getEvents`, { params: { limit: 24, q: search.trim() || undefined, status: statusFilter, eventType: typeFilter } })
+      .then(({ data }) => { if (data.success) { setEvents(data.events); setPagination(data.pagination); } else toast.error(data.msg); })
       .catch(() => toast.error("Could not load events"))
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => setLoading(false)), 250);
+    return () => window.clearTimeout(timer);
+  }, [search, statusFilter, typeFilter]);
+
+  const loadMore = async () => {
+    if (!pagination.hasMore || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const { data } = await axios.get(`${import.meta.env.VITE_BASE_URI}/club/getEvents`, { params: { page: pagination.page + 1, limit: 24, q: search.trim() || undefined, status: statusFilter, eventType: typeFilter } });
+      setEvents((current) => [...current, ...(data.events || [])]);
+      setPagination(data.pagination);
+    } catch { toast.error("Could not load more events"); }
+    finally { setLoadingMore(false); }
+  };
 
   const changeStatus = async (event, status) => {
     if (["cancelled", "archived"].includes(status) && !window.confirm(`${status} ${event.title}?`))
@@ -209,6 +223,7 @@ export default function Events() {
             })}
           </div>
         )}
+        {!loading && pagination.hasMore && <div className="mt-7 flex justify-center"><Button variant="secondary" loading={loadingMore} onClick={loadMore}>Load more events</Button></div>}
       </div>
     </Page>
   );

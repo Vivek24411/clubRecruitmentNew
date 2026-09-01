@@ -20,8 +20,9 @@ function SessionCheck() {
 }
 
 export default function ProtectedWrapper({ children }) {
-  const { loggedInStudent, authLoading } = useContext(StudentContextData);
+  const { loggedInStudent, authLoading, authError, refreshProfile } = useContext(StudentContextData);
   if (authLoading) return <SessionCheck />;
+  if (authError) return <div className="grid min-h-screen place-items-center bg-paper px-6"><div className="max-w-md text-center" role="alert"><h1 className="display text-2xl">We couldn’t reach Discovr</h1><p className="mt-3 text-sm text-ink-3">{authError}</p><button type="button" className="btn btn-primary mt-6" onClick={refreshProfile}>Try again</button></div></div>;
   if (!loggedInStudent) {
     const intended = `${window.location.pathname}${window.location.search}`;
     if (intended !== "/login" && intended.startsWith("/") && !intended.startsWith("//")) {

@@ -4,10 +4,14 @@ import { InstrumentSans_500Medium } from '@expo-google-fonts/instrument-sans/500
 import { InstrumentSans_600SemiBold } from '@expo-google-fonts/instrument-sans/600SemiBold';
 import { InstrumentSans_700Bold } from '@expo-google-fonts/instrument-sans/700Bold';
 import { useFonts } from 'expo-font';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, FadeOut, ReduceMotion } from 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { palette, typography } from '@/constants/theme';
@@ -31,9 +35,13 @@ export default function RootLayout() {
     InstrumentSans_400Regular, InstrumentSans_500Medium, InstrumentSans_600SemiBold,
     InstrumentSans_700Bold, IBMPlexMono_500Medium,
   });
+  const [showLaunch, setShowLaunch] = useState(true);
 
   useEffect(() => {
-    if (fontsLoaded || fontError) void SplashScreen.hideAsync();
+    if (!fontsLoaded && !fontError) return;
+    void SplashScreen.hideAsync();
+    const timer = setTimeout(() => setShowLaunch(false), 900);
+    return () => clearTimeout(timer);
   }, [fontsLoaded, fontError]);
 
   useEffect(() => {
@@ -64,7 +72,7 @@ export default function RootLayout() {
       <ThemeProvider value={navigationTheme}>
         <FeedbackProvider>
           <AuthProvider>
-            <StatusBar style="dark" />
+            <StatusBar style={showLaunch ? 'light' : 'dark'} />
             <Stack screenOptions={{
               animation: 'slide_from_right', headerBackButtonDisplayMode: 'minimal',
               headerStyle: { backgroundColor: palette.surface }, headerTintColor: palette.ink,
@@ -82,9 +90,20 @@ export default function RootLayout() {
               <Stack.Screen name="notifications" options={{ title: 'Alerts' }} />
               <Stack.Screen name="applications" options={{ headerShown: false }} />
             </Stack>
+            {showLaunch ? <Animated.View entering={FadeIn.duration(180).reduceMotion(ReduceMotion.System)} exiting={FadeOut.duration(420).reduceMotion(ReduceMotion.System)} style={launchStyles.root} accessibilityLabel="Discovr is opening">
+              <LinearGradient colors={[palette.ink, palette.accentDeep]} style={StyleSheet.absoluteFill} />
+              <View style={launchStyles.orbitLarge} /><View style={launchStyles.orbitSmall} />
+              <View style={launchStyles.mark}><Image source={require('../../../student/public/discovrlogo.png')} contentFit="contain" style={launchStyles.logo} /><View style={launchStyles.rule} /><Text style={launchStyles.meta}>IIT ROORKEE · CAMPUS OPPORTUNITIES</Text></View>
+            </Animated.View> : null}
           </AuthProvider>
         </FeedbackProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );
 }
+
+const launchStyles = StyleSheet.create({
+  root: { position: 'absolute', inset: 0, zIndex: 999, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  mark: { alignItems: 'center', gap: 16 }, logo: { width: 220, height: 62 }, rule: { width: 72, height: 3, borderRadius: 2, backgroundColor: '#8FD1F5' }, meta: { color: '#CBEAFE', fontFamily: typography.mono, fontSize: 9, letterSpacing: 1.25 },
+  orbitLarge: { position: 'absolute', width: 340, height: 340, borderRadius: 170, borderWidth: 1, borderColor: 'rgba(143,209,245,0.18)', right: -150, top: -95 }, orbitSmall: { position: 'absolute', width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(143,209,245,0.08)', left: -90, bottom: -42 },
+});

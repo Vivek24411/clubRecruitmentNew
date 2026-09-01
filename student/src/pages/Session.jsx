@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { formatDateTime, sessionDate, sessionEndDate } from "../utils/date";
 import { StudentContextData } from "../context/StudentContext";
 import ClubLogo from "../components/ClubLogo";
+import CalendarSaveButton from "../components/CalendarSaveButton";
 import {
   Badge,
   Button,
@@ -147,6 +148,15 @@ export default function Session() {
             {session.shortDescription}
           </p>
         )}
+        <div className="mt-6 flex flex-wrap gap-3">
+          <CalendarSaveButton
+            sourceType="session"
+            sourceId={sessionId}
+            signedIn={loggedInStudent}
+            onSignIn={() => rememberSessionAndNavigate("/login")}
+          />
+          {loggedInStudent && <Button to="/calendar" variant="ghost">View my calendar →</Button>}
+        </div>
         <hr className="rule animate-draw mt-8" style={{ animationDelay: "200ms" }} />
       </header>
 

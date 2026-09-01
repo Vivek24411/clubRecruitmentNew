@@ -4,6 +4,7 @@ import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import ProtectedWrapper from './pages/ProtectedWrapper'
 import StudentLayout from './components/StudentLayout'
+import ErrorBoundary from './components/ErrorBoundary'
 
 const Home = React.lazy(() => import('./pages/Home'))
 const Register = React.lazy(() => import('./pages/Register'))
@@ -20,6 +21,7 @@ const ClubSessions = React.lazy(() => import('./pages/ClubSessions'))
 const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword'))
 const MyApplications = React.lazy(() => import('./pages/MyApplications'))
 const Notifications = React.lazy(() => import('./pages/Notifications'))
+const Calendar = React.lazy(() => import('./pages/Calendar'))
 
 const preloadRoutes = () => Promise.allSettled([
   import('./pages/Home'), import('./pages/Register'), import('./pages/Login'),
@@ -27,6 +29,7 @@ const preloadRoutes = () => Promise.allSettled([
   import('./pages/Event'), import('./pages/Events'), import('./pages/Clubs'),
   import('./pages/Club'), import('./pages/ClubEvents'), import('./pages/ClubSessions'),
   import('./pages/ForgotPassword'), import('./pages/MyApplications'), import('./pages/Notifications'),
+  import('./pages/Calendar'),
 ])
 
 function RouteFallback() {
@@ -52,7 +55,7 @@ const App = () => {
   }, [])
 
   return (
-    <>
+    <ErrorBoundary>
     <React.Suspense fallback={<RouteFallback />}><Routes>
       <Route path='/' element={<StudentLayout><Home/></StudentLayout>}/>
       <Route path='/login' element={<Login/>}/>
@@ -69,6 +72,7 @@ const App = () => {
       <Route path='/forgotPassword' element={<ForgotPassword/>}/>
       <Route path='/applications' element={<ProtectedWrapper><MyApplications/></ProtectedWrapper>}/>
       <Route path='/notifications' element={<ProtectedWrapper><Notifications/></ProtectedWrapper>}/>
+      <Route path='/calendar' element={<ProtectedWrapper><Calendar/></ProtectedWrapper>}/>
     </Routes></React.Suspense>
     <ToastContainer
       position="bottom-right"
@@ -82,7 +86,7 @@ const App = () => {
       pauseOnHover
       theme="light"
     />
-    </>
+    </ErrorBoundary>
   )
 }
 

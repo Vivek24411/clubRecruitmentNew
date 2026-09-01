@@ -38,14 +38,26 @@ export default function Clubs() {
   const [resetClub, setResetClub] = useState(null);
   const [passwords, setPasswords] = useState({ password: "", confirmation: "" });
   const [resetting, setResetting] = useState(false);
+  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
-    axios
-      .get(`${import.meta.env.VITE_BASE_URI}/admin/getAllClubs?limit=100`)
-      .then(({ data }) => (data.success ? setClubs(data.clubs) : toast.error(data.msg)))
+    const timer = window.setTimeout(() => axios
+      .get(`${import.meta.env.VITE_BASE_URI}/admin/getAllClubs`, { params: { limit: 36, search: search.trim() || undefined } })
+      .then(({ data }) => { if (data.success) { setClubs(data.clubs); setPagination(data.pagination); } else toast.error(data.msg); })
       .catch(() => toast.error("Could not load clubs"))
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => setLoading(false)), 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const loadMore = async () => {
+    if (loadingMore || pagination.page >= pagination.pages) return;
+    setLoadingMore(true);
+    try {
+      const { data } = await axios.get(`${import.meta.env.VITE_BASE_URI}/admin/getAllClubs`, { params: { page: pagination.page + 1, limit: 36, search: search.trim() || undefined } });
+      setClubs((current) => [...current, ...(data.clubs || [])]); setPagination(data.pagination);
+    } catch { toast.error("Could not load more clubs"); } finally { setLoadingMore(false); }
+  };
 
   const setStatus = async (club, status) => {
     if (
@@ -192,6 +204,8 @@ export default function Clubs() {
       </div>
 
       {/* Password reset ---------------------------------------------------- */}
+      {!loading && pagination.page < pagination.pages && <div className="mt-7 flex justify-center"><Button variant="secondary" loading={loadingMore} onClick={loadMore}>Load more clubs</Button></div>}
+
       <Modal
         open={Boolean(resetClub)}
         onClose={closeReset}

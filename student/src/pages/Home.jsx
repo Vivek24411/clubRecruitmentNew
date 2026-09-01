@@ -1,6 +1,7 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
+import { toast } from "react-toastify";
 import { StudentContextData } from "../context/StudentContext";
 import {
   daysUntil,
@@ -64,6 +65,9 @@ export default function Home() {
           setSessions(data.sessions || []);
           setSettings(data.settings);
         }
+      })
+      .catch((error) => {
+        toast.error(error.response?.data?.msg || "Discovr is temporarily unavailable. Please try again.");
       })
       .finally(() => setLoading(false));
   }, []);

@@ -66,22 +66,50 @@ export default function Events() {
   const [category, setCategory] = useState("all");
   const [eventType, setEventType] = useState("all");
   const [sortBy, setSortBy] = useState("deadline");
+  const [pagination, setPagination] = useState({ page: 1, total: 0, hasMore: false });
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
-    async function fetchEvents() {
+    const timer = window.setTimeout(async () => {
       setIsLoading(true);
       try {
-        const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getEvents?limit=100`);
-        if (response.data.success) setEvents(response.data.events);
+        const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getEvents`, { params: {
+          limit: 24,
+          q: searchQuery.trim() || undefined,
+          status: filter,
+          category: category === "all" ? undefined : category,
+          eventType: eventType === "all" ? undefined : eventType,
+          sort: ["deadline", "title"].includes(sortBy) ? sortBy : "newest",
+        } });
+        if (response.data.success) {
+          setEvents(response.data.events);
+          setPagination(response.data.pagination);
+        }
         else toast.error(response.data.msg);
       } catch {
         toast.error("Failed to fetch events");
       } finally {
         setIsLoading(false);
       }
-    }
-    fetchEvents();
-  }, []);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [category, eventType, filter, searchQuery, sortBy]);
+
+  const loadMore = async () => {
+    if (!pagination.hasMore || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const { data } = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getEvents`, { params: {
+        page: pagination.page + 1, limit: 24, q: searchQuery.trim() || undefined, status: filter,
+        category: category === "all" ? undefined : category,
+        eventType: eventType === "all" ? undefined : eventType,
+        sort: ["deadline", "title"].includes(sortBy) ? sortBy : "newest",
+      } });
+      setEvents((current) => [...current, ...(data.events || [])]);
+      setPagination(data.pagination);
+    } catch { toast.error("Could not load more events"); }
+    finally { setLoadingMore(false); }
+  };
 
   const now = new Date();
 
@@ -195,7 +223,7 @@ export default function Events() {
       {/* Result count */}
       {!isLoading && (
         <p className="mt-4 text-sm text-ink-3" role="status">
-          <span className="tabular font-semibold text-ink">{visibleEvents.length}</span>{" "}
+          <span className="tabular font-semibold text-ink">{pagination.total}</span>{" "}
           {visibleEvents.length === 1 ? "event" : "events"}
           {filtersActive && (
             <>
@@ -335,6 +363,7 @@ export default function Events() {
             })}
           </div>
         )}
+        {!isLoading && pagination.hasMore && <div className="mt-7 flex justify-center"><Button variant="secondary" loading={loadingMore} onClick={loadMore}>Load more events</Button></div>}
       </div>
     </Page>
   );

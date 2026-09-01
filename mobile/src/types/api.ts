@@ -258,5 +258,32 @@ export type DashboardResponse = {
   success: boolean;
   events: DiscovrEvent[];
   sessions: Session[];
+  recruitingClubs?: Club[];
   settings?: { maintenanceMessage?: string };
+};
+
+export type CalendarItem = {
+  id: string;
+  type: 'registration_deadline' | 'submission_deadline' | 'round_start' | 'round' | 'interview' | 'session';
+  title: string;
+  startsAt: string;
+  endsAt?: string | null;
+  sourceType: 'event' | 'session';
+  sourceId: MongoId;
+  eventId?: MongoId;
+  sessionId?: MongoId;
+  eventTitle?: string;
+  verticalTitle?: string;
+  clubName?: string;
+  link: string;
+  venue?: string;
+  meetingUrl?: string;
+  saved?: boolean;
+  rsvpStatus?: string | null;
+};
+
+export type CalendarResponse = {
+  success: boolean;
+  items: CalendarItem[];
+  range: { from: string; to: string };
 };

@@ -9,6 +9,7 @@ const cors = require("cors");
 const { requireTrustedOrigin, securityHeaders } = require("./src/middlewares/security");
 const rateLimit = require("./src/middlewares/rateLimit");
 const { destroyUploadedFile } = require("./src/utils/uploads");
+const { log, requestObservability } = require("./src/utils/observability");
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean)
@@ -21,6 +22,7 @@ if (process.env.TRUST_PROXY_HOPS) {
 }
 app.disable("x-powered-by");
 app.use(securityHeaders);
+app.use(requestObservability);
 
 app.use(
   cors({
@@ -65,7 +67,12 @@ app.use(async (error, req, res, next) => {
   const isValidationError = ["ValidationError", "CastError"].includes(error?.name);
   const isDuplicateError = error?.code === 11000;
   const status = error?.status || (isCorsError ? 403 : isUploadError || isValidationError ? 400 : isDuplicateError ? 409 : 500);
-  if (status === 500) console.error("Unhandled request error:", error);
+  if (status === 500) log("error", "http.unhandled_error", {
+    requestId: req.requestId,
+    method: req.method,
+    path: req.originalUrl.split("?")[0],
+    error: String(error?.message || error).slice(0, 1000),
+  });
   return res.status(status).json({
     success: false,
     msg: isCorsError

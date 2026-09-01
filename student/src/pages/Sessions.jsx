@@ -60,22 +60,46 @@ export default function Sessions() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showPast, setShowPast] = useState(false);
   const [sortBy, setSortBy] = useState("session_date");
+  const [pagination, setPagination] = useState({ page: 1, total: 0, hasMore: false });
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
-    async function fetchSessions() {
+    const timer = window.setTimeout(async () => {
       setIsLoading(true);
       try {
-        const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getSessions?limit=100`);
-        if (response.data.success) setSessions(response.data.sessions);
+        const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getSessions`, { params: {
+          limit: 24,
+          q: searchTerm.trim() || undefined,
+          timing: showPast ? undefined : "upcoming",
+          sort: sortBy === "session_date" ? "date" : "newest",
+        } });
+        if (response.data.success) {
+          setSessions(response.data.sessions);
+          setPagination(response.data.pagination);
+        }
         else toast.error(response.data.msg);
       } catch {
         toast.error("Failed to load sessions");
       } finally {
         setIsLoading(false);
       }
-    }
-    fetchSessions();
-  }, []);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm, showPast, sortBy]);
+
+  const loadMore = async () => {
+    if (!pagination.hasMore || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const { data } = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getSessions`, { params: {
+        page: pagination.page + 1, limit: 24, q: searchTerm.trim() || undefined,
+        timing: showPast ? undefined : "upcoming", sort: sortBy === "session_date" ? "date" : "newest",
+      } });
+      setSessions((current) => [...current, ...(data.sessions || [])]);
+      setPagination(data.pagination);
+    } catch { toast.error("Could not load more sessions"); }
+    finally { setLoadingMore(false); }
+  };
 
   const grouped = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -217,6 +241,7 @@ export default function Sessions() {
             ))}
           </div>
         )}
+        {!isLoading && pagination.hasMore && <div className="mt-7 flex justify-center"><Button variant="secondary" loading={loadingMore} onClick={loadMore}>Load more sessions</Button></div>}
       </div>
     </Page>
   );

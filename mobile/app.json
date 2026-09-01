@@ -20,7 +20,7 @@
       "package": "in.expediva.discovr",
       "permissions": ["POST_NOTIFICATIONS"],
       "adaptiveIcon": {
-        "backgroundColor": "#F2F0E9",
+        "backgroundColor": "#111612",
         "foregroundImage": "../student/public/discovr-o.png"
       },
       "predictiveBackGestureEnabled": false
@@ -34,7 +34,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#F2F0E9",
+          "backgroundColor": "#111612",
           "image": "../student/public/discovrlogo.png",
           "imageWidth": 220
         }

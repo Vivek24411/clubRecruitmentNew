@@ -93,5 +93,6 @@ export function notificationPath(response: NotificationResponse) {
   if (typeof link !== 'string' || !link.startsWith('/') || link.startsWith('//')) return '/notifications';
   if (link === '/profile') return '/(tabs)/profile';
   if (link === '/applications' || link.startsWith('/applications?')) return '/(tabs)/applications';
+  if (link === '/calendar' || link.startsWith('/calendar?')) return '/(tabs)/calendar';
   return link;
 }

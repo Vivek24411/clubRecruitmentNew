@@ -9,17 +9,23 @@ const StudentContext = ({ children }) => {
   const [loggedInStudent, setLoggedInStudent] = React.useState(false);
   const [profile, setProfile] = React.useState(null);
   const [authLoading, setAuthLoading] = React.useState(true);
+  const [authError, setAuthError] = React.useState("");
 
   const refreshProfile = useCallback(async () => {
     try {
+      setAuthError("");
       const response = await axios.get(`${import.meta.env.VITE_BASE_URI}/student/getProfile`);
       if (!response.data.success) throw new Error(response.data.msg);
       setProfile(response.data.student);
       setLoggedInStudent(true);
       return true;
-    } catch {
-      setProfile(null);
-      setLoggedInStudent(false);
+    } catch (error) {
+      if ([401, 403].includes(error.response?.status)) {
+        setProfile(null);
+        setLoggedInStudent(false);
+      } else {
+        setAuthError("Discovr could not verify your session. Check your connection and try again.");
+      }
       return false;
     } finally {
       setAuthLoading(false);
@@ -63,6 +69,7 @@ const StudentContext = ({ children }) => {
       loggedInStudent,
       setLoggedInStudent,
       authLoading,
+      authError,
       refreshProfile,
       signOut,
     }}>

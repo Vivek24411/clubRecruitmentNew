@@ -12,7 +12,8 @@ const { sessionStartAt } = require("../utils/sessionSchedule");
 const { backfillRoundReminders, deliverRoundReminder } = require("./roundReminder.services");
 
 const workerId = `${os.hostname()}:${process.pid}:${crypto.randomUUID().slice(0, 8)}`;
-const SESSION_REMINDER_LEAD_MS = 60 * 60 * 1000;
+const REMINDER_LEAD_MS = 2 * 60 * 60 * 1000;
+const SESSION_REMINDER_LEAD_MS = REMINDER_LEAD_MS;
 
 function sessionReminderRunAt(session, now = new Date()) {
   const startsAt = sessionStartAt(session);
@@ -33,10 +34,52 @@ function buildSessionReminderNotification(session) {
   return {
     type: "session_reminder",
     title: `Reminder: ${session.title} is coming up`,
-    message: "The session you RSVP'd for starts soon.",
+    message: "The session you RSVP'd for starts in about two hours.",
     link: `/session/${session._id}`,
     emailDetails: { startsAt: sessionStartAt(session), venue: session.venue, meetingUrl: session.meetingUrl },
   };
+}
+
+function calendarReminderJobId(studentId, item) {
+  return crypto
+    .createHash("sha256")
+    .update(`calendar-reminder:${studentId}:${item.id}:${new Date(item.startsAt).toISOString()}`)
+    .digest("hex")
+    .slice(0, 24);
+}
+
+async function enqueueCalendarReminders(studentId, items, options = {}) {
+  const now = options.now || new Date();
+  const jobs = [];
+  for (const item of items || []) {
+    const startsAt = new Date(item.startsAt);
+    if (!studentId || Number.isNaN(startsAt.getTime()) || startsAt <= now) continue;
+    const runAt = new Date(Math.max(now.getTime(), startsAt.getTime() - REMINDER_LEAD_MS));
+    const jobId = calendarReminderJobId(studentId, item);
+    const notification = {
+      type: `${item.type || "calendar"}_reminder`,
+      title: `Reminder: ${item.title}`,
+      message: "This important date is coming up in about two hours.",
+      link: item.link || "/calendar",
+      emailDetails: { startsAt, venue: item.venue, meetingUrl: item.meetingUrl },
+    };
+    jobs.push(jobModel.findOneAndUpdate(
+      { _id: jobId },
+      { $setOnInsert: {
+        type: "notification",
+        payload: {
+          studentId: String(studentId),
+          notification,
+          channels: ["inApp", "email", "push"],
+          calendarKey: `${item.sourceType}:${item.sourceId}`,
+        },
+        status: "queued",
+        runAt,
+      } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    ));
+  }
+  return Promise.all(jobs);
 }
 
 async function enqueueSessionReminder(studentId, session, options = {}) {
@@ -243,6 +286,19 @@ async function deliverSessionReminder(job) {
   ) return;
 
   const notification = buildSessionReminderNotification(session);
+  if (!job.delivery?.inAppAt) {
+    if (student.notificationPreferences?.inApp !== false) {
+      await notificationModel.updateOne(
+        { deliveryKey: `job:${job._id}` },
+        { $setOnInsert: { studentId, ...notification, deliveryKey: `job:${job._id}` } },
+        { upsert: true },
+      );
+    }
+    await jobModel.updateOne(
+      { _id: job._id, lockedBy: workerId },
+      { $set: { "delivery.inAppAt": new Date(), updatedAt: new Date() } },
+    );
+  }
   if (!job.delivery?.pushAt) {
     await sendPushNotification(studentId, notification);
     await jobModel.updateOne(
@@ -371,6 +427,7 @@ module.exports = {
   buildSessionReminderNotification,
   dateInKolkata,
   enqueueNotification,
+  enqueueCalendarReminders,
   enqueueNotifications,
   enqueueUniqueNotifications,
   notificationJobId,

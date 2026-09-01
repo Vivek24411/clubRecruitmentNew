@@ -19,12 +19,12 @@ test("job records support scheduled session reminders", () => {
   assert.ok(jobModel.schema.path("type").enumValues.includes("session_reminder"));
 });
 
-test("session reminders are scheduled one hour before an IITR session", () => {
+test("session reminders are scheduled two hours before an IITR session", () => {
   const session = { date: "2026-08-20", time: "18:30" };
   assert.equal(sessionStartAt(session).toISOString(), "2026-08-20T13:00:00.000Z");
   assert.equal(
     sessionReminderRunAt(session, new Date("2026-08-20T08:00:00.000Z")).toISOString(),
-    "2026-08-20T12:00:00.000Z",
+    "2026-08-20T11:00:00.000Z",
   );
 });
 
@@ -35,7 +35,7 @@ test("a session remains active until its duration has elapsed", () => {
   assert.equal(sessionHasEnded(session, new Date("2026-08-20T14:00:00.000Z")), true);
 });
 
-test("an RSVP made inside the final hour queues an immediate reminder", () => {
+test("an RSVP made inside the final two hours queues an immediate reminder", () => {
   const session = { date: "2026-08-20", time: "18:30" };
   const now = new Date("2026-08-20T12:30:00.000Z");
   assert.equal(sessionReminderRunAt(session, now).toISOString(), now.toISOString());

@@ -127,9 +127,12 @@ module.exports.addClub = async (req, res) => {
 module.exports.getAllSessions = async (req, res) => {
   try{
     const paging = pageRequest(req.query, { defaultLimit: 50 });
+    const search = String(req.query.search || "").trim();
+    const term = search ? new RegExp(escapedRegex(search.slice(0, 100)), "i") : null;
+    const filter = term ? { $or: [{ title: term }, { shortDescription: term }, { venue: term }] } : {};
     const [sessions, total] = await Promise.all([
-      sessionModel.find().sort({ createdAt: -1, _id: -1 }).skip(paging.skip).limit(paging.limit).populate('clubId', '-password'),
-      sessionModel.countDocuments(),
+      sessionModel.find(filter).sort({ createdAt: -1, _id: -1 }).skip(paging.skip).limit(paging.limit).populate('clubId', '-password'),
+      sessionModel.countDocuments(filter),
     ]);
     res.json({ success: true, sessions, pagination: pageMetadata(paging, total), msg: "Sessions fetched successfully" });
   } catch (error) {
@@ -161,9 +164,12 @@ module.exports.getSessionDetail = async (req, res) => {
 module.exports.getAllClubs = async (req, res) => {
   try {
     const paging = pageRequest(req.query, { defaultLimit: 50 });
+    const search = String(req.query.search || "").trim();
+    const term = search ? new RegExp(escapedRegex(search.slice(0, 100)), "i") : null;
+    const filter = term ? { $or: [{ name: term }, { userName: term }, { accountEmail: term }] } : {};
     const [clubs, total] = await Promise.all([
-      clubModel.find().select('-password').sort({ name: 1, _id: 1 }).skip(paging.skip).limit(paging.limit),
-      clubModel.countDocuments(),
+      clubModel.find(filter).select('-password').sort({ name: 1, _id: 1 }).skip(paging.skip).limit(paging.limit),
+      clubModel.countDocuments(filter),
     ]);
     res.json({ success: true, clubs, pagination: pageMetadata(paging, total), msg: "Clubs fetched successfully" });
   } catch (error) {
@@ -194,9 +200,13 @@ module.exports.getClubDetail = async (req, res) => {
 module.exports.getAllEvents = async (req, res) => {
   try {
     const paging = pageRequest(req.query, { defaultLimit: 50 });
+    const search = String(req.query.search || "").trim();
+    const term = search ? new RegExp(escapedRegex(search.slice(0, 100)), "i") : null;
+    const matchingClubIds = term ? await clubModel.find({ name: term }).distinct("_id") : [];
+    const filter = term ? { $or: [{ title: term }, { shortDescription: term }, { clubId: { $in: matchingClubIds } }] } : {};
     const [events, total] = await Promise.all([
-      eventModel.find().sort({ createdAt: -1, _id: -1 }).skip(paging.skip).limit(paging.limit).populate('clubId', '-password'),
-      eventModel.countDocuments(),
+      eventModel.find(filter).sort({ createdAt: -1, _id: -1 }).skip(paging.skip).limit(paging.limit).populate('clubId', '-password'),
+      eventModel.countDocuments(filter),
     ]);
     res.json({ success: true, events, pagination: pageMetadata(paging, total), msg: "Events fetched successfully" });
   } catch (error) {

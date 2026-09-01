@@ -2,7 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 
 import { EventCard, SessionCard } from '@/components/catalogue';
-import { Badge, Button, Card, ErrorState, Heading, LoadingState, RemoteImage, Screen, SectionHeader } from '@/components/ui';
+import { ArtworkImage, Badge, Button, Card, ErrorState, Heading, LoadingState, RemoteImage, Screen, SectionHeader } from '@/components/ui';
 import { palette, radius, spacing, typography } from '@/constants/theme';
 import { useApiQuery } from '@/hooks/use-api-query';
 import { titleCase } from '@/lib/date';
@@ -33,8 +33,8 @@ export default function ClubDetailScreen() {
   return <Screen safeTop={false} refreshing={clubQuery.refreshing} onRefresh={() => Promise.all([clubQuery.refresh(), eventsQuery.refresh(), sessionsQuery.refresh()]).then(() => undefined)} contentStyle={styles.content}>
     {clubQuery.loading ? <LoadingState /> : clubQuery.error || !club ? <ErrorState message={clubQuery.error || 'Club not found'} onRetry={clubQuery.reload} /> : <>
       <View style={styles.masthead}>
-        <RemoteImage uri={club.clubBanner} style={styles.banner} />
-        <View style={styles.identity}><RemoteImage uri={club.clubLogo} contain style={styles.logo} /><View style={styles.identityText}><Badge tone="accent">{titleCase(club.category || 'student club')}</Badge><Heading>{club.name}</Heading></View></View>
+        <ArtworkImage uri={club.clubBanner} fallbackText={club.name} accessibilityLabel={`${club.name} banner`} style={styles.banner} />
+        <View style={styles.identity}><View style={styles.logoFrame}><RemoteImage uri={club.clubLogo} fallbackText={club.name} contain style={styles.logo} /></View><View style={styles.identityText}><Badge tone="accent">{titleCase(club.category || 'student club')}</Badge><Heading>{club.name}</Heading></View></View>
       </View>
       {club.shortDescription ? <Text style={styles.lead}>{club.shortDescription}</Text> : null}
       {club.longDescription ? <View style={styles.section}><Text style={styles.sectionTitle}>About</Text><Text style={styles.body}>{club.longDescription}</Text></View> : null}
@@ -54,7 +54,7 @@ export default function ClubDetailScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingTop: spacing.lg }, masthead: { gap: spacing.lg }, banner: { width: '100%', aspectRatio: 8 / 3, borderRadius: radius.md, backgroundColor: palette.ink },
-  identity: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg }, logo: { width: 78, height: 78, borderRadius: radius.md, backgroundColor: palette.white }, identityText: { flex: 1, gap: spacing.sm },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg }, logoFrame: { width: 84, height: 84, padding: 7, borderRadius: radius.md, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.white, overflow: 'hidden' }, logo: { width: '100%', height: '100%', borderRadius: radius.sm }, identityText: { flex: 1, gap: spacing.sm },
   lead: { color: palette.inkSoft, fontFamily: typography.regular, fontSize: 16, lineHeight: 25 }, section: { gap: spacing.lg }, sectionTitle: { color: palette.ink, fontFamily: typography.semibold, fontSize: 19 },
   body: { color: palette.inkSoft, fontFamily: typography.regular, fontSize: 14, lineHeight: 23 }, contactCard: { padding: spacing.lg, gap: spacing.md },
 });

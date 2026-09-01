@@ -19,6 +19,10 @@ build
 dist
 */dist
 */build
+test-results
+*/test-results
+playwright-report
+*/playwright-report
 
 # Debug logs
 npm-debug.log*

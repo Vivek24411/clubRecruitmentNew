@@ -41,6 +41,10 @@ const {
   getAcademicOptions,
   submitInitialApplication,
   deleteAccount,
+  getCalendar,
+  getCalendarItemStatus,
+  saveCalendarItem,
+  removeCalendarItem,
 } = require("../controllers/student.controllers");
 const { optionalStudentAuth, studentAuth } = require("../middlewares/auth.middlewares");
 const rateLimit = require("../middlewares/rateLimit");
@@ -158,6 +162,23 @@ router.get('/getClubSessions', publicCache(60), [
 ], validateRequest, getClubSessions)
 
 router.get('/getDashboard', optionalStudentAuth, catalogueCache(60), getDashBoard)
+
+router.get('/calendar', studentAuth, [
+  query('from').optional().isISO8601(),
+  query('to').optional().isISO8601(),
+], validateRequest, getCalendar)
+router.get('/calendar/status', studentAuth, [
+  query('sourceType').isIn(['event', 'session']),
+  query('sourceId').isMongoId(),
+], validateRequest, getCalendarItemStatus)
+router.put('/calendar/items', studentAuth, [
+  body('sourceType').isIn(['event', 'session']),
+  body('sourceId').isMongoId(),
+], validateRequest, saveCalendarItem)
+router.delete('/calendar/items', studentAuth, [
+  body('sourceType').isIn(['event', 'session']),
+  body('sourceId').isMongoId(),
+], validateRequest, removeCalendarItem)
 
 router.post('/registerEvent',studentAuth,[
   body('eventId').isMongoId().withMessage("Invalid event ID"),

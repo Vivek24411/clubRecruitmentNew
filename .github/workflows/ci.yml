@@ -46,6 +46,10 @@ jobs:
       - run: npm run lint
       - if: matrix.app == 'student'
         run: npm run test:coverage
+      - if: matrix.app == 'student'
+        run: npx playwright install --with-deps chromium
+      - if: matrix.app == 'student'
+        run: npm run test:e2e -- --project=chromium
       - run: npm run build
       - run: npm audit --audit-level=critical
 
@@ -63,5 +67,6 @@ jobs:
           cache-dependency-path: mobile/package-lock.json
       - run: npm ci
       - run: npm run verify
+      - run: npm run test
       - run: npm run export:android
       - run: npm audit --audit-level=critical

@@ -29,6 +29,9 @@ const scheduleSlotModel = require("../models/scheduleSlot.model");
 const scheduleReservationModel = require("../models/scheduleReservation.model");
 const pushRegistrationModel = require("../models/pushRegistration.model");
 const jobModel = require("../models/job.model");
+const calendarBookmarkModel = require("../models/calendarBookmark.model");
+const { getStudentCalendar } = require("../services/calendar.services");
+const { enqueueCalendarReminders } = require("../services/jobQueue.services");
 const {
   eventEligibility,
   inferProgramStartYear,
@@ -61,6 +64,8 @@ const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
 const tokenHash = (token) => crypto.createHash("sha256").update(token).digest("hex");
 const PUBLIC_CLUB_FIELDS = "name category shortDescription longDescription website linkedin instagram achivements recruitmentMethods contactEmail contactPhone contactPersons clubLogo clubBanner resources annualEvents status";
 const DUMMY_PASSWORD_HASH = "$2b$12$4Qj6z7mmoEgcnxHLS0xDR.jjYdMm05/mtrLZVBInMaqjKAuvz9taa";
+const escapeRegex = (value) => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const searchRegex = (value) => value ? new RegExp(escapeRegex(String(value).trim().slice(0, 100)), "i") : null;
 
 function publicStudent(student) {
   if (!student) return null;
@@ -594,6 +599,7 @@ module.exports.deleteAccount = async (req, res) => {
     notificationModel.deleteMany({ studentId }),
     pushRegistrationModel.deleteMany({ studentId }),
     sessionRsvpModel.deleteMany({ studentId }),
+    calendarBookmarkModel.deleteMany({ studentId }),
     jobModel.deleteMany({ "payload.studentId": studentIdText }),
   ]);
   const cleanupFailure = cleanup.find((result) => result.status === "rejected");
@@ -617,10 +623,19 @@ module.exports.deleteAccount = async (req, res) => {
 module.exports.getAllSessions = async (req, res) => {
   try {
     const paging = pageRequest(req.query);
-    const activeClubIds = await clubModel.find({ status: "active" }).distinct("_id");
+    const term = searchRegex(req.query.q);
+    const clubFilter = { status: "active", ...(req.query.category ? { category: req.query.category } : {}) };
+    const [activeClubIds, matchingClubIds] = await Promise.all([
+      clubModel.find(clubFilter).distinct("_id"),
+      term ? clubModel.find({ ...clubFilter, name: term }).distinct("_id") : [],
+    ]);
     const filter = { status: "published", clubId: { $in: activeClubIds } };
+    if (term) filter.$or = [{ title: term }, { shortDescription: term }, { longDescription: term }, { venue: term }, { clubId: { $in: matchingClubIds } }];
+    if (req.query.timing === "upcoming") filter.date = { $gte: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()) };
+    if (req.query.timing === "past") filter.date = { $lt: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date()) };
+    const sort = req.query.sort === "date" ? { date: 1, time: 1, _id: 1 } : { createdAt: -1, _id: -1 };
     const [sessions, total] = await Promise.all([
-      sessionModel.find(filter).sort({ createdAt: -1, _id: -1 }).skip(paging.skip).limit(paging.limit)
+      sessionModel.find(filter).sort(sort).skip(paging.skip).limit(paging.limit)
         .populate({ path: "clubId", select: PUBLIC_CLUB_FIELDS }),
       sessionModel.countDocuments(filter),
     ]);
@@ -657,12 +672,35 @@ module.exports.getSession = async (req, res) => {
 module.exports.getAllClubs = async (req, res) => {
   try {
     const paging = pageRequest(req.query);
-    const filter = { status: "active" };
-    const [clubs, total] = await Promise.all([
+    const term = searchRegex(req.query.q);
+    const directoryFilter = { status: "active" };
+    const searchFilter = term
+      ? { $or: [{ name: term }, { shortDescription: term }, { longDescription: term }, { category: term }] }
+      : {};
+    const filter = {
+      ...directoryFilter,
+      ...(req.query.category ? { category: req.query.category } : {}),
+      ...searchFilter,
+    };
+    const [clubs, total, directoryTotal, categoryCounts] = await Promise.all([
       clubModel.find(filter).select(PUBLIC_CLUB_FIELDS).sort({ name: 1, _id: 1 }).skip(paging.skip).limit(paging.limit),
       clubModel.countDocuments(filter),
+      clubModel.countDocuments(directoryFilter),
+      clubModel.aggregate([
+        { $match: { ...directoryFilter, category: { $type: "string", $ne: "" } } },
+        { $group: { _id: "$category", count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]),
     ]);
-    return res.json({ success: true, clubs, pagination: pageMetadata(paging, total) });
+    return res.json({
+      success: true,
+      clubs,
+      pagination: pageMetadata(paging, total),
+      facets: {
+        total: directoryTotal,
+        categories: categoryCounts.map(({ _id, count }) => ({ value: _id, count })),
+      },
+    });
   } catch (error) {
 
     return res.status(500).json({ success: false, msg: "Server error" });
@@ -703,10 +741,28 @@ module.exports.getClub = async (req, res) => {
 module.exports.getAllEvents = async (req, res) => {
   try {
     const paging = pageRequest(req.query);
-    const activeClubIds = await clubModel.find({ status: "active" }).distinct("_id");
-    const filter = { status: { $in: ["published", "closed"] }, clubId: { $in: activeClubIds } };
+    const term = searchRegex(req.query.q);
+    const clubFilter = { status: "active", ...(req.query.category ? { category: req.query.category } : {}) };
+    const [activeClubIds, matchingClubIds] = await Promise.all([
+      clubModel.find(clubFilter).distinct("_id"),
+      term ? clubModel.find({ ...clubFilter, name: term }).distinct("_id") : [],
+    ]);
+    const statuses = req.query.status === "ongoing" ? ["published"]
+      : req.query.status === "completed" ? ["closed"] : ["published", "closed"];
+    const filter = {
+      status: { $in: statuses },
+      clubId: { $in: activeClubIds },
+      ...(req.query.eventType ? { eventType: req.query.eventType } : {}),
+    };
+    if (term) filter.$or = [
+      { title: term }, { shortDescription: term }, { longDescription: term },
+      { eligibility: term }, { clubId: { $in: matchingClubIds } },
+    ];
+    const sort = req.query.sort === "title" ? { title: 1, _id: 1 }
+      : req.query.sort === "deadline" ? { registrationDeadlineAt: 1, _id: 1 }
+        : { publishedAt: -1, createdAt: -1, _id: -1 };
     const [events, total] = await Promise.all([
-      eventModel.find(filter).sort({ publishedAt: -1, createdAt: -1, _id: -1 })
+      eventModel.find(filter).sort(sort)
         .skip(paging.skip).limit(paging.limit)
         .populate({ path: "clubId", select: PUBLIC_CLUB_FIELDS }),
       eventModel.countDocuments(filter),
@@ -825,12 +881,39 @@ module.exports.getClubSessions = async (req, res) => {
 };
 
 module.exports.getDashBoard = async (req, res, next) => {
-  const [events, sessions, settings] = await Promise.all([
-    eventModel.find({ status: "published" }).sort({ publishedAt: -1, createdAt: -1 }).limit(8).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS }),
-    sessionModel.find({ status: "published" }).sort({ createdAt: -1 }).limit(8).populate({ path: "clubId", match: { status: "active" }, select: PUBLIC_CLUB_FIELDS }),
+  const now = new Date();
+  const todayInIndia = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(now);
+  const activeClubIds = await clubModel.find({ status: "active" }).distinct("_id");
+  const eventBase = { status: "published", clubId: { $in: activeClubIds } };
+  const registrationOpenFilter = {
+    $or: [
+      { registrationDeadlineAt: { $gte: now } },
+      { registrationDeadlineAt: null, registerationDeadline: { $gte: todayInIndia } },
+      { registrationDeadlineAt: null, registerationDeadline: { $in: [null, ""] } },
+    ],
+  };
+  const [registrationOpenEvents, sessions, settings, recruitingClubIds] = await Promise.all([
+    eventModel.find({
+      ...eventBase,
+      ...registrationOpenFilter,
+    }).sort({ registrationDeadlineAt: 1, registerationDeadline: 1, publishedAt: -1 }).limit(8)
+      .populate({ path: "clubId", select: PUBLIC_CLUB_FIELDS }),
+    sessionModel.find({ status: "published", clubId: { $in: activeClubIds }, date: { $gte: todayInIndia } })
+      .sort({ date: 1, time: 1, _id: 1 }).limit(8)
+      .populate({ path: "clubId", select: PUBLIC_CLUB_FIELDS }),
     getPlatformSettingsCached(),
+    eventModel.find({ ...eventBase, ...registrationOpenFilter, eventType: "recruitment" }).distinct("clubId"),
   ]);
-  const visibleEvents = events.filter((event) => event.clubId);
+  const remaining = Math.max(8 - registrationOpenEvents.length, 0);
+  const selectionEvents = remaining
+    ? await eventModel.find({ ...eventBase, _id: { $nin: registrationOpenEvents.map((event) => event._id) } })
+      .sort({ updatedAt: -1, publishedAt: -1 }).limit(remaining)
+      .populate({ path: "clubId", select: PUBLIC_CLUB_FIELDS })
+    : [];
+  const visibleEvents = [...registrationOpenEvents, ...selectionEvents];
+  const visibleRecruitingClubIds = platformRegistrationIsOpen(settings, now) ? recruitingClubIds : [];
+  const recruitingClubs = await clubModel.find({ _id: { $in: visibleRecruitingClubIds }, status: "active" })
+    .select(PUBLIC_CLUB_FIELDS).sort({ name: 1, _id: 1 });
   const memberships = req.student
     ? await eventMembershipModel.find({
       studentId: req.student._id,
@@ -838,11 +921,11 @@ module.exports.getDashBoard = async (req, res, next) => {
     })
     : [];
   const applicationEventIds = new Set(memberships.map((membership) => String(membership.eventId)));
-  const visibleSessions = sessions.filter((session) => session.clubId);
   return res.json({
     success: true,
     events: visibleEvents.map((event) => ({ ...event.toObject(), hasApplied: applicationEventIds.has(String(event._id)) })),
-    sessions: await sessionsWithConfirmedRsvpCounts(visibleSessions),
+    sessions: await sessionsWithConfirmedRsvpCounts(sessions),
+    recruitingClubs,
     settings,
   });
 };
@@ -1828,6 +1911,50 @@ module.exports.getMyApplications = async (req, res) => {
   }));
 
   return res.json({ success: true, applications: [...activeApplications, ...applicationHistory, ...legacyHistory] });
+};
+
+module.exports.getCalendar = async (req, res) => {
+  const calendar = await getStudentCalendar(req.student._id, req.query);
+  return res.json({ success: true, ...calendar });
+};
+
+module.exports.getCalendarItemStatus = async (req, res) => {
+  const bookmark = await calendarBookmarkModel.exists({
+    studentId: req.student._id,
+    sourceType: req.query.sourceType,
+    sourceId: req.query.sourceId,
+  });
+  return res.json({ success: true, saved: Boolean(bookmark) });
+};
+
+module.exports.saveCalendarItem = async (req, res) => {
+  const { sourceType, sourceId } = req.body;
+  const source = sourceType === "event"
+    ? await eventModel.exists({ _id: sourceId, status: "published" })
+    : await sessionModel.exists({ _id: sourceId, status: "published" });
+  if (!source) return res.status(404).json({ success: false, msg: `${sourceType === "event" ? "Event" : "Session"} not found` });
+  await calendarBookmarkModel.updateOne(
+    { studentId: req.student._id, sourceType, sourceId },
+    { $setOnInsert: { studentId: req.student._id, sourceType, sourceId, createdAt: new Date() } },
+    { upsert: true },
+  );
+  const calendar = await getStudentCalendar(req.student._id);
+  const sourceItems = calendar.items.filter((item) => item.sourceType === sourceType && String(item.sourceId) === String(sourceId));
+  await enqueueCalendarReminders(req.student._id, sourceItems);
+  return res.json({ success: true, saved: true, items: sourceItems, msg: "Added to your Discovr calendar" });
+};
+
+module.exports.removeCalendarItem = async (req, res) => {
+  const { sourceType, sourceId } = req.body;
+  await Promise.all([
+    calendarBookmarkModel.deleteOne({ studentId: req.student._id, sourceType, sourceId }),
+    jobModel.deleteMany({
+      status: "queued",
+      "payload.studentId": String(req.student._id),
+      "payload.calendarKey": `${sourceType}:${sourceId}`,
+    }),
+  ]);
+  return res.json({ success: true, saved: false, msg: "Removed from your Discovr calendar" });
 };
 
 module.exports.getNotifications = async (req, res) => {

@@ -3,9 +3,10 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppHeader } from '@/components/app-header';
 import { SessionCard } from '@/components/catalogue';
-import { Button, EmptyState, ErrorState, Eyebrow, FilterChip, Heading, LoadingState, Screen, SearchField } from '@/components/ui';
+import { Button, EmptyState, ErrorState, Eyebrow, FilterChip, Heading, ListScreen, LoadingState, SearchField } from '@/components/ui';
 import { palette, spacing, typography } from '@/constants/theme';
 import { useApiQuery } from '@/hooks/use-api-query';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { sessionStart, sessionTiming } from '@/lib/date';
 import type { Session } from '@/types/api';
 
@@ -13,10 +14,12 @@ type TimingFilter = 'upcoming' | 'past' | 'all';
 type SortFilter = 'date' | 'newest';
 
 export default function SessionsScreen() {
-  const query = useApiQuery<{ success: boolean; sessions: Session[]; pagination?: { page: number; pages: number; hasMore: boolean } }>('/student/getSessions?limit=24', 'sessions');
   const [search, setSearch] = useState('');
   const [timing, setTiming] = useState<TimingFilter>('upcoming');
   const [sort, setSort] = useState<SortFilter>('date');
+  const debouncedSearch = useDebouncedValue(search.trim(), 320);
+  const queryPath = `/student/getSessions?limit=24&timing=${timing}&sort=${sort}${debouncedSearch ? `&q=${encodeURIComponent(debouncedSearch)}` : ''}`;
+  const query = useApiQuery<{ success: boolean; sessions: Session[]; pagination?: { page: number; pages: number; hasMore: boolean; total: number } }>(queryPath, 'sessions');
   const sessions = useMemo(() => query.data?.sessions || [], [query.data]);
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -31,8 +34,18 @@ export default function SessionsScreen() {
       ? new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
       : (sessionStart(a)?.getTime() || Number.MAX_SAFE_INTEGER) - (sessionStart(b)?.getTime() || Number.MAX_SAFE_INTEGER));
   }, [search, sessions, sort, timing]);
+  const searchSettled = debouncedSearch === search.trim();
+  const resultCount = searchSettled ? query.data?.pagination?.total ?? visible.length : visible.length;
 
-  return <Screen refreshing={query.refreshing} onRefresh={query.refresh} contentStyle={styles.content}>
+  return <ListScreen
+    data={query.loading ? [] : visible}
+    keyExtractor={(session) => session._id}
+    renderItem={({ item }) => <SessionCard session={item} />}
+    refreshing={query.refreshing}
+    onRefresh={query.refresh}
+    onEndReached={query.hasMore ? () => void query.loadMore() : undefined}
+    contentStyle={styles.content}
+    header={<>
     <AppHeader />
     <View style={styles.intro}><Eyebrow accent>Information sessions</Eyebrow><Heading size="xl">Sessions</Heading><Text style={styles.copy}>Reserve your place at talks, workshops, and club introductions.</Text></View>
     <View style={styles.filters}>
@@ -45,10 +58,12 @@ export default function SessionsScreen() {
         <FilterChip label="Session date" selected={sort === 'date'} onPress={() => setSort('date')} />
         <FilterChip label="Recently listed" selected={sort === 'newest'} onPress={() => setSort('newest')} />
       </ScrollView>
-      <Text style={styles.count}>{visible.length} {visible.length === 1 ? 'session' : 'sessions'}</Text>
+      <Text accessibilityLiveRegion="polite" style={styles.count}>{resultCount} {resultCount === 1 ? 'session' : 'sessions'}</Text>
     </View>
-    {query.loading ? <LoadingState /> : query.error && !sessions.length ? <ErrorState message={query.error} onRetry={query.reload} /> : !visible.length ? <EmptyState title={timing === 'upcoming' ? 'No upcoming sessions' : 'No matching sessions'} message={search ? 'Try another session, club, or venue.' : timing === 'upcoming' ? 'Published future sessions will appear here.' : 'There are no sessions in this view.'} /> : <View style={styles.list}>{visible.map((session) => <SessionCard key={session._id} session={session} />)}{query.hasMore ? <Button label="Load more sessions" variant="secondary" loading={query.loadingMore} onPress={() => void query.loadMore()} /> : null}</View>}
-  </Screen>;
+    </>}
+    empty={query.loading ? <LoadingState /> : query.error && !sessions.length ? <ErrorState message={query.error} onRetry={query.reload} /> : <EmptyState title={timing === 'upcoming' ? 'No upcoming sessions' : 'No matching sessions'} message={search ? 'Try another session, club, or venue.' : timing === 'upcoming' ? 'Published future sessions will appear here.' : 'There are no sessions in this view.'} />}
+    footer={query.loadingMore ? <LoadingState label="Loading more sessions…" /> : query.hasMore ? <Button label="Load more sessions" variant="secondary" onPress={() => void query.loadMore()} /> : null}
+  />;
 }
 
 const styles = StyleSheet.create({

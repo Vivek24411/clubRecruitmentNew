@@ -1,5 +1,11 @@
 const mongoose = require("mongoose");
 const { normalizeProgrammeEligibility } = require("../services/academic.services");
+const { isHttpUrl, validDateOrder } = require("../utils/validation");
+
+const httpUrlValidator = {
+  validator: isHttpUrl,
+  message: "Links must use http or https",
+};
 
 const programmeEligibilitySchema = new mongoose.Schema({
   programme: {
@@ -56,7 +62,7 @@ const roundSchema = new mongoose.Schema({
   startsAt: { type: Date, default: null },
   endsAt: { type: Date, default: null },
   venue: { type: String, default: "", trim: true, maxlength: 300 },
-  meetingUrl: { type: String, default: "", trim: true, maxlength: 2048 },
+  meetingUrl: { type: String, default: "", trim: true, maxlength: 2048, validate: httpUrlValidator },
   slotDurationMinutes: { type: Number, default: 20, min: 5, max: 480 },
   slotBufferMinutes: { type: Number, default: 0, min: 0, max: 120 },
   slotCapacity: { type: Number, default: 1, min: 1, max: 100 },
@@ -85,6 +91,12 @@ roundSchema.pre("validate", function(next) {
   if (["test", "group_discussion", "presentation"].includes(this.type) && this.startsAt) {
     this.scheduleMode = this.scheduleMode === "none" ? "common" : this.scheduleMode;
   }
+  if (!validDateOrder(this.startsAt, this.endsAt)) {
+    return next(new Error(`Round "${this.title}" must end after it starts`));
+  }
+  if (!validDateOrder(this.submissionOpensAt, this.submissionDeadlineAt)) {
+    return next(new Error(`Submission deadline for "${this.title}" must be after it opens`));
+  }
   next();
 });
 
@@ -96,7 +108,7 @@ const verticalSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true, maxlength: 120 },
   shortDescription: { type: String, default: "", maxlength: 500 },
   description: { type: String, default: "", maxlength: 5000 },
-  problemStatementUrl: { type: String, default: "", trim: true, maxlength: 2048 },
+  problemStatementUrl: { type: String, default: "", trim: true, maxlength: 2048, validate: httpUrlValidator },
   order: { type: Number, required: true, min: 1, max: 20 },
   isDefault: { type: Boolean, default: false },
   status: { type: String, enum: ["open", "closed"], default: "open" },
@@ -129,7 +141,7 @@ const eventSchema = new mongoose.Schema({
   },
   shortDescription: { type: String, required: true, maxlength: 500 },
   longDescription: { type: String, default: "", maxlength: 10000 },
-  problemStatementUrl: { type: String, default: "", trim: true, maxlength: 2048 },
+  problemStatementUrl: { type: String, default: "", trim: true, maxlength: 2048, validate: httpUrlValidator },
   registerationDeadline: { type: String, maxlength: 10 },
   registrationDeadlineAt: { type: Date, default: null },
   // Event-level team settings seed each new vertical. The workflow engine reads
@@ -279,6 +291,7 @@ eventSchema.pre("save", function(next) {
 
 eventSchema.index({ clubId: 1, status: 1, createdAt: -1 });
 eventSchema.index({ status: 1, registrationDeadlineAt: 1, publishedAt: -1 });
+eventSchema.index({ title: "text", shortDescription: "text", longDescription: "text", eligibility: "text" });
 
 module.exports = mongoose.model("Event", eventSchema);
 module.exports.roundSchema = roundSchema;

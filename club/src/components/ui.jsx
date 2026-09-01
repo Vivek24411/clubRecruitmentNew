@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { cloneElement, isValidElement, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, NavLink } from "react-router-dom";
 
@@ -241,19 +241,28 @@ export function Badge({ tone = "neutral", live = false, className, children, ...
    ------------------------------------------------------------------------- */
 
 export function Field({ label, hint, error, required, children, className, id }) {
+  const generatedId = useId();
+  const fieldId = id || generatedId;
+  const descriptionId = (error || hint) ? String(fieldId) + "-description" : undefined;
+  const control = isValidElement(children) ? cloneElement(children, {
+    id: children.props.id || fieldId,
+    "aria-describedby": [children.props["aria-describedby"], descriptionId].filter(Boolean).join(" ") || undefined,
+    "aria-invalid": error ? "true" : children.props["aria-invalid"],
+    required: children.props.required ?? required,
+  }) : children;
   return (
     <div className={cx("field-shell", className)}>
       {label && (
-        <label className="label" htmlFor={id}>
+        <label className="label" htmlFor={fieldId}>
           {label}
           {required && <span className="ml-1 text-accent">*</span>}
         </label>
       )}
-      {children}
+      {control}
       {error ? (
-        <p className="hint text-bad">{error}</p>
+        <p id={descriptionId} className="hint text-bad" role="alert">{error}</p>
       ) : hint ? (
-        <p className="hint">{hint}</p>
+        <p id={descriptionId} className="hint">{hint}</p>
       ) : null}
     </div>
   );
@@ -594,17 +603,53 @@ export function SlidingNav({ links, ariaLabel, className }) {
  * and locks body scroll while open.
  */
 export function Modal({ open, onClose, title, description, children, labelledBy = "modal-title" }) {
+  const panelRef = useRef(null);
+  const previousFocusRef = useRef(null);
   useEffect(() => {
     if (!open) return;
+    previousFocusRef.current = document.activeElement;
+    const main = document.querySelector(".app-main");
+    const previousAriaHidden = main?.getAttribute("aria-hidden");
+    if (main) {
+      main.setAttribute("inert", "");
+      main.setAttribute("aria-hidden", "true");
+    }
     const onKeyDown = (nativeEvent) => {
       if (nativeEvent.key === "Escape") onClose?.();
+      if (nativeEvent.key !== "Tab" || !panelRef.current) return;
+      const focusable = [...panelRef.current.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
+      if (!focusable.length) {
+        nativeEvent.preventDefault();
+        panelRef.current.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (nativeEvent.shiftKey && document.activeElement === first) {
+        nativeEvent.preventDefault();
+        last.focus();
+      } else if (!nativeEvent.shiftKey && document.activeElement === last) {
+        nativeEvent.preventDefault();
+        first.focus();
+      }
     };
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKeyDown);
+    const focusFrame = window.requestAnimationFrame(() => {
+      const initial = panelRef.current?.querySelector('[autofocus], button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])');
+      (initial || panelRef.current)?.focus();
+    });
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
+      window.cancelAnimationFrame(focusFrame);
+      if (main) {
+        main.removeAttribute("inert");
+        if (previousAriaHidden == null) main.removeAttribute("aria-hidden");
+        else main.setAttribute("aria-hidden", previousAriaHidden);
+      }
+      previousFocusRef.current?.focus?.();
     };
   }, [open, onClose]);
 
@@ -622,7 +667,7 @@ export function Modal({ open, onClose, title, description, children, labelledBy 
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="modal-panel relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border border-line bg-surface p-6 shadow-pop">
+      <div ref={panelRef} tabIndex={-1} className="modal-panel relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border border-line bg-surface p-6 shadow-pop">
         {onClose && (
           <button type="button" className="modal-close" aria-label="Close dialog" onClick={onClose}>
             <span aria-hidden="true">×</span>

@@ -41,6 +41,39 @@ const validOptionalHttpUrl = (value) => {
     return false;
   }
 };
+const validOptionalDate = (value) => !value || !Number.isNaN(new Date(value).getTime());
+const validOrderedDates = (start, end) => !start || !end || new Date(start) < new Date(end);
+const validRound = (round) => {
+  if (!round || typeof round !== "object") return false;
+  const title = String(round.title || round.Type || "").trim();
+  const fields = round.submissionFields || [];
+  if (!title || title.length > 120
+    || !validOptionalHttpUrl(round.meetingUrl)
+    || !validOptionalDate(round.startsAt)
+    || !validOptionalDate(round.endsAt)
+    || !validOptionalDate(round.submissionOpensAt)
+    || !validOptionalDate(round.submissionDeadlineAt)
+    || !validOrderedDates(round.startsAt, round.endsAt)
+    || !validOrderedDates(round.submissionOpensAt, round.submissionDeadlineAt)
+    || !Array.isArray(fields)
+    || fields.length > 20) return false;
+  const keys = fields.map((field) => String(field?.key || "").trim());
+  return new Set(keys).size === keys.length && fields.every((field) => field
+    && typeof field === "object"
+    && String(field.key || "").trim().length > 0
+    && String(field.key).length <= 80
+    && String(field.label || "").trim().length > 0
+    && String(field.label).length <= 120
+    && (!field.options || (Array.isArray(field.options) && field.options.length <= 30)));
+};
+const validRoundsJSON = (value) => {
+  try {
+    const rounds = JSON.parse(value || "[]");
+    return Array.isArray(rounds) && rounds.length <= 20 && rounds.every(validRound);
+  } catch {
+    return false;
+  }
+};
 const validVerticals = (value) => {
   try {
     const verticals = JSON.parse(value);
@@ -51,7 +84,7 @@ const validVerticals = (value) => {
       || vertical.title.trim().length < 2
       || vertical.title.length > 120
       || !validOptionalHttpUrl(vertical.problemStatementUrl)
-      || (vertical.rounds !== undefined && (!Array.isArray(vertical.rounds) || vertical.rounds.length > 20)))) {
+      || (vertical.rounds !== undefined && (!Array.isArray(vertical.rounds) || vertical.rounds.length > 20 || !vertical.rounds.every(validRound))))) {
       throw new Error();
     }
     return true;
@@ -191,7 +224,7 @@ router.post('/addEvent',clubAuth,
   body('verticalsEnabled').optional().isBoolean(),
   body('verticalsJSON').optional().isString().isLength({ max: 400000 }).custom(validVerticals),
   body('maxVerticalApplications').optional({ checkFalsy: true, nullable: true }).isInt({ min: 1, max: 20 }),
-  body('roundsJSON').optional().isString().isLength({ max: 200000 }),
+  body('roundsJSON').optional().isString().isLength({ max: 200000 }).custom(validRoundsJSON).withMessage('Round details are invalid'),
   body('contactInfoJSON').optional().isString().isLength({ max: 10000 }),
   body('roundDetailsJSON').optional().custom((value, { req }) => {
     const expectedRounds = Number(req.body.numberOfRounds || 0);
@@ -205,7 +238,7 @@ router.post('/addEvent',clubAuth,
       const rounds = JSON.parse(roundValue);
       if (!Array.isArray(rounds) || rounds.length > 20) throw new Error();
       if (expectedRounds !== rounds.length) throw new Error();
-      if (rounds.some((round) => !round || typeof round !== 'object' || typeof (round.title || round.Type) !== 'string' || String(round.title || round.Type).length > 120)) throw new Error();
+      if (rounds.some((round) => !validRound(round))) throw new Error();
       return true;
     } catch {
       throw new Error('Round details are invalid');
@@ -237,7 +270,7 @@ router.patch('/events/:eventId', clubAuth, upload.bannerUpload.single('eventBann
   body('verticalsEnabled').optional().isBoolean(),
   body('verticalsJSON').optional().isString().isLength({ max: 400000 }).custom(validVerticals),
   body('maxVerticalApplications').optional({ checkFalsy: true, nullable: true }).isInt({ min: 1, max: 20 }),
-  body('roundsJSON').optional().isString().isLength({ max: 200000 }),
+  body('roundsJSON').optional().isString().isLength({ max: 200000 }).custom(validRoundsJSON).withMessage('Round details are invalid'),
   body('contactInfoJSON').optional().isString().isLength({ max: 10000 }),
   body('eligibilityMode').optional().isIn(['undergraduate', 'all_iitr']),
   body('programmeEligibilityJSON').optional().isString().isLength({ max: 2000 }).custom(validProgrammeEligibility),

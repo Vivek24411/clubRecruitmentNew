@@ -30,14 +30,28 @@ export default function Sessions() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("published");
   const [timeFilter, setTimeFilter] = useState("all");
+  const [pagination, setPagination] = useState({ page: 1, hasMore: false, total: 0 });
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
-    axios
-      .get(`${import.meta.env.VITE_BASE_URI}/club/getSessions`)
-      .then(({ data }) => (data.success ? setSessions(data.sessions) : toast.error(data.msg)))
+    const timer = window.setTimeout(() => axios
+      .get(`${import.meta.env.VITE_BASE_URI}/club/getSessions`, { params: { limit: 24, q: search.trim() || undefined, status: statusFilter, timing: timeFilter } })
+      .then(({ data }) => { if (data.success) { setSessions(data.sessions); setPagination(data.pagination); } else toast.error(data.msg); })
       .catch(() => toast.error("Could not load sessions"))
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => setLoading(false)), 250);
+    return () => window.clearTimeout(timer);
+  }, [search, statusFilter, timeFilter]);
+
+  const loadMore = async () => {
+    if (!pagination.hasMore || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const { data } = await axios.get(`${import.meta.env.VITE_BASE_URI}/club/getSessions`, { params: { page: pagination.page + 1, limit: 24, q: search.trim() || undefined, status: statusFilter, timing: timeFilter } });
+      setSessions((current) => [...current, ...(data.sessions || [])]);
+      setPagination(data.pagination);
+    } catch { toast.error("Could not load more sessions"); }
+    finally { setLoadingMore(false); }
+  };
 
   const filteredSessions = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -168,6 +182,7 @@ export default function Sessions() {
             })}
           </div>
         )}
+        {!loading && pagination.hasMore && <div className="mt-7 flex justify-center"><Button variant="secondary" loading={loadingMore} onClick={loadMore}>Load more sessions</Button></div>}
       </div>
     </Page>
   );

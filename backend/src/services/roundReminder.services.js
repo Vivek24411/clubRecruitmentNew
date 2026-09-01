@@ -7,7 +7,7 @@ const studentModel = require("../models/student.model");
 const { sendNotificationEmail } = require("./student.services");
 const { sendPushNotification } = require("./firebaseMessaging.services");
 
-const SUBMISSION_DEADLINE_LEAD_MS = 6 * 60 * 60 * 1000;
+const SUBMISSION_DEADLINE_LEAD_MS = 2 * 60 * 60 * 1000;
 const INTERVIEW_LEAD_MS = 2 * 60 * 60 * 1000;
 const ACTIVE_DEADLINE_STATUSES = ["eligible", "scheduled", "active"];
 const ACTIVE_INTERVIEW_STATUSES = ["eligible", "scheduled", "active"];

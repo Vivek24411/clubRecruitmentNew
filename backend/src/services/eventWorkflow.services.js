@@ -6,6 +6,7 @@ const roundCandidateModel = require("../models/roundCandidate.model");
 const scheduleSlotModel = require("../models/scheduleSlot.model");
 const scheduleReservationModel = require("../models/scheduleReservation.model");
 const { enqueueSubmissionDeadlineReminders } = require("./roundReminder.services");
+const { optionalHttpUrl, validDateOrder } = require("../utils/validation");
 
 const ROUND_TYPES = new Set([
   "test", "submission", "interview", "group_discussion", "presentation", "hackathon", "custom",
@@ -86,6 +87,18 @@ function normalizeRounds(input) {
       : [];
     const startsAt = cleanDate(round?.startsAt || (type === "submission" ? round?.submissionOpensAt : null));
     const endsAt = cleanDate(round?.endsAt || (type === "submission" ? round?.submissionDeadlineAt : null));
+    if (!validDateOrder(startsAt, endsAt)) {
+      const error = new Error(`Round ${index + 1} must end after it starts`);
+      error.status = 400;
+      throw error;
+    }
+    const submissionOpensAt = type === "submission" ? startsAt : cleanDate(round?.submissionOpensAt);
+    const submissionDeadlineAt = type === "submission" ? endsAt : cleanDate(round?.submissionDeadlineAt);
+    if (!validDateOrder(submissionOpensAt, submissionDeadlineAt)) {
+      const error = new Error(`Round ${index + 1} submission deadline must be after it opens`);
+      error.status = 400;
+      throw error;
+    }
     return {
       ...(mongoose.isValidObjectId(round?._id) ? { _id: round._id } : {}),
       order: index + 1,
@@ -100,13 +113,13 @@ function normalizeRounds(input) {
       startsAt,
       endsAt,
       venue: cleanString(round?.venue, 300),
-      meetingUrl: cleanString(round?.meetingUrl, 2048),
+      meetingUrl: optionalHttpUrl(cleanString(round?.meetingUrl, 2048), `Round ${index + 1} meeting link`),
       slotDurationMinutes: Math.min(Math.max(Number(round?.slotDurationMinutes) || 20, 5), 480),
       slotBufferMinutes: Math.min(Math.max(Number(round?.slotBufferMinutes) || 0, 0), 120),
       slotCapacity: Math.min(Math.max(Number(round?.slotCapacity) || 1, 1), 100),
       submissionEnabled,
-      submissionOpensAt: type === "submission" ? startsAt : cleanDate(round?.submissionOpensAt),
-      submissionDeadlineAt: type === "submission" ? endsAt : cleanDate(round?.submissionDeadlineAt),
+      submissionOpensAt,
+      submissionDeadlineAt,
       allowResubmission: round?.allowResubmission !== false,
       submissionFields,
     };
@@ -132,7 +145,7 @@ function normalizeVerticals(input, defaults = {}) {
       title: cleanString(vertical?.title || `Vertical ${index + 1}`, 120),
       shortDescription: cleanString(vertical?.shortDescription, 500),
       description: cleanString(vertical?.description, 5000),
-      problemStatementUrl: cleanString(vertical?.problemStatementUrl || defaults.problemStatementUrl, 2048),
+      problemStatementUrl: optionalHttpUrl(cleanString(vertical?.problemStatementUrl || defaults.problemStatementUrl, 2048), `Vertical ${index + 1} problem statement link`),
       order: index + 1,
       isDefault: false,
       status: vertical?.status === "closed" ? "closed" : "open",

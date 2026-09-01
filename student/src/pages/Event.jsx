@@ -14,6 +14,7 @@ import EventWorkflow from "../components/EventWorkflow";
 import VerticalApplication from "../components/VerticalApplication";
 import { StudentContextData } from "../context/StudentContext";
 import ClubLogo from "../components/ClubLogo";
+import CalendarSaveButton from "../components/CalendarSaveButton";
 import {
   Badge,
   Button,
@@ -267,6 +268,15 @@ export default function Event() {
             {event.shortDescription}
           </p>
         )}
+        <div className="mt-6 flex flex-wrap gap-3">
+          <CalendarSaveButton
+            sourceType="event"
+            sourceId={eventId}
+            signedIn={loggedInStudent}
+            onSignIn={() => rememberEventAndNavigate("/login")}
+          />
+          {loggedInStudent && <Button to="/calendar" variant="ghost">View my calendar →</Button>}
+        </div>
         <hr className="rule animate-draw mt-8" style={{ animationDelay: "200ms" }} />
       </header>
 

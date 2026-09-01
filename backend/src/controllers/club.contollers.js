@@ -28,6 +28,7 @@ const {
 } = require("../services/roundReminder.services");
 const { sessionsWithConfirmedRsvpCounts } = require("../services/sessionRsvp.services");
 const { sessionEndAt } = require("../utils/sessionSchedule");
+const { pageMetadata, pageRequest } = require("../utils/pagination");
 const { sendOtp } = require("../services/student.services");
 const { writeAudit } = require("../services/audit.services");
 const { destroyCloudinaryAsset, destroyCloudinaryImage, destroyUploadedFile } = require("../utils/uploads");
@@ -45,6 +46,7 @@ const CLUB_PASSWORD_RESET_PURPOSE = "club_password_reset";
 const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
 const normalizeUserName = (userName) => String(userName || "").trim().toLowerCase();
 const tokenHash = (token) => crypto.createHash("sha256").update(token).digest("hex");
+const searchRegex = (value) => value ? new RegExp(String(value).trim().slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : null;
 const clubRecoveryKey = (userName, email) =>
   `club:${normalizeUserName(userName)}:${normalizeEmail(email)}`;
 
@@ -454,8 +456,20 @@ module.exports.updateProfile = async (req, res) => {
 
 module.exports.getSessions = async (req, res) => {
   try {
-    const sessions = await sessionModel.find({ clubId: req.club._id });
-    return res.json({ success: true, sessions: await sessionsWithConfirmedRsvpCounts(sessions) });
+    const paging = pageRequest(req.query);
+    const term = searchRegex(req.query.q);
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+    const filter = {
+      clubId: req.club._id,
+      ...(req.query.status && req.query.status !== "all" ? { status: req.query.status } : {}),
+      ...(req.query.timing === "upcoming" ? { date: { $gte: today } } : req.query.timing === "past" ? { date: { $lt: today } } : {}),
+      ...(term ? { $or: [{ title: term }, { shortDescription: term }, { venue: term }] } : {}),
+    };
+    const [sessions, total] = await Promise.all([
+      sessionModel.find(filter).sort({ date: 1, time: 1, _id: 1 }).skip(paging.skip).limit(paging.limit),
+      sessionModel.countDocuments(filter),
+    ]);
+    return res.json({ success: true, sessions: await sessionsWithConfirmedRsvpCounts(sessions), pagination: pageMetadata(paging, total) });
   } catch (err) {
    
     return res.json({ success: false, msg: "Failed to fetch sessions" });
@@ -630,8 +644,19 @@ module.exports.addEvent = async (req, res) => {
 
 module.exports.getEvents = async (req, res) => {
   try {
-    const events = await eventModel.find({ clubId: req.club._id });
-    return res.json({ success: true, events });
+    const paging = pageRequest(req.query);
+    const term = searchRegex(req.query.q);
+    const filter = {
+      clubId: req.club._id,
+      ...(req.query.status && req.query.status !== "all" ? { status: req.query.status } : {}),
+      ...(req.query.eventType && req.query.eventType !== "all" ? { eventType: req.query.eventType } : {}),
+      ...(term ? { $or: [{ title: term }, { shortDescription: term }, { longDescription: term }] } : {}),
+    };
+    const [events, total] = await Promise.all([
+      eventModel.find(filter).sort({ updatedAt: -1, _id: -1 }).skip(paging.skip).limit(paging.limit),
+      eventModel.countDocuments(filter),
+    ]);
+    return res.json({ success: true, events, pagination: pageMetadata(paging, total) });
   } catch (err) {
     console.error("Error fetching events:", err);
     return res.json({ success: false, msg: "Failed to fetch events" });

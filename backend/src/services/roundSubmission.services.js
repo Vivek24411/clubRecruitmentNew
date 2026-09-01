@@ -1,5 +1,6 @@
 const roundSubmissionModel = require("../models/roundSubmission.model");
 const { destroyCloudinaryAsset } = require("../utils/uploads");
+const { isHttpUrl } = require("../utils/validation");
 
 function submissionError(message, status = 400) {
   const error = new Error(message);
@@ -18,10 +19,16 @@ function prepareRoundSubmission({ round, answersJSON, fileKeysJSON, uploadedFile
     throw submissionError("Submission data is invalid");
   }
 
-  const cleanAnswers = answers.slice(0, 20).map((answer) => ({
+  if (answers.length > 20 || fileKeys.length > 5 || uploadedFiles.length !== fileKeys.length) {
+    throw submissionError("Submission contains too many fields or invalid attachments");
+  }
+  const cleanAnswers = answers.map((answer) => ({
     key: String(answer?.key || "").slice(0, 80),
     value: String(answer?.value || "").slice(0, 10000),
   }));
+  if (new Set(cleanAnswers.map((answer) => answer.key)).size !== cleanAnswers.length) {
+    throw submissionError("Each submission field can be answered only once");
+  }
   const answerMap = new Map(cleanAnswers.map((answer) => [answer.key, answer.value.trim()]));
   const files = uploadedFiles.map((file, index) => ({
     fieldKey: String(fileKeys[index] || "attachment").slice(0, 80),
@@ -37,6 +44,34 @@ function prepareRoundSubmission({ round, answersJSON, fileKeysJSON, uploadedFile
   const existingFilesByField = new Map((existing?.files || []).map((file) => [file.fieldKey, file]));
   const uploadedFields = new Set(files.map((file) => file.fieldKey));
   const fields = round.submissionFields || [];
+  const fieldsByKey = new Map(fields.map((field) => [String(field.key), field]));
+  const unknownAnswer = cleanAnswers.find((answer) => !fieldsByKey.has(answer.key));
+  if (unknownAnswer) throw submissionError("Submission contains an unknown field");
+  const unknownFile = [...uploadedFields].find((key) => {
+    const field = fieldsByKey.get(key);
+    return !field || !["file", "pdf", "video"].includes(field.type);
+  });
+  if (unknownFile) throw submissionError("Submission contains an unexpected attachment");
+
+  for (const answer of cleanAnswers) {
+    const field = fieldsByKey.get(answer.key);
+    const value = answer.value.trim();
+    if (!value) continue;
+    const maxLength = field.type === "long_text" ? 10000 : field.type === "text" ? 2000 : 2048;
+    if (value.length > maxLength) throw submissionError(`${field.label} is too long`);
+    if (field.type === "boolean" && !["true", "false"].includes(value)) {
+      throw submissionError(`Choose a valid value for: ${field.label}`);
+    }
+    if (["url", "drive_link", "github"].includes(field.type) && !isHttpUrl(value)) {
+      throw submissionError(`${field.label} must be a valid http(s) link`);
+    }
+    if (field.type === "github" && new URL(value).hostname.toLowerCase() !== "github.com") {
+      throw submissionError(`${field.label} must be a GitHub link`);
+    }
+    if (field.type === "drive_link" && !["drive.google.com", "docs.google.com"].includes(new URL(value).hostname.toLowerCase())) {
+      throw submissionError(`${field.label} must be a Google Drive link`);
+    }
+  }
 
   const invalidSelection = fields.find((field) => field.type === "select"
     && answerMap.get(field.key)

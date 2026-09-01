@@ -12,16 +12,16 @@
   /* --- ink ------------------------------------------------------------- */
   --color-ink: #111612;
   --color-ink-2: #384039;
-  --color-ink-3: #697169;
-  --color-ink-4: #969c96;
+  --color-ink-3: #566057;
+  --color-ink-4: #626b63;
 
   /* --- hairlines ------------------------------------------------------- */
   --color-line: #dcd8cd;
   --color-line-2: #c9c3b5;
 
   /* --- E-Cell blue: shared brand accent -------------------------------- */
-  --color-accent: #0878be;
-  --color-accent-deep: #075d94;
+  --color-accent: #075d94;
+  --color-accent-deep: #064873;
   --color-accent-tint: #e5f3fb;
 
   /* --- semantic, kept earthy so it sits inside the palette -------------- */
@@ -1155,6 +1155,73 @@
 .Toastify__toast--info .Toastify__toast-icon { color: var(--color-info); }
 .Toastify__close-button { color: var(--color-ink-3); opacity: 0.7; }
 .Toastify__close-button:hover { color: var(--color-ink); opacity: 1; }
+
+/* Student calendar */
+.calendar-shell {
+  background:
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--color-accent) 9%, transparent), transparent 34%),
+    var(--color-surface);
+}
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+.calendar-weekday {
+  padding: 0.5rem 0.15rem;
+  color: var(--color-ink-3);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+.calendar-day {
+  position: relative;
+  display: flex;
+  min-height: 4.75rem;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-surface) 90%, transparent);
+  padding: 0.6rem;
+  color: var(--color-ink-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  transition: transform 0.3s var(--ease-spring), border-color 0.25s, background-color 0.25s, box-shadow 0.3s;
+}
+.calendar-day:not(.is-empty):hover {
+  z-index: 1;
+  transform: translateY(-2px);
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-card);
+}
+.calendar-day.is-selected {
+  border-color: var(--color-accent);
+  background: var(--color-accent-tint);
+  color: var(--color-accent-deep);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 25%, transparent);
+}
+.calendar-day.is-today > span:first-child {
+  display: grid;
+  width: 1.55rem;
+  height: 1.55rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--color-ink);
+  color: white;
+}
+.calendar-day.is-empty { border-color: transparent; background: transparent; }
+.calendar-dots { display: flex; gap: 0.22rem; }
+.calendar-dots i { width: 0.34rem; height: 0.34rem; border-radius: 999px; background: var(--color-accent); }
+
+@media (max-width: 640px) {
+  .calendar-grid { gap: 0.2rem; }
+  .calendar-day { min-height: 3.4rem; padding: 0.38rem; }
+  .calendar-weekday { font-size: 0.55rem; }
+}
 
 /* ==========================================================================
    REDUCED MOTION — honour it completely, not partially
